@@ -1,0 +1,51 @@
+.task-menu {
+  position: absolute;
+  bottom: calc(100% + 0.75rem);
+  left: 0;
+  z-index: 10;
+  width: min(21rem, 100%);
+  padding: 0.5rem;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+}
+
+.task-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  text-align: left;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.task-menu__item svg {
+  flex: none;
+  color: var(--slate);
+}
+
+.task-menu__item:hover,
+.task-menu__item:focus-visible {
+  background: var(--ripple-60);
+}
+
+.task-menu__item:focus-visible {
+  outline-offset: -2px;
+}
+
+.task-menu__text {
+  display: flex;
+  flex-direction: column;
+}
+
+.task-menu__label {
+  font-weight: 600;
+}
+
+.task-menu__hint {
+  font-size: 0.8125rem;
+  color: var(--slate);
+}

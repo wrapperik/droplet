@@ -389,3 +389,60 @@ Not yet fully resolved. Implementation decisions should be checked against them.
 - Research folder on Rikus's Mac: `Documents/Research (UX300T4)`: secondary sources (PDFs), `References (APA 7).md`, interview transcripts and an anonymised compilation.
 - Briefs: DV300 Project Pitch brief; UX300 Theme 4 Capstone brief.
 - Supervisor feedback: "Droplet: Supervisor Approval & Scope Feedback" (Laudette Sass, 22 Sep 2026).
+
+---
+
+## 11. Visual design: tokens, type, icons and references
+
+Design direction: **minimalist with subtle glassmorphism**. Calm, pale surfaces, large radii, soft shadows, almost no decoration. The interface must never compete with the content the AI assembles. Visual consistency comes from these tokens and the design system, never from the model (see section 6).
+
+References for how components should look live in `docs/ui-references/` (see its `README.md` for what to take from each image). Wireframes live in `docs/wireframes/`. **Check both before designing or changing any component.**
+
+### Colour palette
+
+All colour comes from CSS custom properties in `src/styles/tokens.css`. Never hard-code a hex value in a component. Contrast ratios were calculated with the WCAG 2.x formula. AA requires 4.5:1 for body text and 3:1 for large text and non-text UI such as borders, focus rings and icons.
+
+| Token | Hex | Role | Contrast | Use |
+|---|---|---|---|---|
+| Ink | `#0E1A2B` | Primary text | 17.48 on white, 16.37 on Mist | All body and heading text |
+| Deep Water | `#0B4F8A` | Primary brand, buttons | 8.40 on white; white text on it 8.40 | Primary buttons, links, selected states |
+| Droplet Blue | `#1F8FE0` | Accent, ripple | 3.46 on white | Focus rings, ripple animation, icons, large display text only. Fails AA for body text, so never used for small text |
+| Ripple | `#CFE9FB` | Tint surface | Ink on it 13.90; Deep Water on it 6.68 | Selected cards, highlighted regions, the project rail |
+| Mist | `#F4F8FB` | App background | Ink on it 16.37 | Canvas and page background |
+| Slate | `#4A5A70` | Secondary text | 7.03 on white, 6.58 on Mist | Labels, captions, the one-line component reasons |
+| Outstanding | `#B45309` | Status: outstanding | 5.02 on white, 4.70 on Mist | Outstanding assets, always paired with an icon and the word |
+| Resolved | `#15803D` | Status: resolved | 5.02 on white, 4.70 on Mist | Resolved assets, always paired with an icon and the word |
+
+Status is never shown by colour alone: every resolved or outstanding marker carries an icon and a text label.
+
+### Glass surfaces
+
+Glass is subtle and used for floating or layered UI only (menus, the intent bar, the account pill). Not for body text blocks or large areas.
+
+- Translucent white fill (about 60 to 70 percent), `backdrop-filter` blur, a 1px light border and a soft low-contrast shadow. Use the shared `.glass` class and the `--glass-*` tokens.
+- Text on glass must still meet the contrast ratios above against the lightest and darkest thing that can sit behind it.
+- Provide an opaque fallback where `backdrop-filter` is unsupported.
+
+### Typography
+
+- **Urbanist** (variable, bundled via `@fontsource-variable/urbanist`). One family, weights 100 to 900.
+- Build hierarchy with size and weight, not extra families. Do not use Droplet Blue for small text.
+- Headings and the wordmark sit at weight 500 to 600. Body is 400 to 500.
+
+### Icons
+
+- **Solar icon set only**, via `@solar-icons/react`, **linear** style: `import { AddIcon } from '@solar-icons/react/linear'`.
+- **Never use Lucide** or any other icon set. Do not install another one.
+- Colour with `currentColor` (ink or slate). Decorative icons get `aria-hidden`; icon-only buttons get an `aria-label`.
+
+### Shape, space and motion
+
+- Controls are pills (fully rounded). Panels use 20 to 32px radii. Nested surfaces use a smaller radius than their parent.
+- Focus is always visible: a 2px Droplet Blue ring (3:1 non-text contrast is met on Mist and white).
+- Motion is small and quick (about 150 to 250ms, a few pixels of travel). Framer Motion is configured with `reducedMotion="user"`, so it respects the system setting.
+
+### Screens built so far
+
+| Screen | Route | Wireframe |
+|---|---|---|
+| Home | `/home` | `docs/wireframes/home.png` |

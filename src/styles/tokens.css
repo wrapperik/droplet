@@ -1,0 +1,48 @@
+/* Design tokens. Palette and rules: CLAUDE.md section 11. Never hard-code hex values in components. */
+:root {
+  /* Palette */
+  --ink: #0e1a2b;
+  --deep-water: #0b4f8a;
+  --droplet-blue: #1f8fe0; /* Large display text, icons and focus rings only. Fails AA for body text. */
+  --ripple: #cfe9fb;
+  --mist: #f4f8fb;
+  --slate: #4a5a70;
+  --outstanding: #b45309;
+  --resolved: #15803d;
+  --white: #ffffff;
+
+  /* Derived, from the palette above */
+  --ink-06: rgb(14 26 43 / 0.06);
+  --ink-10: rgb(14 26 43 / 0.1);
+  --ripple-60: rgb(207 233 251 / 0.6);
+
+  /* Glass */
+  --glass-fill: rgb(255 255 255 / 0.66);
+  --glass-fill-strong: rgb(255 255 255 / 0.84);
+  --glass-fill-fallback: rgb(255 255 255 / 0.96);
+  --glass-border: rgb(255 255 255 / 0.9);
+  --glass-blur: 18px;
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px rgb(14 26 43 / 0.04), 0 4px 14px rgb(14 26 43 / 0.05);
+  --shadow-md: 0 2px 4px rgb(14 26 43 / 0.04), 0 10px 30px rgb(14 26 43 / 0.08);
+  --shadow-lg: 0 4px 8px rgb(14 26 43 / 0.04), 0 24px 60px rgb(14 26 43 / 0.12);
+
+  /* Shape */
+  --radius-pill: 999px;
+  --radius-sm: 12px;
+  --radius-md: 18px;
+  --radius-lg: 24px;
+  --radius-xl: 32px;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --duration-fast: 150ms;
+  --duration-base: 220ms;
+
+  /* Layout */
+  --page-gutter: clamp(20px, 5vw, 96px);
+
+  /* Type */
+  --font-sans: 'Urbanist Variable', system-ui, sans-serif;
+}
