@@ -1,0 +1,37 @@
+.thread {
+  position: relative; /* contains the visually hidden speaker labels so they cannot extend the page */
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+  margin: 0;
+  padding: 0.5rem 0.5rem 1rem;
+  list-style: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.thread__message {
+  max-width: 92%;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* The founder's own words sit in a blue-tinted bubble on the right; Droplet's replies in a light grey bubble on the left. */
+.thread__message--you {
+  align-self: flex-end;
+  padding: 0.625rem 1rem;
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);
+  background: var(--accent-tint);
+  color: var(--text);
+}
+
+.thread__message--droplet {
+  align-self: flex-start;
+  padding: 0.625rem 1rem;
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-lg) var(--radius-sm);
+  background: var(--overlay-06);
+  color: var(--text);
+}

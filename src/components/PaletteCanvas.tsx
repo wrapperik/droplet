@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { AddCircleIcon, CheckIcon, CopyIcon } from '@solar-icons/react/linear'
+import { AddCircleIcon, CheckIcon, CopyIcon, TrashBinMinimalisticIcon } from '@solar-icons/react/linear'
 import { readableTextColour } from '../lib/colour.ts'
 import './PaletteCanvas.css'
 
@@ -10,20 +10,45 @@ type Props = {
   blocks: PaletteBlock[]
   selectedId: number
   max: number
+  min: number
   onSelect: (id: number) => void
   onAdd: () => void
+  onRemove: (id: number) => void
 }
 
 // The work area for a palette: colour blocks you click to select, then change with the picker.
-export default function PaletteCanvas({ blocks, selectedId, max, onSelect, onAdd }: Props) {
+export default function PaletteCanvas({ blocks, selectedId, max, min, onSelect, onAdd, onRemove }: Props) {
   const full = blocks.length >= max
   const [copiedId, setCopiedId] = useState<number | null>(null)
+  const [removedNote, setRemovedNote] = useState('')
+  const gridRef = useRef<HTMLFieldSetElement>(null)
+  const refocus = useRef(false)
+  const canRemove = blocks.length > min
 
   useEffect(() => {
     if (copiedId === null) return
     const timer = window.setTimeout(() => setCopiedId(null), 1600)
     return () => window.clearTimeout(timer)
   }, [copiedId])
+
+  useEffect(() => {
+    if (!removedNote) return
+    const timer = window.setTimeout(() => setRemovedNote(''), 3000)
+    return () => window.clearTimeout(timer)
+  }, [removedNote])
+
+  // The remove button disappears with its block, so keyboard focus moves to the colour now selected.
+  useEffect(() => {
+    if (!refocus.current) return
+    refocus.current = false
+    gridRef.current?.querySelector<HTMLInputElement>('.palette__input:checked')?.focus()
+  }, [blocks])
+
+  const remove = (block: PaletteBlock, index: number) => {
+    refocus.current = true
+    setRemovedNote(`Colour ${index + 1}, ${block.hex}, removed.`)
+    onRemove(block.id)
+  }
 
   const copy = async (block: PaletteBlock) => {
     try {
@@ -49,7 +74,7 @@ export default function PaletteCanvas({ blocks, selectedId, max, onSelect, onAdd
         </button>
       </header>
 
-      <fieldset className="palette__grid">
+      <fieldset ref={gridRef} className="palette__grid">
         <legend className="visually-hidden">Palette colours</legend>
         <AnimatePresence initial={false}>
           {blocks.map((block, index) => {
@@ -63,6 +88,7 @@ export default function PaletteCanvas({ blocks, selectedId, max, onSelect, onAdd
                 initial={{ opacity: 0, scale: 0.85 }}
                 animate={{ opacity: 1, scale: 1 }}
                 whileTap={{ scale: 0.985 }}
+                exit={{ opacity: 0, scale: 0.85 }}
                 transition={{ duration: 0.3, ease: [0.2, 0.8, 0.2, 1] }}
               >
                 <label
@@ -78,14 +104,27 @@ export default function PaletteCanvas({ blocks, selectedId, max, onSelect, onAdd
                     onChange={() => onSelect(block.id)}
                     aria-label={`Colour ${index + 1}, ${block.hex}`}
                   />
-                  <span className="palette__name">Colour {index + 1}</span>
-                  {selected && (
-                    <span className="palette__check" style={{ background: ink, color: block.hex }} aria-hidden="true">
-                      <CheckIcon size={13} strokeWidth={2.5} />
-                    </span>
-                  )}
+                  <span className="palette__top">
+                    <span className="palette__name">Colour {index + 1}</span>
+                    {selected && (
+                      <span className="palette__check" style={{ background: ink, color: block.hex }} aria-hidden="true">
+                        <CheckIcon size={13} strokeWidth={2.5} />
+                      </span>
+                    )}
+                  </span>
                   <span className="palette__hex">{block.hex}</span>
                 </label>
+                {canRemove && (
+                  <button
+                    type="button"
+                    className="palette__remove"
+                    style={{ color: ink }}
+                    onClick={() => remove(block, index)}
+                    aria-label={`Remove colour ${index + 1}, ${block.hex}`}
+                  >
+                    <TrashBinMinimalisticIcon size={16} aria-hidden="true" />
+                  </button>
+                )}
                 <button
                   type="button"
                   className="palette__copy"
@@ -102,7 +141,7 @@ export default function PaletteCanvas({ blocks, selectedId, max, onSelect, onAdd
         </AnimatePresence>
       </fieldset>
       <p className="visually-hidden" role="status">
-        {copiedId !== null ? 'Hex value copied.' : ''}
+        {copiedId !== null ? 'Hex value copied.' : removedNote}
       </p>
     </section>
   )

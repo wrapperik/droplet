@@ -71,6 +71,32 @@ export function compact(placements: Placement[], heights: Heights, priorityId?: 
   return placements.map((p) => placed.find((q) => q.id === p.id)!)
 }
 
+// The layout to draw. Column counts depend on the grid's width, so a saved layout can come back with items
+// that were side by side now overlapping (the grid is narrower, or a toolbar needs more columns than when it
+// was saved). Plain compaction would push one of them below the other. Items that shared a row keep sharing
+// it instead: the later one slides right to sit flush against the one it now overlaps, as long as it still
+// fits inside the grid. If it does not fit, it drops beneath that neighbour, lined up with its left edge.
+export function reflow(placements: Placement[], heights: Heights): Placement[] {
+  const indexOf = new Map(placements.map((p, index) => [p.id, index]))
+  const order = [...placements]
+    .filter((p) => p.col !== AUTO_COL)
+    .sort((a, b) => a.row - b.row || a.col - b.col || indexOf.get(a.id)! - indexOf.get(b.id)!)
+
+  let working = placements
+  for (const { id } of order) {
+    const item = working.find((p) => p.id === id)!
+    const blockers = working.filter(
+      (other) => other.id !== id && other.col !== AUTO_COL && other.row === item.row && other.col <= item.col && overlapsColumns(item, other),
+    )
+    if (blockers.length === 0) continue
+    const beside = Math.max(...blockers.map((other) => other.col + other.w))
+    // Too wide to sit beside it: line up under its left edge, so the two stack neatly instead of staggering.
+    const col = beside + item.w <= COLS ? beside : clamp(Math.min(...blockers.map((other) => other.col)), 0, COLS - item.w)
+    working = working.map((p) => (p.id === id ? { ...p, col } : p))
+  }
+  return compact(working, heights)
+}
+
 export function bottomRow(placements: Placement[], heights: Heights): number {
   return placements.reduce((max, p) => Math.max(max, p.row + heightOf(heights, p.id)), 0)
 }

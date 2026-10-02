@@ -23,6 +23,7 @@ import {
   columnsForWidth,
   compact,
   moveByKey,
+  reflow,
   rowsForHeight,
   settle,
   type Heights,
@@ -197,7 +198,7 @@ export default function GridWorkspace({ items, layout, onLayoutChange }: Props) 
     [layout, items, sizesPx, width],
   )
 
-  const resolved = useMemo(() => compact(layoutW, heights), [layoutW, heights])
+  const resolved = useMemo(() => reflow(layoutW, heights), [layoutW, heights])
 
   // Animate any item whose place changed (a drop, a push from another item, Reset layout) from where it
   // was to where it is now. Runs after the DOM has updated and before the browser paints.
@@ -229,8 +230,8 @@ export default function GridWorkspace({ items, layout, onLayoutChange }: Props) 
 
   const candidate = useMemo(() => {
     if (!drag) return null
-    return settle(layoutW, heights, drag.id, drag.cell)
-  }, [drag, layoutW, heights])
+    return settle(resolved, heights, drag.id, drag.cell)
+  }, [drag, resolved, heights])
   const preview = drag && candidate ? candidate.find((p) => p.id === drag.id)! : null
 
   // The ghost follows the pointer by writing its transform directly, so moving it never re-renders the grid.
@@ -257,11 +258,11 @@ export default function GridWorkspace({ items, layout, onLayoutChange }: Props) 
 
   // The latest state, readable from window listeners without going stale.
   const dragRef = useRef<DragState | null>(null)
-  const layoutRef = useRef(layoutW)
-  const latest = useRef({ layout: layoutW, heights, onLayoutChange })
+  const layoutRef = useRef(resolved)
+  const latest = useRef({ layout: resolved, heights, onLayoutChange })
   useLayoutEffect(() => {
-    layoutRef.current = layoutW
-    latest.current = { layout: layoutW, heights, onLayoutChange }
+    layoutRef.current = resolved
+    latest.current = { layout: resolved, heights, onLayoutChange }
   })
 
   const dragId = drag?.id ?? null
@@ -333,7 +334,7 @@ export default function GridWorkspace({ items, layout, onLayoutChange }: Props) 
     const move = KEY_MOVES[event.key]
     if (!move) return
     event.preventDefault()
-    onLayoutChange(compact(moveByKey(layoutW, heights, id, move), heights, id))
+    onLayoutChange(compact(moveByKey(resolved, heights, id, move), heights, id))
     setAnnouncement(`${itemById(id).title} moved ${move}.`)
   }
 

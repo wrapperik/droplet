@@ -10,6 +10,7 @@ import {
   compact,
   moveByKey,
   moveTo,
+  reflow,
   reconcile,
   rowsForHeight,
   settle,
@@ -256,5 +257,66 @@ describe('settle', () => {
   it('stays inside the grid', () => {
     const result = settle(sideBySide, h, 'contrast', { col: COLS - 12, row: 0 })
     expect(at(result, 'contrast').col + at(result, 'contrast').w).toBeLessThanOrEqual(COLS)
+  })
+})
+
+describe('reflow', () => {
+  const h: Heights = { a: 10, b: 10, c: 40 }
+
+  it('keeps items that shared a row on that row when a neighbour grows into them', () => {
+    // a was saved 8 columns wide with b beside it at column 8; a now needs 11 columns
+    const grown: Placement[] = [
+      { id: 'a', col: 0, row: 0, w: 11 },
+      { id: 'b', col: 8, row: 0, w: 13 },
+      { id: 'c', col: 0, row: 10, w: COLS },
+    ]
+    const result = reflow(grown, h)
+    expect(at(result, 'b')).toMatchObject({ col: 11, row: 0 })
+    expect(at(result, 'c').row).toBe(10)
+  })
+
+  it('drops the item beneath its neighbour, lined up with it, when it can no longer fit beside it', () => {
+    const tooWide: Placement[] = [
+      { id: 'a', col: 0, row: 0, w: 11 },
+      { id: 'b', col: 8, row: 0, w: 14 },
+      { id: 'c', col: 0, row: 10, w: COLS },
+    ]
+    const result = reflow(tooWide, h)
+    expect(at(result, 'b')).toMatchObject({ col: 0, row: h.a })
+  })
+
+  it('works when the item that grew is the one on the left', () => {
+    const rightGrew: Placement[] = [
+      { id: 'a', col: 0, row: 0, w: 6 },
+      { id: 'b', col: 6, row: 0, w: 8 },
+      { id: 'c', col: 0, row: 10, w: COLS },
+    ]
+    // a grows to 9 columns, so b must move from column 6 to column 9
+    const result = reflow(rightGrew.map((p) => (p.id === 'a' ? { ...p, w: 9 } : p)), h)
+    expect(at(result, 'b')).toMatchObject({ col: 9, row: 0 })
+  })
+
+  it('does not move items that were on different rows, or already clear of each other', () => {
+    const apart: Placement[] = [
+      { id: 'a', col: 0, row: 0, w: 8 },
+      { id: 'b', col: 8, row: 0, w: 8 },
+      { id: 'c', col: 0, row: 10, w: COLS },
+    ]
+    expect(samePlacements(reflow(apart, h), compact(apart, h))).toBe(true)
+    const stacked: Placement[] = [
+      { id: 'a', col: 0, row: 0, w: 8 },
+      { id: 'b', col: 4, row: 10, w: 8 },
+      { id: 'c', col: 0, row: 20, w: COLS },
+    ]
+    expect(samePlacements(reflow(stacked, h), compact(stacked, h))).toBe(true)
+  })
+
+  it('leaves automatic columns to compaction', () => {
+    const flow: Placement[] = [
+      { id: 'a', col: 0, row: 0, w: 11 },
+      { id: 'b', col: AUTO_COL, row: 0, w: 13 },
+      { id: 'c', col: 0, row: 10, w: COLS },
+    ]
+    expect(samePlacements(reflow(flow, h), compact(flow, h))).toBe(true)
   })
 })

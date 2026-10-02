@@ -10,6 +10,7 @@ import PaletteCanvas, { type PaletteBlock } from './PaletteCanvas.tsx'
 import './PaletteWorkspace.css'
 
 const MAX_BLOCKS = 8
+const MIN_BLOCKS = 2 // a palette needs at least a pair, and the checker needs one colour to read
 const STARTER_COLOURS = ['#1F8FE0', '#0B4F8A', '#CFE9FB', '#0E1A2B']
 
 // Where things start, and where "Reset layout" puts them: the two toolbars side by side across the top
@@ -55,6 +56,19 @@ export default function PaletteWorkspace({ projectId, projectName }: Props) {
     setSelectedId(id)
   }, [blocks, selectedHex])
 
+  const removeBlock = useCallback(
+    (id: number) => {
+      if (blocks.length <= MIN_BLOCKS) return
+      const index = blocks.findIndex((block) => block.id === id)
+      if (index < 0) return
+      const remaining = blocks.filter((block) => block.id !== id)
+      setBlocks(remaining)
+      // Removing the selected colour selects the one that takes its place (or the last, if it was last).
+      if (id === selectedId) setSelectedId(remaining[Math.min(index, remaining.length - 1)].id)
+    },
+    [blocks, selectedId],
+  )
+
   const layoutIsDefault = samePlacements(layout, DEFAULT_LAYOUT)
   const unsaved =
     !saved ||
@@ -96,7 +110,15 @@ export default function PaletteWorkspace({ projectId, projectName }: Props) {
         distance: 0.12,
         node: (
           <div className="palette-workspace__canvas">
-            <PaletteCanvas blocks={blocks} selectedId={selectedId} max={MAX_BLOCKS} onSelect={setSelectedId} onAdd={addBlock} />
+            <PaletteCanvas
+              blocks={blocks}
+              selectedId={selectedId}
+              max={MAX_BLOCKS}
+              min={MIN_BLOCKS}
+              onSelect={setSelectedId}
+              onAdd={addBlock}
+              onRemove={removeBlock}
+            />
           </div>
         ),
       },
@@ -111,7 +133,7 @@ export default function PaletteWorkspace({ projectId, projectName }: Props) {
         node: <ContrastChecker hex={selectedHex} checking={label} reason="Checks the selected colour as a background." />,
       },
     ],
-    [blocks, selectedId, label, selectedHex, changeColour, addBlock],
+    [blocks, selectedId, label, selectedHex, changeColour, addBlock, removeBlock],
   )
 
   return (

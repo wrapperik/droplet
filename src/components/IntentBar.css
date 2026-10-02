@@ -7,6 +7,16 @@
   width: min(42.25rem, 100%);
 }
 
+/* Docked in the side panel: fills the panel, and the menu opens upwards at the same width. */
+.intent--docked {
+  width: 100%;
+  gap: 0.75rem;
+}
+
+.intent--docked .intent__chip {
+  border-radius: var(--radius-lg);
+}
+
 .intent__chip {
   display: inline-flex;
   align-items: center;

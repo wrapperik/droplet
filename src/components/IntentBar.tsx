@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { AddIcon, ReplyIcon, Widget2Icon } from '@solar-icons/react/linear'
 import { useDismiss } from '../hooks/useDismiss.ts'
@@ -9,16 +9,24 @@ import './IntentBar.css'
 type Props = {
   onSubmitIntent?: (text: string) => void
   onChooseTask?: (id: TaskId) => void
+  // Sits in the side panel beside a thread instead of centred beneath the workspace.
+  docked?: boolean
 }
 
 // The two equal ways in: describe what you need, or choose a task from the menu.
-export default function IntentBar({ onSubmitIntent, onChooseTask }: Props) {
+export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false }: Props) {
   const [text, setText] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
   const chipRef = useRef<HTMLButtonElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const close = useCallback(() => setMenuOpen(false), [])
   useDismiss(menuOpen, close, wrapRef)
+
+  // The bar moves into the side panel when a workspace appears, so keep the cursor in it.
+  useEffect(() => {
+    if (docked) inputRef.current?.focus()
+  }, [docked])
 
   const canSend = text.trim().length > 0
 
@@ -36,7 +44,7 @@ export default function IntentBar({ onSubmitIntent, onChooseTask }: Props) {
   }
 
   return (
-    <div className="intent" ref={wrapRef}>
+    <div className={docked ? 'intent intent--docked' : 'intent'} ref={wrapRef}>
       <AnimatePresence>{menuOpen && <TaskMenu onSelect={choose} />}</AnimatePresence>
 
       <button
@@ -65,6 +73,7 @@ export default function IntentBar({ onSubmitIntent, onChooseTask }: Props) {
           <AddIcon size={22} aria-hidden="true" />
         </button>
         <input
+          ref={inputRef}
           className="intent__input"
           type="text"
           value={text}

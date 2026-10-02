@@ -109,15 +109,18 @@
   cursor: pointer;
 }
 
+.palette__top {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .palette__name {
   font-size: 0.8125rem;
   font-weight: 600;
 }
 
 .palette__check {
-  position: absolute;
-  top: 0.625rem;
-  right: 0.625rem;
   display: grid;
   place-items: center;
   width: 1.375rem;
@@ -132,7 +135,23 @@
   letter-spacing: 0.02em;
 }
 
-/* Copy appears on hover or focus, and always on touch screens. */
+/* Copy and remove appear on hover or focus, and always on touch screens. */
+.palette__remove {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 1px solid currentcolor;
+  border-radius: 50%;
+  background: transparent;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
 .palette__copy {
   position: absolute;
   right: 0.5rem;
@@ -151,12 +170,15 @@
 }
 
 .palette__cell:hover .palette__copy,
-.palette__copy:focus-visible {
+.palette__cell:hover .palette__remove,
+.palette__copy:focus-visible,
+.palette__remove:focus-visible {
   opacity: 0.9;
 }
 
 @media (hover: none) {
-  .palette__copy {
+  .palette__copy,
+  .palette__remove {
     opacity: 0.8;
   }
 }
