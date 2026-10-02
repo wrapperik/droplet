@@ -14,15 +14,17 @@ import { GripHorizontalIcon } from '@solar-icons/react/linear'
 import {
   CELL_GAP_PX,
   CELL_PX,
+  boxForPlacement,
   COLS,
   ROWS_PER_CELL,
   ROW_PX,
   bottomRow,
   cellFromPoint,
+  columnsForWidth,
   compact,
   moveByKey,
-  moveTo,
   rowsForHeight,
+  settle,
   type Heights,
   type KeyMove,
   type Placement,
@@ -40,6 +42,11 @@ export type WorkspaceItem = {
   // How the item first appears (see Emerge).
   delay?: number
   distance?: number
+  // Fills its columns without being measured for them, as a canvas does. Other items are given just
+  // enough whole columns for their contents.
+  fill?: boolean
+  // Corner radius, so the drop outline matches the item it stands in for.
+  radius?: string
 }
 
 type Props = {
@@ -49,13 +56,13 @@ type Props = {
   onLayoutChange: (next: Placement[]) => void
 }
 
-// Below this width the three columns would be too narrow for the components, so items stack and cannot be moved.
+// Below this width the items would be too narrow for the components, so items stack and cannot be moved.
 const MIN_GRID_WIDTH = 940
 // Empty rows kept beneath the last item, so there is always room to drop something below.
 const SPARE_ROWS = 26
 // A press that moves less than this is a click, not a drag.
 const DRAG_THRESHOLD_PX = 6
-const GHOST_SIZE = 72
+const GHOST_SIZE = 56
 // How long a component takes to glide to its new place, in milliseconds.
 const MOVE_DURATION_MS = 650
 const MOVE_EASING = 'cubic-bezier(0.16, 1, 0.3, 1)'
@@ -75,7 +82,7 @@ const KEY_MOVES: Record<string, KeyMove> = {
   ArrowDown: 'down',
 }
 
-// A 12-column grid whose items can be dragged anywhere. While dragging, a grey box with the item's icon
+// A 24-column grid whose items can be dragged anywhere. While dragging, a grey box with the item's icon
 // follows the pointer and a dashed outline shows where it will land. The real component then animates to
 // its new position when dropped.
 export default function GridWorkspace({ items, layout, onLayoutChange }: Props) {
@@ -89,6 +96,7 @@ export default function GridWorkspace({ items, layout, onLayoutChange }: Props) 
 
   const [width, setWidth] = useState<number | null>(null)
   const [heights, setHeights] = useState<Heights>({})
+  const [sizesPx, setSizesPx] = useState<Record<string, { w: number; h: number }>>({})
   const [ready, setReady] = useState(false)
   const [drag, setDrag] = useState<DragState | null>(null)
   const [announcement, setAnnouncement] = useState('')
@@ -100,22 +108,58 @@ export default function GridWorkspace({ items, layout, onLayoutChange }: Props) 
     const root = rootRef.current
     if (!root) return
     setWidth(root.getBoundingClientRect().width)
+    // Column counts depend on the width and are recalculated a frame after it changes. In that frame a pill can
+    // be a little too narrow for its tools; the toolbar's min-width keeps its contents inside it until the
+    // new column count arrives.
     const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width))
     observer.observe(root)
     return () => observer.disconnect()
   }, [])
 
-  // Measure every item so the grid knows how many rows each one covers.
+  // Measure every item: its height, and how wide its contents want to be. The grid turns those into rows
+  // and columns. The width is the natural width of the tools (marked data-intrinsic), not the item's own
+  // width, because an item always fills the columns it is given.
   useEffect(() => {
     if (!wide) return
+    const naturalWidth = (item: HTMLElement) => {
+      const parts = Array.from(item.querySelectorAll<HTMLElement>('[data-intrinsic]'))
+      const frameOwner = parts[0]?.parentElement
+      if (!frameOwner) return item.offsetWidth
+      const px = (value: string) => parseFloat(value) || 0
+      const frame = getComputedStyle(frameOwner)
+      let total = px(frame.paddingLeft) + px(frame.paddingRight) + px(frame.borderLeftWidth) + px(frame.borderRightWidth)
+      for (const part of parts) {
+        const style = getComputedStyle(part)
+        total += part.offsetWidth + px(style.marginLeft) + px(style.marginRight)
+      }
+      return total
+    }
+
     const observer = new ResizeObserver((entries) => {
+      const touched = new Set<HTMLElement>()
+      for (const entry of entries) {
+        const item = (entry.target as HTMLElement).closest<HTMLElement>('.gw__item')
+        if (item?.dataset.id) touched.add(item)
+      }
+      setSizesPx((current) => {
+        const next = { ...current }
+        let changed = false
+        for (const item of touched) {
+          const id = item.dataset.id!
+          const size = { w: naturalWidth(item), h: item.offsetHeight }
+          if (next[id]?.w !== size.w || next[id]?.h !== size.h) {
+            next[id] = size
+            changed = true
+          }
+        }
+        return changed ? next : current
+      })
       setHeights((current) => {
         const next = { ...current }
         let changed = false
-        for (const entry of entries) {
-          const id = (entry.target as HTMLElement).dataset.id
-          if (!id) continue
-          const rows = rowsForHeight((entry.target as HTMLElement).offsetHeight)
+        for (const item of touched) {
+          const id = item.dataset.id!
+          const rows = rowsForHeight(item.offsetHeight)
           if (next[id] !== rows) {
             next[id] = rows
             changed = true
@@ -124,9 +168,12 @@ export default function GridWorkspace({ items, layout, onLayoutChange }: Props) 
         return changed ? next : current
       })
     })
+
     for (const id of Object.keys(itemRefs.current)) {
       const element = itemRefs.current[id]
-      if (element) observer.observe(element)
+      if (!element) continue
+      observer.observe(element)
+      for (const part of element.querySelectorAll('[data-intrinsic]')) observer.observe(part)
     }
     return () => observer.disconnect()
   }, [wide, itemIds])
@@ -138,7 +185,19 @@ export default function GridWorkspace({ items, layout, onLayoutChange }: Props) 
     return () => cancelAnimationFrame(frame)
   }, [wide, ready, heights, items.length])
 
-  const resolved = useMemo(() => compact(layout, heights), [layout, heights])
+  // Items that hug their content take as many columns as that content needs. Items that fill (a canvas) keep theirs.
+  const layoutW = useMemo(
+    () =>
+      layout.map((p) => {
+        const item = items.find((candidate) => candidate.id === p.id)
+        const px = sizesPx[p.id]?.w
+        if (!item || item.fill || !px || !width) return p
+        return { ...p, w: columnsForWidth(px, width) }
+      }),
+    [layout, items, sizesPx, width],
+  )
+
+  const resolved = useMemo(() => compact(layoutW, heights), [layoutW, heights])
 
   // Animate any item whose place changed (a drop, a push from another item, Reset layout) from where it
   // was to where it is now. Runs after the DOM has updated and before the browser paints.
@@ -170,8 +229,8 @@ export default function GridWorkspace({ items, layout, onLayoutChange }: Props) 
 
   const candidate = useMemo(() => {
     if (!drag) return null
-    return compact(moveTo(layout, drag.id, drag.cell), heights, drag.id)
-  }, [drag, layout, heights])
+    return settle(layoutW, heights, drag.id, drag.cell)
+  }, [drag, layoutW, heights])
   const preview = drag && candidate ? candidate.find((p) => p.id === drag.id)! : null
 
   // The ghost follows the pointer by writing its transform directly, so moving it never re-renders the grid.
@@ -183,7 +242,7 @@ export default function GridWorkspace({ items, layout, onLayoutChange }: Props) 
 
   const cellAt = (point: { x: number; y: number }, id: string) => {
     const box = gridRef.current!.getBoundingClientRect()
-    return cellFromPoint(point, box, itemById(id).w)
+    return cellFromPoint(point, box, layoutRef.current.find((p) => p.id === id)?.w ?? itemById(id).w)
   }
 
   const beginDrag = (event: PointerEvent<HTMLButtonElement>, id: string) => {
@@ -198,9 +257,11 @@ export default function GridWorkspace({ items, layout, onLayoutChange }: Props) 
 
   // The latest state, readable from window listeners without going stale.
   const dragRef = useRef<DragState | null>(null)
-  const latest = useRef({ layout, heights, onLayoutChange })
+  const layoutRef = useRef(layoutW)
+  const latest = useRef({ layout: layoutW, heights, onLayoutChange })
   useLayoutEffect(() => {
-    latest.current = { layout, heights, onLayoutChange }
+    layoutRef.current = layoutW
+    latest.current = { layout: layoutW, heights, onLayoutChange }
   })
 
   const dragId = drag?.id ?? null
@@ -214,7 +275,7 @@ export default function GridWorkspace({ items, layout, onLayoutChange }: Props) 
       const current = dragRef.current
       const { layout: currentLayout, heights: currentHeights, onLayoutChange: apply } = latest.current
       if (current && commit && current.moved) {
-        apply(compact(moveTo(currentLayout, current.id, current.cell), currentHeights, current.id))
+        apply(settle(currentLayout, currentHeights, current.id, current.cell))
         setAnnouncement(`${itemById(current.id).title} moved.`)
       }
       dragRef.current = null
@@ -272,7 +333,7 @@ export default function GridWorkspace({ items, layout, onLayoutChange }: Props) 
     const move = KEY_MOVES[event.key]
     if (!move) return
     event.preventDefault()
-    onLayoutChange(compact(moveByKey(layout, heights, id, move), heights, id))
+    onLayoutChange(compact(moveByKey(layoutW, heights, id, move), heights, id))
     setAnnouncement(`${itemById(id).title} moved ${move}.`)
   }
 
@@ -300,14 +361,20 @@ export default function GridWorkspace({ items, layout, onLayoutChange }: Props) 
         ref={gridRef}
         className="gw__grid"
         data-dragging={drag?.moved ? 'true' : undefined}
-        style={{ gridTemplateRows: `repeat(${totalRows}, ${ROW_PX}px)` }}
+        style={{
+          gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))`,
+          gridTemplateRows: `repeat(${totalRows}, ${ROW_PX}px)`,
+        }}
       >
         {/* The grid, columns and rows, only while something is being dragged. */}
         {drag?.moved && (
           <div
             className="gw__guides"
             aria-hidden="true"
-            style={{ gridTemplateRows: `repeat(${guideRows}, ${CELL_PX - CELL_GAP_PX}px)` }}
+            style={{
+              gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))`,
+              gridTemplateRows: `repeat(${guideRows}, ${CELL_PX - CELL_GAP_PX}px)`,
+            }}
           >
             {Array.from({ length: COLS * guideRows }, (_, index) => (
               <span key={index} className="gw__guide" />
@@ -336,28 +403,37 @@ export default function GridWorkspace({ items, layout, onLayoutChange }: Props) 
                 <Emerge delay={item.delay} distance={item.distance}>
                   {item.node}
                 </Emerge>
+                <button
+                  type="button"
+                  className="gw__handle"
+                  aria-label={`Move ${item.title}. Drag, or use the arrow keys.`}
+                  onPointerDown={(event) => beginDrag(event, item.id)}
+                  onKeyDown={(event) => onHandleKeyDown(event, item.id)}
+                >
+                  <GripHorizontalIcon size={16} aria-hidden="true" />
+                </button>
               </div>
-              <button
-                type="button"
-                className="gw__handle"
-                aria-label={`Move ${item.title}. Drag, or use the arrow keys.`}
-                onPointerDown={(event) => beginDrag(event, item.id)}
-                onKeyDown={(event) => onHandleKeyDown(event, item.id)}
-              >
-                <GripHorizontalIcon size={18} aria-hidden="true" />
-              </button>
             </div>
           )
         })}
 
-        {preview && drag?.moved && (
+        {preview && drag?.moved && width !== null && (
           <div
             className="gw__drop"
             aria-hidden="true"
-            style={{
-              gridColumn: `${preview.col + 1} / span ${preview.w}`,
-              gridRow: `${preview.row + 1} / span ${Math.max(1, (heights[drag.id] ?? 24) - 2)}`,
-            }}
+            style={(() => {
+              const dragged = itemById(drag.id)
+              const measured = sizesPx[drag.id]
+              // Every item fills its columns, so the outline is as wide as its columns and as tall as its content.
+              const box = boxForPlacement(preview, width, measured ? { w: Infinity, h: measured.h } : undefined)
+              return {
+                left: box.left,
+                top: box.top,
+                width: box.width,
+                height: box.height ?? undefined,
+                borderRadius: dragged.radius,
+              }
+            })()}
           />
         )}
       </div>
@@ -373,7 +449,7 @@ export default function GridWorkspace({ items, layout, onLayoutChange }: Props) 
             className="gw__ghost"
             aria-hidden="true"
           >
-            <GhostIcon size={30} />
+            <GhostIcon size={24} />
           </div>,
           document.body,
         )}

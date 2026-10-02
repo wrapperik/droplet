@@ -67,8 +67,7 @@
 
 /* The canvas is the white space where the work happens. */
 .palette-workspace__canvas {
-  min-height: 26rem;
-  padding: 1.5rem;
+  padding: 1.125rem 1.25rem 1.25rem;
   border: 1px solid var(--overlay-10);
   border-radius: var(--radius-xl);
   background: var(--canvas);

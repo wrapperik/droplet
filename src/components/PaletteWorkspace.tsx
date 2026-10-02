@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { EyeIcon, LayersMinimalisticIcon, LockIcon, PaletteIcon, RestartIcon, CheckIcon } from '@solar-icons/react/linear'
 import { shiftHue } from '../lib/colour.ts'
-import { samePlacements, type Placement } from '../lib/gridLayout.ts'
+import { AUTO_COL, reconcile, samePlacements, type Placement } from '../lib/gridLayout.ts'
 import { loadPalette, savePalette, type PaletteSave } from '../lib/projectStore.ts'
 import ColourPicker from './ColourPicker.tsx'
 import ContrastChecker from './ContrastChecker.tsx'
@@ -12,11 +12,13 @@ import './PaletteWorkspace.css'
 const MAX_BLOCKS = 8
 const STARTER_COLOURS = ['#1F8FE0', '#0B4F8A', '#CFE9FB', '#0E1A2B']
 
-// Where things start, and where "Reset layout" puts them: picker left, canvas centre, contrast right.
+// Where things start, and where "Reset layout" puts them: the two toolbars side by side across the top
+// (the second starts where the first ends) and the white canvas full width beneath them. Toolbar widths come
+// from their content and the canvas row is only a preference, so nothing here reserves unused space.
 const DEFAULT_LAYOUT: Placement[] = [
-  { id: 'picker', col: 0, row: 0, w: 3 },
-  { id: 'canvas', col: 3, row: 0, w: 6 },
-  { id: 'contrast', col: 9, row: 0, w: 3 },
+  { id: 'picker', col: 0, row: 0, w: 8 },
+  { id: 'contrast', col: AUTO_COL, row: 0, w: 12 },
+  { id: 'canvas', col: 0, row: 10, w: 24 },
 ]
 
 const starterBlocks = (): PaletteBlock[] => STARTER_COLOURS.map((hex, index) => ({ id: index + 1, hex }))
@@ -31,7 +33,7 @@ type Props = {
 export default function PaletteWorkspace({ projectId, projectName }: Props) {
   const [saved, setSaved] = useState<PaletteSave | null>(() => loadPalette(projectId))
   const [blocks, setBlocks] = useState<PaletteBlock[]>(() => saved?.blocks ?? starterBlocks())
-  const [layout, setLayout] = useState<Placement[]>(() => saved?.layout ?? DEFAULT_LAYOUT)
+  const [layout, setLayout] = useState<Placement[]>(() => (saved ? reconcile(saved.layout, DEFAULT_LAYOUT) : DEFAULT_LAYOUT))
   const [selectedId, setSelectedId] = useState(() => (saved?.blocks ?? starterBlocks())[0].id)
   const [saveFailed, setSaveFailed] = useState(false)
 
@@ -71,7 +73,8 @@ export default function PaletteWorkspace({ projectId, projectName }: Props) {
         id: 'picker',
         title: 'Colour picker',
         icon: PaletteIcon,
-        w: 3,
+        w: 8,
+        radius: 'var(--radius-xl)',
         delay: 0.45,
         distance: 0.9,
         node: (
@@ -79,7 +82,7 @@ export default function PaletteWorkspace({ projectId, projectName }: Props) {
             value={selectedHex}
             onChange={changeColour}
             editing={label}
-            reason="Shown because you asked for a colour palette."
+            reason="Shown because you asked for a colour palette. Click the colour to open the full spectrum."
           />
         ),
       },
@@ -87,7 +90,9 @@ export default function PaletteWorkspace({ projectId, projectName }: Props) {
         id: 'canvas',
         title: 'Palette canvas',
         icon: LayersMinimalisticIcon,
-        w: 6,
+        w: 24,
+        fill: true,
+        radius: 'var(--radius-xl)',
         distance: 0.12,
         node: (
           <div className="palette-workspace__canvas">
@@ -99,7 +104,8 @@ export default function PaletteWorkspace({ projectId, projectName }: Props) {
         id: 'contrast',
         title: 'Contrast checker',
         icon: EyeIcon,
-        w: 3,
+        w: 12,
+        radius: 'var(--radius-xl)',
         delay: 0.9,
         distance: 0.4,
         node: <ContrastChecker hex={selectedHex} checking={label} reason="Checks the selected colour as a background." />,

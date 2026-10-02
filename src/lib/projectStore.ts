@@ -4,9 +4,9 @@ import { z } from 'zod'
 // Everything read back is validated, because storage can hold anything.
 const placementSchema = z.object({
   id: z.string(),
-  col: z.number().int().min(0).max(11),
+  col: z.number().int().min(-1).max(23), // -1 means "start after the previous item"
   row: z.number().int().min(0),
-  w: z.number().int().min(1).max(12),
+  w: z.number().int().min(1).max(24),
 })
 
 export const paletteSaveSchema = z.object({

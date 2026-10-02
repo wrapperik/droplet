@@ -1,0 +1,103 @@
+.toolbar {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  /* Safety net: the pill is never narrower than its contents, so nothing can spill out of it. */
+  min-width: max-content;
+  padding: 0.3125rem 0.75rem 0.3125rem 1rem;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+}
+
+/* The title and its info button, at the left. */
+.toolbar__lead {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.25rem;
+  margin-right: 0.75rem;
+}
+
+.toolbar__title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+}
+
+/* The tools keep their natural width and sit in the middle of the space left over. */
+.toolbar__centre {
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  min-width: 0;
+}
+
+.toolbar__tools {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.5rem;
+  width: max-content;
+}
+
+.toolbar__divider {
+  align-self: stretch;
+  width: 1px;
+  min-height: 1.75rem;
+  margin-inline: 0.125rem;
+  background: var(--overlay-10);
+}
+
+/* A round icon button, as in the reference toolbars. */
+.toolbar__button {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.toolbar__button:hover,
+.toolbar__button:focus-visible {
+  background: var(--overlay-06);
+  color: var(--text);
+}
+
+.reason {
+  position: relative;
+  display: inline-flex;
+}
+
+.reason__tip {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  z-index: 30;
+  width: max-content;
+  max-width: 16rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  font-size: 0.8125rem;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition:
+    opacity var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.reason:hover .reason__tip,
+.reason__button:focus + .reason__tip {
+  opacity: 1;
+  transform: none;
+}

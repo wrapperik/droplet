@@ -13,6 +13,7 @@ These are inspiration, not assets. Do not copy their colours, icons or content. 
 | `05-pill-toolbars.png` | Pill containers with a pill nested inside. Round icon buttons, a thin vertical divider between groups, a filled round primary action. The base of the intent bar and action bar. |
 | `06-tools-menu-composer.png` | The composer pattern: a rounded input with a `+` and a tools button, and a menu that opens beneath it. Rows are icon plus label with a quiet right-aligned note. |
 | `07-sidebar-navigation.png` | The app shell. A project switcher card at the top (icon, name, up/down chevrons), a dashed divider, icon plus label nav, the active item on a soft grey fill with a short dark bar, and sub-items hanging off a dashed guide line. The working screen is a slightly smaller rounded white box inset beside the sidebar. |
+| `08-toolbars.png` | Compact toolbars. A vertical pill of icon buttons, a horizontal pill with icon buttons, a thin divider and one dark primary button, and a pill with labelled icons. Components should be toolbars like these, with detail (such as a full colour spectrum) opening on demand rather than always showing. |
 
 ## Shared traits
 
