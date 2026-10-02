@@ -37,7 +37,7 @@ export type WorkspaceItem = {
   id: string
   title: string
   icon: Icon
-  // Width in grid columns (out of 12).
+  // Width in grid columns (out of 24).
   w: number
   node: ReactNode
   // How the item first appears (see Emerge).

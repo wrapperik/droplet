@@ -4,6 +4,8 @@
   width: 100%;
   /* Safety net: the pill is never narrower than its contents, so nothing can spill out of it. */
   min-width: max-content;
+  /* One height for every toolbar, so ones stacked under each other start on the same grid row. */
+  min-height: 3.125rem;
   padding: 0.3125rem 0.75rem 0.3125rem 1rem;
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-md);

@@ -17,6 +17,21 @@ describe('projectStore', () => {
     expect(loadPalette('typography')).toBeNull()
   })
 
+  it('keeps the role given to a colour', () => {
+    const withRoles = { ...data, blocks: [{ id: 1, hex: '#1F8FE0', role: 'primary' as const }, { id: 2, hex: '#0B4F8A' }] }
+    savePalette('duckstack', withRoles)
+    expect(loadPalette('duckstack')?.blocks[0].role).toBe('primary')
+    expect(loadPalette('duckstack')?.blocks[1].role).toBeUndefined()
+  })
+
+  it('rejects a role that does not exist', () => {
+    window.localStorage.setItem(
+      'droplet-project-duckstack-palette',
+      JSON.stringify({ blocks: [{ id: 1, hex: '#1F8FE0', role: 'headline' }], layout: [], savedAt: new Date().toISOString() }),
+    )
+    expect(loadPalette('duckstack')).toBeNull()
+  })
+
   it('stamps when it was saved', () => {
     const save = savePalette('duckstack', data)
     expect(Number.isNaN(Date.parse(save!.savedAt))).toBe(false)

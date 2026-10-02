@@ -170,9 +170,16 @@
   }
 
   .sidebar[data-collapsed='true'] .nav__label,
+  .sidebar[data-collapsed='true'] .account__name,
+  .sidebar[data-collapsed='true'] .account__chevron,
   .sidebar[data-collapsed='true'] .nav__chevron,
   .sidebar[data-collapsed='true'] .subnav {
     display: none;
+  }
+
+  .sidebar[data-collapsed='true'] .account__trigger {
+    justify-content: center;
+    padding-inline: 0.5rem;
   }
 
   .sidebar[data-collapsed='true'] .nav__item,

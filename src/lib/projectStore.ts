@@ -11,7 +11,14 @@ const placementSchema = z.object({
 
 export const paletteSaveSchema = z.object({
   blocks: z
-    .array(z.object({ id: z.number().int(), hex: z.string().regex(/^#[0-9A-Fa-f]{6}$/) }))
+    .array(
+      z.object({
+        id: z.number().int(),
+        hex: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+        role: z.enum(['primary', 'accent', 'background', 'text']).optional(),
+        locked: z.boolean().optional(),
+      }),
+    )
     .min(1)
     .max(8),
   layout: z.array(placementSchema),

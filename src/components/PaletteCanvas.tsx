@@ -1,10 +1,17 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { AddCircleIcon, CheckIcon, CopyIcon, TrashBinMinimalisticIcon } from '@solar-icons/react/linear'
+import {
+  AddCircleIcon,
+  CheckIcon,
+  CopyIcon,
+  LockKeyholeMinimalisticIcon,
+  LockKeyholeMinimalisticUnlockedIcon,
+  TrashBinMinimalisticIcon,
+} from '@solar-icons/react/linear'
 import { readableTextColour } from '../lib/colour.ts'
+import { COLOUR_ROLES, type PaletteBlock } from '../lib/palette.ts'
+import { ReasonTip } from './Toolbar.tsx'
 import './PaletteCanvas.css'
-
-export type PaletteBlock = { id: number; hex: string }
 
 type Props = {
   blocks: PaletteBlock[]
@@ -14,10 +21,13 @@ type Props = {
   onSelect: (id: number) => void
   onAdd: () => void
   onRemove: (id: number) => void
+  onToggleLock: (id: number) => void
+  // One line saying why this component is on screen (manifesto principle 3).
+  reason: string
 }
 
 // The work area for a palette: colour blocks you click to select, then change with the picker.
-export default function PaletteCanvas({ blocks, selectedId, max, min, onSelect, onAdd, onRemove }: Props) {
+export default function PaletteCanvas({ blocks, selectedId, max, min, onSelect, onAdd, onRemove, onToggleLock, reason }: Props) {
   const full = blocks.length >= max
   const [copiedId, setCopiedId] = useState<number | null>(null)
   const [removedNote, setRemovedNote] = useState('')
@@ -64,6 +74,7 @@ export default function PaletteCanvas({ blocks, selectedId, max, min, onSelect, 
       <header className="palette__header">
         <div className="palette__heading">
           <h2 className="palette__title">Palette</h2>
+          <ReasonTip reason={reason} />
           <p className="palette__hint">
             {blocks.length} of {max} colours. Select one to edit it.
           </p>
@@ -81,6 +92,7 @@ export default function PaletteCanvas({ blocks, selectedId, max, min, onSelect, 
             const selected = block.id === selectedId
             const ink = readableTextColour(block.hex)
             const copied = copiedId === block.id
+            const roleLabel = COLOUR_ROLES.find((role) => role.id === block.role)?.label
             return (
               <motion.div
                 key={block.id}
@@ -102,10 +114,13 @@ export default function PaletteCanvas({ blocks, selectedId, max, min, onSelect, 
                     name="palette-colour"
                     checked={selected}
                     onChange={() => onSelect(block.id)}
-                    aria-label={`Colour ${index + 1}, ${block.hex}`}
+                    aria-label={`Colour ${index + 1}, ${block.hex}${roleLabel ? `, ${roleLabel}` : ''}`}
                   />
                   <span className="palette__top">
-                    <span className="palette__name">Colour {index + 1}</span>
+                    <span className="palette__titles">
+                      <span className="palette__name">Colour {index + 1}</span>
+                      {roleLabel && <span className="palette__role">{roleLabel}</span>}
+                    </span>
                     {selected && (
                       <span className="palette__check" style={{ background: ink, color: block.hex }} aria-hidden="true">
                         <CheckIcon size={13} strokeWidth={2.5} />
@@ -114,17 +129,33 @@ export default function PaletteCanvas({ blocks, selectedId, max, min, onSelect, 
                   </span>
                   <span className="palette__hex">{block.hex}</span>
                 </label>
-                {canRemove && (
+                <div className="palette__actions">
                   <button
                     type="button"
-                    className="palette__remove"
-                    style={{ color: ink }}
-                    onClick={() => remove(block, index)}
-                    aria-label={`Remove colour ${index + 1}, ${block.hex}`}
+                    className="palette__action"
+                    style={{ color: ink, '--block': block.hex } as CSSProperties}
+                    aria-pressed={Boolean(block.locked)}
+                    aria-label={`Keep colour ${index + 1}, ${block.hex}, when generating`}
+                    onClick={() => onToggleLock(block.id)}
                   >
-                    <TrashBinMinimalisticIcon size={16} aria-hidden="true" />
+                    {block.locked ? (
+                      <LockKeyholeMinimalisticIcon size={15} aria-hidden="true" />
+                    ) : (
+                      <LockKeyholeMinimalisticUnlockedIcon size={15} aria-hidden="true" />
+                    )}
                   </button>
-                )}
+                  {canRemove && (
+                    <button
+                      type="button"
+                      className="palette__action"
+                      style={{ color: ink }}
+                      onClick={() => remove(block, index)}
+                      aria-label={`Remove colour ${index + 1}, ${block.hex}`}
+                    >
+                      <TrashBinMinimalisticIcon size={16} aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
                 <button
                   type="button"
                   className="palette__copy"

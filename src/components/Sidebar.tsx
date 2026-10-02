@@ -11,6 +11,7 @@ import {
 } from '@solar-icons/react/linear'
 import { mockAssets, type ProjectSummary } from '../lib/mockProjects.ts'
 import { tasks, type TaskId } from '../lib/tasks.ts'
+import AccountMenu from './AccountMenu.tsx'
 import ProjectSwitcher from './ProjectSwitcher.tsx'
 import StatusMark from './StatusMark.tsx'
 import ThemeSwitcher from './ThemeSwitcher.tsx'
@@ -26,6 +27,8 @@ type Props = {
   collapsed: boolean
   onToggleCollapsed: () => void
   mobileOpen: boolean
+  // Who is signed in, shown in the account section at the bottom.
+  userName: string
 }
 
 type ItemProps = {
@@ -73,6 +76,7 @@ export default function Sidebar({
   collapsed,
   onToggleCollapsed,
   mobileOpen,
+  userName,
 }: Props) {
   const [assetsOpen, setAssetsOpen] = useState(true)
   const assetsId = useId()
@@ -181,6 +185,8 @@ export default function Sidebar({
       </nav>
 
       <ThemeSwitcher />
+
+      <AccountMenu name={userName} collapsed={collapsed} />
 
       <button
         type="button"

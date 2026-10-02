@@ -111,8 +111,22 @@
 
 .palette__top {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.5rem;
+}
+
+.palette__titles {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* What the colour is for, when the founder has said. */
+.palette__role {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  opacity: 0.85;
 }
 
 .palette__name {
@@ -122,6 +136,7 @@
 
 .palette__check {
   display: grid;
+  margin-top: 0.0625rem;
   place-items: center;
   width: 1.375rem;
   height: 1.375rem;
@@ -135,11 +150,16 @@
   letter-spacing: 0.02em;
 }
 
-/* Copy and remove appear on hover or focus, and always on touch screens. */
-.palette__remove {
+/* Keep, remove and copy appear on hover or focus, and always on touch screens. A kept colour shows its lock all the time. */
+.palette__actions {
   position: absolute;
   top: 0.5rem;
   right: 0.5rem;
+  display: flex;
+  gap: 0.25rem;
+}
+
+.palette__action {
   display: grid;
   place-items: center;
   width: 1.75rem;
@@ -150,6 +170,16 @@
   background: transparent;
   opacity: 0;
   transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+/* Kept: a solid disc in the text colour with the lock in the block's own colour, so it differs in more than hue. */
+.palette__action[aria-pressed='true'] {
+  background: currentcolor;
+  opacity: 0.95;
+}
+
+.palette__action[aria-pressed='true'] svg {
+  color: var(--block);
 }
 
 .palette__copy {
@@ -170,15 +200,15 @@
 }
 
 .palette__cell:hover .palette__copy,
-.palette__cell:hover .palette__remove,
+.palette__cell:hover .palette__action,
 .palette__copy:focus-visible,
-.palette__remove:focus-visible {
+.palette__action:focus-visible {
   opacity: 0.9;
 }
 
 @media (hover: none) {
   .palette__copy,
-  .palette__remove {
+  .palette__action {
     opacity: 0.8;
   }
 }

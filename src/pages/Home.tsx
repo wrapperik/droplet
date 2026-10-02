@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { HamburgerMenuIcon } from '@solar-icons/react/linear'
-import AccountMenu from '../components/AccountMenu.tsx'
 import ChatThread, { type ThreadMessage } from '../components/ChatThread.tsx'
 import IntentBar from '../components/IntentBar.tsx'
 import PaletteWorkspace from '../components/PaletteWorkspace.tsx'
@@ -12,7 +11,7 @@ import { isColourPaletteIntent } from '../lib/testIntents.ts'
 import './Home.css'
 
 const PALETTE_REPLY =
-  'I assembled a colour palette workspace: a colour picker, a contrast checker and a canvas of four blocks. Drag any of them by the grip on its top edge to rearrange.'
+  'I assembled a colour palette workspace: a colour picker, a role selector, a generate tool, a canvas of four blocks and a sample invoice in your colours. Drag any of them by the grip on its top edge to rearrange.'
 const NO_WORKSPACE_REPLY = 'I cannot assemble a workspace for that yet. Try asking for a colour palette, or choose a task from the menu.'
 
 export default function Home() {
@@ -63,6 +62,7 @@ export default function Home() {
         collapsed={collapsed}
         onToggleCollapsed={() => setCollapsed((value) => !value)}
         mobileOpen={mobileOpen}
+        userName={mockUser.name}
       />
       {mobileOpen && <div className="home__scrim" onClick={() => setMobileOpen(false)} aria-hidden="true" />}
 
@@ -81,9 +81,6 @@ export default function Home() {
           </div>
           <div className="home__brand">
             <Wordmark />
-          </div>
-          <div className="home__account">
-            <AccountMenu name={mockUser.name} />
           </div>
         </header>
 

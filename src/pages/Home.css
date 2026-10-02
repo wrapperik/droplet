@@ -30,11 +30,6 @@
   grid-column: 2;
 }
 
-.home__account {
-  grid-column: 3;
-  justify-self: end;
-}
-
 .home__canvas {
   flex: 1;
   min-height: 0;
