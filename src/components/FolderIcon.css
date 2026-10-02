@@ -1,0 +1,28 @@
+.folder-icon {
+  flex: none;
+  width: 2.5rem;
+  height: 2.5rem;
+  overflow: visible;
+  filter: drop-shadow(0 5px 6px var(--illustration-shadow));
+  transition: transform var(--duration-base) var(--ease-out);
+}
+
+.folder-icon__stop-back-top {
+  stop-color: color-mix(in srgb, var(--deep-water) 60%, var(--droplet-blue));
+}
+
+.folder-icon__stop-back-bottom {
+  stop-color: var(--deep-water);
+}
+
+.folder-icon__stop-front-top {
+  stop-color: var(--droplet-blue);
+}
+
+.folder-icon__stop-front-bottom {
+  stop-color: color-mix(in srgb, var(--deep-water) 80%, var(--droplet-blue));
+}
+
+.folder-icon__stop-paper-bottom {
+  stop-color: var(--ripple);
+}

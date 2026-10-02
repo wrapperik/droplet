@@ -1,0 +1,27 @@
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status__dot {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 50%;
+  color: var(--on-status);
+}
+
+.status--resolved .status__dot {
+  background: var(--status-resolved);
+}
+
+.status--outstanding .status__dot {
+  background: var(--status-outstanding);
+}

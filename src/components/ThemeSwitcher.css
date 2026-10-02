@@ -1,0 +1,68 @@
+.theme-switcher {
+  display: flex;
+  gap: 0.125rem;
+  margin: 0;
+  padding: 0.1875rem;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--overlay-06);
+}
+
+.theme-switcher__option {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  min-width: 0;
+  padding: 0.4375rem 0.5rem;
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.theme-switcher__option:hover {
+  color: var(--text);
+}
+
+/* The input is visually hidden but stays focusable. */
+.theme-switcher__input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.theme-switcher__option:has(.theme-switcher__input:checked) {
+  background: var(--raised);
+  box-shadow: var(--shadow-sm);
+  color: var(--text);
+}
+
+.theme-switcher__option:has(.theme-switcher__input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Collapsed sidebar: a vertical stack of icons. */
+@media (min-width: 52.0625rem) {
+  .sidebar[data-collapsed='true'] .theme-switcher {
+    flex-direction: column;
+    border-radius: var(--radius-lg);
+  }
+
+  .sidebar[data-collapsed='true'] .theme-switcher__label {
+    display: none;
+  }
+
+  .sidebar[data-collapsed='true'] .theme-switcher__option {
+    padding: 0.5rem;
+  }
+}

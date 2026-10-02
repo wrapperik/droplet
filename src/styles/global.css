@@ -17,11 +17,11 @@ body {
   font-family: var(--font-sans);
   font-size: 16px;
   line-height: 1.5;
-  color: var(--ink);
-  background-color: var(--mist);
+  color: var(--text);
+  background-color: var(--bg);
   background-image:
-    radial-gradient(60rem 40rem at 8% -10%, var(--ripple-60), transparent 70%),
-    radial-gradient(50rem 36rem at 100% 105%, var(--ripple-60), transparent 70%);
+    radial-gradient(60rem 40rem at 8% -10%, var(--bg-glow), transparent 70%),
+    radial-gradient(50rem 36rem at 100% 105%, var(--bg-glow), transparent 70%);
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
 }
@@ -37,7 +37,7 @@ button {
 }
 
 :focus-visible {
-  outline: 2px solid var(--droplet-blue);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 

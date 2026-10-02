@@ -1,9 +1,17 @@
-/* Design tokens. Palette and rules: CLAUDE.md section 11. Never hard-code hex values in components. */
+/*
+ * Design tokens. Palette and rules: CLAUDE.md section 11.
+ *
+ * Two layers:
+ *   1. Raw palette (--ink, --mist, ...): theme independent. Only this file and illustrations may use them.
+ *   2. Semantic tokens (--text, --bg, --accent, ...): what every component uses. They change with the theme.
+ *
+ * Components use semantic tokens only, so light and dark both work from the start.
+ */
 :root {
-  /* Palette */
+  /* Raw palette */
   --ink: #0e1a2b;
   --deep-water: #0b4f8a;
-  --droplet-blue: #1f8fe0; /* Large display text, icons and focus rings only. Fails AA for body text. */
+  --droplet-blue: #1f8fe0; /* Large display text, icons and focus rings only on light. Fails AA for body text on white. */
   --ripple: #cfe9fb;
   --mist: #f4f8fb;
   --slate: #4a5a70;
@@ -11,38 +19,93 @@
   --resolved: #15803d;
   --white: #ffffff;
 
-  /* Derived, from the palette above */
-  --ink-06: rgb(14 26 43 / 0.06);
-  --ink-10: rgb(14 26 43 / 0.1);
-  --ripple-60: rgb(207 233 251 / 0.6);
+  /* Raw palette: dark companions */
+  --night: #0a1320; /* Dark page background, one step below Ink */
+  --haze: #a9b8cb; /* Dark secondary text */
+  --sky: #7cc0f5; /* Dark accent for text and icons */
+  --mint: #4ade80; /* Dark resolved */
+  --amber: #fbbf24; /* Dark outstanding */
 
-  /* Glass */
-  --glass-fill: rgb(255 255 255 / 0.66);
-  --glass-fill-strong: rgb(255 255 255 / 0.84);
-  --glass-fill-fallback: rgb(255 255 255 / 0.96);
-  --glass-border: rgb(255 255 255 / 0.9);
-  --glass-blur: 18px;
-
-  /* Elevation */
-  --shadow-sm: 0 1px 2px rgb(14 26 43 / 0.04), 0 4px 14px rgb(14 26 43 / 0.05);
-  --shadow-md: 0 2px 4px rgb(14 26 43 / 0.04), 0 10px 30px rgb(14 26 43 / 0.08);
-  --shadow-lg: 0 4px 8px rgb(14 26 43 / 0.04), 0 24px 60px rgb(14 26 43 / 0.12);
-
-  /* Shape */
+  /* Shape, motion, layout and type do not change with the theme */
   --radius-pill: 999px;
   --radius-sm: 12px;
   --radius-md: 18px;
   --radius-lg: 24px;
   --radius-xl: 32px;
 
-  /* Motion */
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --duration-fast: 150ms;
   --duration-base: 220ms;
 
-  /* Layout */
   --page-gutter: clamp(20px, 5vw, 96px);
-
-  /* Type */
   --font-sans: 'Urbanist Variable', system-ui, sans-serif;
+  --glass-blur: 18px;
+
+  /* Semantic tokens: light (default) */
+  color-scheme: light;
+
+  --bg: var(--mist);
+  --bg-glow: rgb(207 233 251 / 0.6);
+  --text: var(--ink);
+  --text-muted: var(--slate);
+  --accent: var(--deep-water); /* Links, selected text and icons on a surface */
+  --accent-tint: var(--ripple); /* Selected cards and rows, avatar and badge fills */
+  --accent-tint-soft: rgb(207 233 251 / 0.6); /* Hover fills */
+  --button: var(--deep-water);
+  --on-button: var(--white);
+  --focus: var(--droplet-blue);
+  --status-resolved: var(--resolved);
+  --status-outstanding: var(--outstanding);
+  --on-status: var(--white); /* Icon inside a status circle */
+
+  --overlay-06: rgb(14 26 43 / 0.06); /* Quiet fills: icon wells, active nav item */
+  --overlay-10: rgb(14 26 43 / 0.1); /* Hairlines and dividers */
+  --scrim: rgb(14 26 43 / 0.28);
+  --raised: rgb(255 255 255 / 0.95); /* A control sitting on a quiet fill, such as the selected segment */
+
+  --glass-fill: rgb(255 255 255 / 0.66);
+  --glass-fill-strong: rgb(255 255 255 / 0.84);
+  --glass-fill-fallback: rgb(255 255 255 / 0.96);
+  --glass-border: rgb(255 255 255 / 0.9);
+
+  --illustration-shadow: rgb(11 79 138 / 0.32); /* Soft blue glow under 3D object icons */
+
+  --shadow-sm: 0 1px 2px rgb(14 26 43 / 0.04), 0 4px 14px rgb(14 26 43 / 0.05);
+  --shadow-md: 0 2px 4px rgb(14 26 43 / 0.04), 0 10px 30px rgb(14 26 43 / 0.08);
+  --shadow-lg: 0 4px 8px rgb(14 26 43 / 0.04), 0 24px 60px rgb(14 26 43 / 0.12);
+}
+
+/* Semantic tokens: dark. Set by the theme store through data-theme on <html>. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: var(--night);
+  --bg-glow: rgb(31 143 224 / 0.14);
+  --text: var(--mist);
+  --text-muted: var(--haze);
+  --accent: var(--sky);
+  --accent-tint: rgb(31 143 224 / 0.26);
+  --accent-tint-soft: rgb(31 143 224 / 0.16);
+  --button: var(--droplet-blue);
+  --on-button: var(--ink);
+  --focus: var(--droplet-blue);
+  --status-resolved: var(--mint);
+  --status-outstanding: var(--amber);
+  --on-status: var(--ink);
+
+  --overlay-06: rgb(255 255 255 / 0.07);
+  --overlay-10: rgb(255 255 255 / 0.12);
+  --scrim: rgb(0 0 0 / 0.55);
+  --raised: rgb(255 255 255 / 0.16);
+
+  --glass-fill: rgb(18 32 52 / 0.62);
+  --glass-fill-strong: rgb(18 32 52 / 0.84);
+  --glass-fill-fallback: rgb(18 32 52 / 0.97);
+  --glass-border: rgb(255 255 255 / 0.1);
+
+  --illustration-shadow: rgb(0 0 0 / 0.5);
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.25), 0 4px 14px rgb(0 0 0 / 0.2);
+  --shadow-md: 0 2px 4px rgb(0 0 0 / 0.25), 0 10px 30px rgb(0 0 0 / 0.3);
+  --shadow-lg: 0 4px 8px rgb(0 0 0 / 0.3), 0 24px 60px rgb(0 0 0 / 0.45);
 }

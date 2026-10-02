@@ -1,9 +1,33 @@
 .wordmark {
-  font-size: 2.75rem;
-  font-weight: 500;
-  letter-spacing: -0.04em;
-  line-height: 1;
-  color: var(--ink);
-  text-decoration: none;
+  display: block;
   border-radius: var(--radius-sm);
+  line-height: 0;
+}
+
+/* The SVG artboard has built-in margin around the lettering (about 23% above, 17% below), so pull it back in. */
+.wordmark__img {
+  display: block;
+  height: 4.5rem;
+  width: auto;
+  margin-block: -1.1rem -0.8rem;
+}
+
+@media (max-width: 52rem) {
+  .wordmark__img {
+    height: 3.5rem;
+    margin-block: -0.85rem -0.6rem;
+    margin-inline-start: -0.4rem;
+  }
+}
+
+.wordmark__img--on-dark {
+  display: none;
+}
+
+:root[data-theme='dark'] .wordmark__img--on-light {
+  display: none;
+}
+
+:root[data-theme='dark'] .wordmark__img--on-dark {
+  display: block;
 }

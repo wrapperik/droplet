@@ -24,12 +24,12 @@
 
 .task-menu__item svg {
   flex: none;
-  color: var(--slate);
+  color: var(--text-muted);
 }
 
 .task-menu__item:hover,
 .task-menu__item:focus-visible {
-  background: var(--ripple-60);
+  background: var(--accent-tint-soft);
 }
 
 .task-menu__item:focus-visible {
@@ -47,5 +47,5 @@
 
 .task-menu__hint {
   font-size: 0.8125rem;
-  color: var(--slate);
+  color: var(--text-muted);
 }

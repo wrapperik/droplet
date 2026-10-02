@@ -12,6 +12,7 @@ These are inspiration, not assets. Do not copy their colours, icons or content. 
 | `04-popup-menu-shortcuts.png` | A menu that grows out of the control that opened it, with a small pointer. Muted labels, the active row in full ink on a soft pill, keyboard hints as small keycaps on the right. |
 | `05-pill-toolbars.png` | Pill containers with a pill nested inside. Round icon buttons, a thin vertical divider between groups, a filled round primary action. The base of the intent bar and action bar. |
 | `06-tools-menu-composer.png` | The composer pattern: a rounded input with a `+` and a tools button, and a menu that opens beneath it. Rows are icon plus label with a quiet right-aligned note. |
+| `07-sidebar-navigation.png` | The app shell. A project switcher card at the top (icon, name, up/down chevrons), a dashed divider, icon plus label nav, the active item on a soft grey fill with a short dark bar, and sub-items hanging off a dashed guide line. The working screen is a slightly smaller rounded white box inset beside the sidebar. |
 
 ## Shared traits
 
