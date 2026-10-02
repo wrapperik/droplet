@@ -42,6 +42,10 @@
   overflow: auto;
 }
 
+.home__component {
+  min-height: 100%;
+}
+
 .home__footer {
   display: flex;
   justify-content: center;

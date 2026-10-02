@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { HamburgerMenuIcon } from '@solar-icons/react/linear'
 import AccountMenu from '../components/AccountMenu.tsx'
 import IntentBar from '../components/IntentBar.tsx'
+import PaletteWorkspace from '../components/PaletteWorkspace.tsx'
 import Sidebar from '../components/Sidebar.tsx'
 import Wordmark from '../components/Wordmark.tsx'
 import { mockProjects, mockUser } from '../lib/mockProjects.ts'
+import { isColourPaletteIntent } from '../lib/testIntents.ts'
 import './Home.css'
 
 export default function Home() {
@@ -12,6 +15,7 @@ export default function Home() {
   const [activeId, setActiveId] = useState('home')
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [showPicker, setShowPicker] = useState(false)
 
   useEffect(() => {
     if (!mobileOpen) return
@@ -64,10 +68,21 @@ export default function Home() {
 
         <main className="home__canvas">
           <h1 className="visually-hidden">Home</h1>
+          <AnimatePresence>
+            {showPicker && (
+              <motion.div key="palette" className="home__component" exit={{ opacity: 0, transition: { duration: 0.2 } }}>
+                <PaletteWorkspace
+                  key={currentProjectId}
+                  projectId={currentProjectId}
+                  projectName={mockProjects.find((project) => project.id === currentProjectId)?.name ?? ''}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </main>
 
         <footer className="home__footer">
-          <IntentBar />
+          <IntentBar onSubmitIntent={(text) => setShowPicker(isColourPaletteIntent(text))} />
         </footer>
       </div>
     </div>

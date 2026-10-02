@@ -1,0 +1,76 @@
+.palette-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-height: 100%;
+}
+
+.palette-workspace__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+
+.palette-workspace__status {
+  flex: 1 1 18rem;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.palette-workspace__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.palette-workspace__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem 0.5rem 0.75rem;
+  border: 1px solid var(--overlay-10);
+  border-radius: var(--radius-pill);
+  background: var(--overlay-06);
+  font-weight: 600;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.palette-workspace__button:not(:disabled):hover {
+  background: var(--accent-tint-soft);
+}
+
+.palette-workspace__button:disabled {
+  color: var(--text-muted);
+  cursor: default;
+  opacity: 0.7;
+}
+
+.palette-workspace__button--primary {
+  border-color: transparent;
+  background: var(--button);
+  color: var(--on-button);
+}
+
+.palette-workspace__button--primary:not(:disabled):hover {
+  background: var(--button);
+  box-shadow: var(--shadow-md);
+}
+
+.palette-workspace__button--primary:disabled {
+  background: var(--overlay-06);
+  color: var(--text-muted);
+}
+
+/* The canvas is the white space where the work happens. */
+.palette-workspace__canvas {
+  min-height: 26rem;
+  padding: 1.5rem;
+  border: 1px solid var(--overlay-10);
+  border-radius: var(--radius-xl);
+  background: var(--canvas);
+  box-shadow: var(--shadow-sm);
+}

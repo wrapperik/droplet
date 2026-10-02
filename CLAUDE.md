@@ -484,8 +484,23 @@ The page is a sidebar on the left and the working screen on the right. The sideb
 
 The sidebar (`src/components/Sidebar.tsx`) holds the project switcher, Home, the five tasks (the familiar path, always one click away), an expandable Assets group showing resolved and outstanding status, and Review and export with an outstanding count. It also holds the theme switcher (Light, Dark, System). It collapses to icons on desktop and becomes a slide-over drawer on narrow screens.
 
+### Workspace layout: an arrangeable grid around a white canvas
+
+Work happens on a **canvas**: a white space (`--canvas`). Components dock around it and can all be moved. `GridWorkspace.tsx` lays everything out on a **12-column grid with rows** (cells 48px tall). The grid is **only drawn while something is being dragged**; at rest the canvas is clean.
+
+- **Moving things:** every item (the canvas and each component) has a grip handle on its top edge. Drag it anywhere: the right column can go beneath the left, the canvas can move, any formation works. The arrow keys move a focused handle (sideways by a column, up or down past the neighbour) and the move is announced.
+- **While dragging:** the real component stays put, dimmed. A plain **grey box with the component's icon** is what follows the pointer, and a dashed outline in the grid shows where it will land. Drops snap to a cell row, then stacking closes up tight. The drag is tracked on the window, so it always ends: on release anywhere (even outside the page), when the next move shows the button is already up, and it cancels on Escape, window blur, right-click or pointer cancel. On drop the real component glides from its old position to the new one (650ms, Web Animations API, skipped for reduced motion). **Reset layout** animates the same way.
+- **Layout rules** (`src/lib/gridLayout.ts`, tested): items never overlap and always rise as far as they can (vertical compaction). A dropped item pushes whatever it lands on downwards. Heights are measured from the content, so expanding a component pushes the ones beneath it down.
+- **Narrow containers** (under 940px of workspace width) cannot hold three columns, so items stack in a fixed order and cannot be moved.
+- **Save to project:** the **Lock in** button saves the palette and the layout to the project. Nothing is saved until the founder locks in (principle 7), and the toolbar says so. After locking in, any change shows "Changes since you locked in are not saved". For now it is stored per project in this browser (`src/lib/projectStore.ts`, validated with Zod) as a stand-in for Supabase `memory_entries`. Reset layout only resets positions, never colours.
+- Components arrive with `Emerge.tsx`: blurred and small, easing into focus, staggered by `delay` with a different `distance` each, so they emerge from different depths. Reduced motion gets a plain fade.
+- Each component does one job (the contrast checker is separate from the picker) and expands on request where useful.
+- Open question for the composition engine: the `WorkspaceSpec` in section 6 names regions `main`, `side` and `bottom`. This workspace uses grid placements (`col`, `row`, `w`). Decide what the spec carries before it is built.
+
 ### Screens built so far
 
 | Screen | Route | Wireframe |
 |---|---|---|
 | Home | `/home` | `docs/wireframes/home.png` |
+
+**Temporary test:** typing "colour palette" (or "color palette") in the Home intent bar shows the palette workspace (`PaletteWorkspace.tsx`): a canvas of 4 colour blocks (up to 8), the colour picker and the contrast checker on the grid, plus Reset layout and Lock in. The keyword match in `src/lib/testIntents.ts` is a stand-in for the composition engine and will be removed.

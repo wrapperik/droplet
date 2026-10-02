@@ -1,0 +1,199 @@
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 1rem;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.picker__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.picker__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.picker__reason {
+  margin: 0.0625rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.picker__toggle {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2rem;
+  height: 2rem;
+  border: 0;
+  border-radius: 50%;
+  background: var(--overlay-06);
+  color: var(--text-muted);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    transform var(--duration-base) var(--ease-out);
+}
+
+.picker__toggle:hover {
+  background: var(--accent-tint-soft);
+  color: var(--text);
+}
+
+.picker__toggle[aria-expanded='true'] {
+  transform: rotate(180deg);
+}
+
+.picker__editing {
+  margin: -0.25rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+/* Saturation (across) and brightness (up). White and black are the colour model here, not theme colours. */
+.picker__area {
+  position: relative;
+  height: 6rem;
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(to top, #000, transparent),
+    linear-gradient(to right, #fff, hsl(var(--picker-hue) 100% 50%));
+  cursor: crosshair;
+  touch-action: none;
+  transition: height var(--duration-base) var(--ease-out);
+}
+
+.picker[data-expanded='true'] .picker__area {
+  height: 11rem;
+}
+
+.picker__handle {
+  position: absolute;
+  width: 1.125rem;
+  height: 1.125rem;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.35), 0 2px 6px rgb(0 0 0 / 0.35);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.picker__hue {
+  width: 100%;
+  height: 0.75rem;
+  margin: 0;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(
+    to right,
+    hsl(0 100% 50%),
+    hsl(60 100% 50%),
+    hsl(120 100% 50%),
+    hsl(180 100% 50%),
+    hsl(240 100% 50%),
+    hsl(300 100% 50%),
+    hsl(360 100% 50%)
+  );
+  appearance: none;
+  cursor: pointer;
+}
+
+.picker__hue::-webkit-slider-thumb {
+  width: 1.125rem;
+  height: 1.125rem;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.35), 0 2px 6px rgb(0 0 0 / 0.35);
+  appearance: none;
+}
+
+.picker__hue::-moz-range-thumb {
+  width: 1.125rem;
+  height: 1.125rem;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.35), 0 2px 6px rgb(0 0 0 / 0.35);
+}
+
+.picker__value {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.picker__swatch {
+  flex: none;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px var(--overlay-10), var(--shadow-sm);
+}
+
+.picker__hex-label {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.picker__hex {
+  flex: 1;
+  min-width: 0;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--overlay-10);
+  border-radius: var(--radius-pill);
+  background: var(--overlay-06);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.picker__hex[aria-invalid='true'] {
+  border-color: var(--status-outstanding);
+}
+
+.picker__error {
+  margin: -0.25rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+.picker__more {
+  overflow: hidden;
+}
+
+.picker__channels {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  padding-top: 0.25rem;
+}
+
+.picker__channel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.picker__channel input {
+  width: 100%;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid var(--overlay-10);
+  border-radius: var(--radius-sm);
+  background: var(--overlay-06);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}

@@ -1,0 +1,127 @@
+.gw {
+  position: relative;
+  width: 100%;
+}
+
+.gw--stacked {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.gw__grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: 1rem;
+}
+
+/* The grid: twelve columns and rows of cells. Only drawn while something is being dragged. */
+.gw__guides {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 1rem;
+  overflow: hidden;
+  pointer-events: none;
+  animation: gw-guides-in var(--duration-base) var(--ease-out);
+}
+
+.gw__guide {
+  border-radius: var(--radius-sm);
+  background: var(--accent-tint-soft);
+}
+
+@keyframes gw-guides-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* No text selection or stray cursors while a drag is in progress. */
+body.gw-dragging {
+  cursor: grabbing;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.gw__item {
+  position: relative;
+  z-index: 1;
+  align-self: start;
+  min-width: 0;
+}
+
+.gw__content {
+  transition: opacity var(--duration-base) var(--ease-out);
+}
+
+/* The component stays where it was while its grey stand-in is dragged, then animates to the new spot. */
+.gw__item[data-dragging='true'] .gw__content {
+  opacity: 0.35;
+}
+
+.gw__handle {
+  position: absolute;
+  top: -0.6875rem;
+  left: 50%;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 1.375rem;
+  padding: 0;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--glass-fill-fallback);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-muted);
+  cursor: grab;
+  opacity: 0.75;
+  touch-action: none;
+  transform: translateX(-50%);
+  transition:
+    opacity var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.gw__item:hover .gw__handle,
+.gw__handle:focus-visible,
+.gw__handle:active {
+  color: var(--text);
+  opacity: 1;
+}
+
+.gw__handle:active {
+  cursor: grabbing;
+}
+
+.gw__drop {
+  z-index: 0;
+  border: 2px dashed var(--focus);
+  border-radius: var(--radius-lg);
+  background: var(--accent-tint-soft);
+  pointer-events: none;
+}
+
+/* Rendered in a portal so no transformed ancestor can offset it. */
+.gw__ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  width: 4.5rem;
+  height: 4.5rem;
+  border: 1px solid var(--overlay-10);
+  border-radius: var(--radius-lg);
+  background: var(--overlay-10);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-muted);
+  cursor: grabbing;
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
