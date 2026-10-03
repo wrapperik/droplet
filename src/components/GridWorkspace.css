@@ -114,6 +114,50 @@ body.gw-dragging .gw__handle {
   cursor: grabbing;
 }
 
+/* The resize grip sits on the right edge, half outside it. Same rules as the move grip: hidden until hover or focus. */
+.gw__resize {
+  position: absolute;
+  top: 50%;
+  right: -0.5625rem;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 1.125rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--glass-fill-fallback);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-muted);
+  cursor: ew-resize;
+  opacity: 0;
+  touch-action: none;
+  transform: translateY(-50%);
+  transition:
+    opacity var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.gw__item:hover .gw__resize,
+.gw__item[data-resizing='true'] .gw__resize,
+.gw__resize:focus-visible {
+  color: var(--text);
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .gw__resize {
+    opacity: 0.85;
+  }
+}
+
+body.gw-resizing {
+  cursor: ew-resize;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 /* Where the item will land: a thin outline with the item's own corners and the faintest fill. */
 .gw__drop {
   position: absolute;

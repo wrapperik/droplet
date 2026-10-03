@@ -15,6 +15,8 @@ import './DocumentPreview.css'
 
 type Props = {
   roles: ResolvedRoles
+  // The business the sample invoice is from, when the request named one.
+  businessName?: string
   // One line saying why this component is on screen (manifesto principle 3).
   reason: string
 }
@@ -23,7 +25,7 @@ const VAT_PERCENT = Math.round(SAMPLE_VAT_RATE * 100)
 
 // The palette on a real document: a sample invoice drawn with the colours in their roles. The document's own
 // colours are the founder's palette, so they are set here as custom properties and used only inside the page.
-export default function DocumentPreview({ roles, reason }: Props) {
+export default function DocumentPreview({ roles, businessName = SAMPLE_BUSINESS, reason }: Props) {
   const totals = invoiceTotals(SAMPLE_LINES, SAMPLE_VAT_RATE)
   const body = pairResult(roles.text.hex, roles.background.hex)
 
@@ -46,7 +48,7 @@ export default function DocumentPreview({ roles, reason }: Props) {
 
       <div className="doc" style={colours}>
         <div className="doc__band">
-          <span className="doc__business">{SAMPLE_BUSINESS}</span>
+          <span className="doc__business">{businessName}</span>
           <span className="doc__kind">Invoice 0001</span>
         </div>
 

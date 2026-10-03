@@ -135,3 +135,27 @@
     grid-column: 1;
   }
 }
+
+/* Before there is a workspace the screen is a conversation: the thread fills it, centred and readable, and scrolls on its own. */
+.home__canvas--chat {
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.home__conversation {
+  display: flex;
+  flex-direction: column;
+  width: min(46rem, 100%);
+  min-height: 0;
+}
+
+/* The workspace is dimmed while the next answer is worked out. */
+.home__component {
+  transition: opacity var(--duration-base) var(--ease-out);
+}
+
+.home__component--busy {
+  opacity: 0.6;
+  pointer-events: none;
+}

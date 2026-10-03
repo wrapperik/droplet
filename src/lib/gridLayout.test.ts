@@ -10,7 +10,13 @@ import {
   compact,
   moveByKey,
   moveTo,
+  nearestStep,
+  placeRelative,
   reflow,
+  spanFromPoint,
+  variantFromDrag,
+  VARIANT_STEP_PX,
+  widthLabel,
   reconcile,
   rowsForHeight,
   settle,
@@ -318,5 +324,147 @@ describe('reflow', () => {
       { id: 'c', col: 0, row: 10, w: COLS },
     ]
     expect(samePlacements(reflow(flow, h), compact(flow, h))).toBe(true)
+  })
+})
+
+describe('reconcile with resizable widths', () => {
+  it('keeps the saved width for items that are resized, and the default width for the rest', () => {
+    const saved: Placement[] = [
+      { id: 'canvas', col: 0, row: 10, w: 12 },
+      { id: 'picker', col: 0, row: 0, w: 14 },
+    ]
+    const defaults: Placement[] = [
+      { id: 'canvas', col: 0, row: 10, w: 24 },
+      { id: 'picker', col: 0, row: 0, w: 8 },
+    ]
+    const result = reconcile(saved, defaults, ['canvas'])
+    expect(at(result, 'canvas').w).toBe(12)
+    expect(at(result, 'picker').w).toBe(8)
+  })
+
+  it('keeps a saved width inside the grid and the column inside the width', () => {
+    const result = reconcile([{ id: 'a', col: 20, row: 0, w: 99 }], [{ id: 'a', col: 0, row: 0, w: 6 }], ['a'])
+    expect(result[0]).toMatchObject({ w: COLS, col: 0 })
+  })
+})
+
+describe('nearestStep', () => {
+  const steps = [8, 12, 16, 24]
+  it('picks the closest allowed width', () => {
+    expect(nearestStep(steps, 1)).toBe(8)
+    expect(nearestStep(steps, 11)).toBe(12)
+    expect(nearestStep(steps, 15)).toBe(16)
+    expect(nearestStep(steps, 22)).toBe(24)
+  })
+
+  it('takes the smaller one halfway between two', () => {
+    expect(nearestStep(steps, 10)).toBe(8)
+    expect(nearestStep(steps, 14)).toBe(12)
+  })
+})
+
+describe('spanFromPoint', () => {
+  const box = { left: 100, width: 1196 }
+  const pitch = (1196 - 16 * (COLS - 1)) / COLS + 16
+
+  it('counts the columns from the item\'s start to the pointer, inclusive', () => {
+    expect(spanFromPoint(100 + pitch * 5 + 4, box, 0)).toBe(6)
+    expect(spanFromPoint(100 + pitch * 5 + 4, box, 2)).toBe(4)
+  })
+
+  it('is at least one column and never runs past the grid', () => {
+    expect(spanFromPoint(100, box, 6)).toBe(1)
+    expect(spanFromPoint(100 + 1196 + 500, box, 6)).toBe(COLS - 6)
+  })
+})
+
+describe('variantFromDrag', () => {
+  it('stays put for a small movement and steps after about half a step', () => {
+    expect(variantFromDrag(0, 10, 2)).toBe(0)
+    expect(variantFromDrag(0, VARIANT_STEP_PX / 2 + 1, 2)).toBe(1)
+  })
+
+  it('goes back when dragged the other way', () => {
+    expect(variantFromDrag(1, -(VARIANT_STEP_PX / 2) - 1, 2)).toBe(0)
+    expect(variantFromDrag(1, 10, 2)).toBe(1)
+  })
+
+  it('never leaves the available versions', () => {
+    expect(variantFromDrag(0, -500, 2)).toBe(0)
+    expect(variantFromDrag(0, 500, 2)).toBe(1)
+    expect(variantFromDrag(1, 500, 3)).toBe(2)
+  })
+})
+
+describe('widthLabel', () => {
+  it('says common widths in words and others in columns', () => {
+    expect(widthLabel(24)).toBe('full width')
+    expect(widthLabel(12)).toBe('half the width')
+    expect(widthLabel(8)).toBe('a third of the width')
+    expect(widthLabel(10)).toBe('10 of 24 columns')
+  })
+})
+
+describe('placeRelative', () => {
+  // picker and contrast side by side on the top row, canvas beneath them, all as drawn
+  const drawn: Placement[] = [
+    { id: 'picker', col: 0, row: 0, w: 8 },
+    { id: 'contrast', col: 8, row: 0, w: 12 },
+    { id: 'canvas', col: 0, row: 10, w: COLS },
+    { id: 'preview', col: 0, row: 50, w: 12 },
+  ]
+  const h: Heights = { picker: 10, contrast: 10, canvas: 40, preview: 30 }
+
+  it('puts an item beside another, flush against it', () => {
+    const result = placeRelative(drawn, h, 'preview', 'picker', 'right_of')!
+    // picker ends at column 8, which is where contrast starts, so one of them gives way, but the preview lands on row 0
+    expect(at(result, 'preview').row).toBe(0)
+    expect(at(result, 'preview').col).toBeGreaterThanOrEqual(8)
+  })
+
+  it('puts an item to the left of another', () => {
+    // a small item, with room to its left on the top row
+    const roomy: Placement[] = [
+      { id: 'a', col: 0, row: 0, w: 6 },
+      { id: 'b', col: 12, row: 0, w: 6 },
+      { id: 'c', col: 0, row: 10, w: 4 },
+    ]
+    const result = placeRelative(roomy, { a: 10, b: 10, c: 10 }, 'c', 'b', 'left_of')!
+    expect(at(result, 'c').row).toBe(0)
+    expect(at(result, 'c').col + at(result, 'c').w).toBeLessThanOrEqual(at(result, 'b').col)
+  })
+
+  it('puts an item directly beneath another', () => {
+    const result = placeRelative(drawn, h, 'picker', 'preview', 'below')!
+    expect(at(result, 'picker').col).toBe(0)
+    expect(at(result, 'picker').row).toBeGreaterThanOrEqual(at(result, 'preview').row + 0)
+    expect(at(result, 'picker').row).toBeGreaterThan(at(result, 'canvas').row)
+  })
+
+  it('puts an item above another, which moves down to make room', () => {
+    const result = placeRelative(drawn, h, 'preview', 'canvas', 'above')!
+    expect(at(result, 'preview').row).toBeLessThan(at(result, 'canvas').row)
+  })
+
+  it('never overlaps items and stays inside the grid', () => {
+    for (const relation of ['above', 'below', 'left_of', 'right_of'] as const) {
+      const result = placeRelative(drawn, h, 'canvas', 'picker', relation)!
+      for (const a of result) {
+        expect(a.col).toBeGreaterThanOrEqual(0)
+        expect(a.col + a.w).toBeLessThanOrEqual(COLS)
+        for (const b of result) {
+          if (a.id === b.id) continue
+          const columns = a.col < b.col + b.w && b.col < a.col + a.w
+          const rows = a.row < b.row + h[b.id] && b.row < a.row + h[a.id]
+          expect(columns && rows).toBe(false)
+        }
+      }
+    }
+  })
+
+  it('does nothing for an item that is not there, or for an item relative to itself', () => {
+    expect(placeRelative(drawn, h, 'ghost', 'picker', 'below')).toBeNull()
+    expect(placeRelative(drawn, h, 'picker', 'ghost', 'below')).toBeNull()
+    expect(placeRelative(drawn, h, 'picker', 'picker', 'below')).toBeNull()
   })
 })

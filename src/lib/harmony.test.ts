@@ -71,6 +71,15 @@ describe('generatePalette', () => {
     expect(result.find((b) => b.id === 4)?.locked).toBe(true)
   })
 
+  it('drops the composer\'s name and note from a colour it replaces, and keeps them on the rest', () => {
+    const described = blocks.map((b) => ({ ...b, name: 'A name', note: 'A reason.' }))
+    const result = generatePalette(described, 1, 'analogous')
+    expect(result.find((b) => b.id === 2)?.name).toBeUndefined()
+    expect(result.find((b) => b.id === 2)?.note).toBeUndefined()
+    expect(result.find((b) => b.id === 1)?.name).toBe('A name')
+    expect(result.find((b) => b.id === 4)?.note).toBe('A reason.')
+  })
+
   it('does not change the list it was given', () => {
     generatePalette(blocks, 1, 'analogous')
     expect(blocks[1].hex).toBe('#0B4F8A')

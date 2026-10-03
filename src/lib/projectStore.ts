@@ -1,31 +1,7 @@
-import { z } from 'zod'
+import { paletteSaveSchema, type PaletteSave } from './paletteSave.ts'
 
 // Stand-in for the project's saved memory until Supabase exists. Saved per project, in this browser.
-// Everything read back is validated, because storage can hold anything.
-const placementSchema = z.object({
-  id: z.string(),
-  col: z.number().int().min(-1).max(23), // -1 means "start after the previous item"
-  row: z.number().int().min(0),
-  w: z.number().int().min(1).max(24),
-})
-
-export const paletteSaveSchema = z.object({
-  blocks: z
-    .array(
-      z.object({
-        id: z.number().int(),
-        hex: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
-        role: z.enum(['primary', 'accent', 'background', 'text']).optional(),
-        locked: z.boolean().optional(),
-      }),
-    )
-    .min(1)
-    .max(8),
-  layout: z.array(placementSchema),
-  savedAt: z.string(),
-})
-
-export type PaletteSave = z.infer<typeof paletteSaveSchema>
+export { paletteSaveSchema, type PaletteSave } from './paletteSave.ts'
 
 const keyFor = (projectId: string) => `droplet-project-${projectId}-palette`
 

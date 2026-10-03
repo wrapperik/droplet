@@ -31,3 +31,5 @@ dist-ssr
 supabase/.temp/
 supabase/.branches/
 coverage/
+# Local composition log and eval results (see server/compositionLog.ts)
+.droplet/

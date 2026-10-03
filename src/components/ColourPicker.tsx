@@ -14,6 +14,8 @@ type Props = {
   editing?: string
   // One line saying why this component is on screen (manifesto principle 3).
   reason: string
+  // 0 is the compact toolbar. 1 is the larger one, which also has the hue slider and RGB fields in the bar.
+  size?: number
 }
 
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value))
@@ -24,7 +26,7 @@ const hsvOf = (hex: string, keepHue: number): Hsv => {
 }
 
 // A toolbar: the current colour and its hex value. Clicking the colour opens the full spectrum.
-export default function ColourPicker({ value, onChange, editing = 'Colour', reason }: Props) {
+export default function ColourPicker({ value, onChange, editing = 'Colour', reason, size = 0 }: Props) {
   const [hsv, setHsv] = useState<Hsv>(() => rgbToHsv(hexToRgb(value)))
   const [syncedValue, setSyncedValue] = useState(value)
   const [draft, setDraft] = useState<string | null>(null)
@@ -117,6 +119,33 @@ export default function ColourPicker({ value, onChange, editing = 'Colour', reas
     commit(hsvOf(rgbToHex({ ...rgb, [channel]: number }), hsv.h))
   }
 
+  const large = size > 0
+
+  const hueSlider = (className: string) => (
+    <input
+      className={className}
+      type="range"
+      min={0}
+      max={360}
+      value={Math.round(hsv.h)}
+      aria-label="Hue"
+      onChange={(event) => commit({ ...hsv, h: Number(event.target.value) })}
+    />
+  )
+
+  const channelField = (channel: 'r' | 'g' | 'b', className: string) => (
+    <label className={className} key={channel}>
+      <span>{channel.toUpperCase()}</span>
+      <input
+        type="number"
+        min={0}
+        max={255}
+        value={Math.round(rgb[channel])}
+        onChange={(event) => onChannelChange(channel, event.target.value)}
+      />
+    </label>
+  )
+
   return (
     <div className="picker" ref={wrapRef}>
       <Toolbar title="Colour picker" reason={reason}>
@@ -155,6 +184,13 @@ export default function ColourPicker({ value, onChange, editing = 'Colour', reas
           <span className="visually-hidden" id={`${id}-error`}>
             Use three or six hex digits, like #1F8FE0.
           </span>
+        )}
+        {large && (
+          <>
+            <ToolbarDivider />
+            {hueSlider('spectrum__hue picker__hue')}
+            <div className="picker__channels">{(['r', 'g', 'b'] as const).map((channel) => channelField(channel, 'picker__channel'))}</div>
+          </>
         )}
       </Toolbar>
 
@@ -200,30 +236,9 @@ export default function ColourPicker({ value, onChange, editing = 'Colour', reas
               />
             </div>
 
-            <input
-              className="spectrum__hue"
-              type="range"
-              min={0}
-              max={360}
-              value={Math.round(hsv.h)}
-              aria-label="Hue"
-              onChange={(event) => commit({ ...hsv, h: Number(event.target.value) })}
-            />
+            {hueSlider('spectrum__hue')}
 
-            <div className="spectrum__channels">
-              {(['r', 'g', 'b'] as const).map((channel) => (
-                <label className="spectrum__channel" key={channel}>
-                  <span>{channel.toUpperCase()}</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={255}
-                    value={Math.round(rgb[channel])}
-                    onChange={(event) => onChannelChange(channel, event.target.value)}
-                  />
-                </label>
-              ))}
-            </div>
+            <div className="spectrum__channels">{(['r', 'g', 'b'] as const).map((channel) => channelField(channel, 'spectrum__channel'))}</div>
           </motion.div>
         )}
       </AnimatePresence>

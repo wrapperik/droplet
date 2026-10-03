@@ -149,15 +149,78 @@ export function samePlacements(a: Placement[], b: Placement[]): boolean {
   })
 }
 
-// Brings a saved layout up to date with the current items: keeps where each item was put, but takes
-// widths from the defaults, ignores items that no longer exist and adds any that are new.
-export function reconcile(saved: Placement[], defaults: Placement[]): Placement[] {
+// Brings a saved layout up to date with the current items: keeps where each item was put, ignores items that no
+// longer exist and adds any that are new. Widths come from the defaults, because an item that hugs its content gets
+// its width from that content. Items whose width the founder sets by resizing (`keepWidths`) keep the saved one.
+export function reconcile(saved: Placement[], defaults: Placement[], keepWidths: string[] = []): Placement[] {
   return defaults.map((fallback) => {
     const found = saved.find((p) => p.id === fallback.id)
     if (!found) return fallback
-    const col = found.col === AUTO_COL ? AUTO_COL : clamp(found.col, 0, COLS - fallback.w)
-    return { id: fallback.id, w: fallback.w, col, row: found.row }
+    const w = keepWidths.includes(fallback.id) ? clamp(found.w, 1, COLS) : fallback.w
+    const col = found.col === AUTO_COL ? AUTO_COL : clamp(found.col, 0, COLS - w)
+    return { id: fallback.id, w, col, row: found.row }
   })
+}
+
+// Resizing. A panel snaps to one of a short list of widths (in columns). A toolbar steps between a few versions
+// of itself, because a toolbar is as wide as its contents and a bigger one shows more.
+
+// The allowed width closest to the one asked for. Halfway between two, the smaller wins.
+export function nearestStep(steps: number[], value: number): number {
+  return steps.reduce((best, step) => (Math.abs(step - value) < Math.abs(best - value) ? step : best), steps[0])
+}
+
+// How many columns wide an item is if its right edge is at the pointer, given the column it starts in.
+export function spanFromPoint(x: number, box: { left: number; width: number }, startCol: number): number {
+  const colWidth = (box.width - GAP_PX * (COLS - 1)) / COLS
+  const pointerCol = Math.floor((x - box.left) / (colWidth + GAP_PX))
+  return clamp(pointerCol - startCol + 1, 1, COLS - startCol)
+}
+
+// How far the pointer must travel sideways to step from one version of a toolbar to the next.
+export const VARIANT_STEP_PX = 56
+
+// Which version a toolbar is on after the pointer has moved `dx` pixels from where the drag began.
+export function variantFromDrag(start: number, dx: number, count: number): number {
+  return clamp(start + Math.round(dx / VARIANT_STEP_PX), 0, count - 1)
+}
+
+// A width in columns, in words.
+export function widthLabel(cols: number): string {
+  const named: Record<number, string> = {
+    24: 'full width',
+    18: 'three quarters of the width',
+    16: 'two thirds of the width',
+    12: 'half the width',
+    8: 'a third of the width',
+    6: 'a quarter of the width',
+  }
+  return named[cols] ?? `${cols} of ${COLS} columns`
+}
+
+export type Relation = 'above' | 'below' | 'left_of' | 'right_of'
+
+// Puts an item next to, above or below another, the way a person would drag it there: the target cell is worked out
+// from where the other item is, then the usual rules apply (it slides to sit flush, and pushes down whatever it lands on).
+// `placements` and `heights` are the layout as drawn now. Returns null if either item is not in the layout.
+export function placeRelative(
+  placements: Placement[],
+  heights: Heights,
+  id: string,
+  targetId: string,
+  relation: Relation,
+): Placement[] | null {
+  const me = placements.find((p) => p.id === id)
+  const target = placements.find((p) => p.id === targetId)
+  if (!me || !target || id === targetId) return null
+
+  const cell =
+    relation === 'right_of' ? { col: target.col + target.w, row: target.row }
+    : relation === 'left_of' ? { col: target.col - me.w, row: target.row }
+    : relation === 'below' ? { col: target.col, row: target.row + heightOf(heights, target.id) }
+    : { col: target.col, row: target.row }
+  const col = clamp(cell.col, 0, COLS - me.w)
+  return settle(placements, heights, id, { col, row: Math.max(0, cell.row) })
 }
 
 // How many columns an item of the given pixel width needs, given the grid's pixel width.

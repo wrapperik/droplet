@@ -1,5 +1,5 @@
 import { hexToRgb, hsvToRgb, rgbToHex, rgbToHsv } from './colour.ts'
-import type { PaletteBlock } from './palette.ts'
+import { withHex, type PaletteBlock } from './palette.ts'
 
 // Ways of choosing colours that go together, as turns around the colour wheel from a starting colour.
 export type Harmony = 'analogous' | 'complementary' | 'triad' | 'monochrome'
@@ -57,6 +57,7 @@ export function generatePalette(blocks: PaletteBlock[], baseId: number, harmony:
   const targets = replaceableIds(blocks, baseId)
   return blocks.map((block) => {
     const position = targets.indexOf(block.id)
-    return position < 0 ? block : { ...block, hex: harmonyColour(base.hex, harmony, position, variation) }
+    if (position < 0) return block
+    return withHex(block, harmonyColour(base.hex, harmony, position, variation))
   })
 }

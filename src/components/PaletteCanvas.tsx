@@ -34,6 +34,7 @@ export default function PaletteCanvas({ blocks, selectedId, max, min, onSelect, 
   const gridRef = useRef<HTMLFieldSetElement>(null)
   const refocus = useRef(false)
   const canRemove = blocks.length > min
+  const selectedNote = blocks.find((block) => block.id === selectedId)?.note
 
   useEffect(() => {
     if (copiedId === null) return
@@ -114,11 +115,12 @@ export default function PaletteCanvas({ blocks, selectedId, max, min, onSelect, 
                     name="palette-colour"
                     checked={selected}
                     onChange={() => onSelect(block.id)}
-                    aria-label={`Colour ${index + 1}, ${block.hex}${roleLabel ? `, ${roleLabel}` : ''}`}
+                    aria-label={`Colour ${index + 1}${block.name ? `, ${block.name}` : ''}, ${block.hex}${roleLabel ? `, ${roleLabel}` : ''}`}
                   />
                   <span className="palette__top">
                     <span className="palette__titles">
                       <span className="palette__name">Colour {index + 1}</span>
+                      {block.name && <span className="palette__given-name">{block.name}</span>}
                       {roleLabel && <span className="palette__role">{roleLabel}</span>}
                     </span>
                     {selected && (
@@ -171,6 +173,11 @@ export default function PaletteCanvas({ blocks, selectedId, max, min, onSelect, 
           })}
         </AnimatePresence>
       </fieldset>
+      {selectedNote && (
+        <p className="palette__note">
+          <span className="palette__note-label">Why this colour</span> {selectedNote}
+        </p>
+      )}
       <p className="visually-hidden" role="status">
         {copiedId !== null ? 'Hex value copied.' : removedNote}
       </p>

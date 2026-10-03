@@ -5,6 +5,8 @@ export type ThreadMessage = {
   id: number
   from: 'you' | 'droplet'
   text: string
+  // Droplet is still working on this reply.
+  pending?: boolean
 }
 
 type Props = {
@@ -27,7 +29,18 @@ export default function ChatThread({ messages }: Props) {
       {messages.map((message) => (
         <li key={message.id} className={`thread__message thread__message--${message.from}`}>
           <span className="visually-hidden">{message.from === 'you' ? 'You: ' : 'Droplet: '}</span>
-          {message.text}
+          {message.pending ? (
+            <span className="thread__pending">
+              Thinking
+              <span className="thread__dots" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </span>
+            </span>
+          ) : (
+            message.text
+          )}
         </li>
       ))}
     </ol>

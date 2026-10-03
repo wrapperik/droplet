@@ -1,4 +1,4 @@
-import { assignRole, resolveRoles, summarisePairs, pairResult, type PaletteBlock } from './palette.ts'
+import { assignRole, resolveRoles, summarisePairs, pairResult, withHex, type PaletteBlock } from './palette.ts'
 
 const starter: PaletteBlock[] = [
   { id: 1, hex: '#1F8FE0' },
@@ -86,5 +86,13 @@ describe('pairs', () => {
     expect(total).toBe(6)
     expect(passing).toBeGreaterThan(0)
     expect(passing).toBeLessThan(total)
+  })
+})
+
+describe('withHex', () => {
+  it('changes the colour and drops the name and note that described the old one', () => {
+    const block: PaletteBlock = { id: 1, hex: '#1F8FE0', role: 'primary', locked: true, name: 'Sky', note: 'A friendly blue.' }
+    expect(withHex(block, '#B5543A')).toEqual({ id: 1, hex: '#B5543A', role: 'primary', locked: true })
+    expect(block.name).toBe('Sky')
   })
 })

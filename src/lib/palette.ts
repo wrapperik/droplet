@@ -11,7 +11,17 @@ export const COLOUR_ROLES: { id: ColourRole; label: string }[] = [
 ]
 
 // `locked` keeps a colour as it is when Generate fills in the others.
-export type PaletteBlock = { id: number; hex: string; role?: ColourRole; locked?: boolean }
+// `name` and `note` come from the composer: a short name for the colour and one sentence on why it was chosen. They
+// describe the colour as it was proposed, so they are dropped as soon as the colour is changed.
+export type PaletteBlock = { id: number; hex: string; role?: ColourRole; locked?: boolean; name?: string; note?: string }
+
+// The block with a different colour. The composer's name and note described the old colour, so they go with it.
+export function withHex(block: PaletteBlock, hex: string): PaletteBlock {
+  const copy = { ...block, hex }
+  delete copy.name
+  delete copy.note
+  return copy
+}
 
 // Gives a colour a role, or clears it with null. A role belongs to one colour, so it moves if another held it.
 export function assignRole(blocks: PaletteBlock[], id: number, role: ColourRole | null): PaletteBlock[] {

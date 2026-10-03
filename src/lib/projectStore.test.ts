@@ -24,6 +24,21 @@ describe('projectStore', () => {
     expect(loadPalette('duckstack')?.blocks[1].role).toBeUndefined()
   })
 
+  it('keeps which version each toolbar is on', () => {
+    savePalette('duckstack', { ...data, sizes: { picker: 1, role: 1 } })
+    expect(loadPalette('duckstack')?.sizes).toEqual({ picker: 1, role: 1 })
+    savePalette('duckstack', data)
+    expect(loadPalette('duckstack')?.sizes).toBeUndefined()
+  })
+
+  it('rejects a toolbar version that cannot exist', () => {
+    window.localStorage.setItem(
+      'droplet-project-duckstack-palette',
+      JSON.stringify({ ...data, sizes: { picker: -1 }, savedAt: new Date().toISOString() }),
+    )
+    expect(loadPalette('duckstack')).toBeNull()
+  })
+
   it('rejects a role that does not exist', () => {
     window.localStorage.setItem(
       'droplet-project-duckstack-palette',

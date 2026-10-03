@@ -219,3 +219,27 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* The composer's name for the colour, under its number. */
+.palette__given-name {
+  overflow: hidden;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Why the selected colour was chosen, in the composer's words. Gone once the colour is changed. */
+.palette__note {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-md);
+  background: var(--overlay-06);
+  font-size: 0.875rem;
+}
+
+.palette__note-label {
+  margin-right: 0.25rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}

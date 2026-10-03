@@ -10,7 +10,7 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import type { Icon } from '@solar-icons/react/lib/types'
-import { GripHorizontalIcon } from '@solar-icons/react/linear'
+import { GripHorizontalIcon, GripVerticalIcon } from '@solar-icons/react/linear'
 import {
   CELL_GAP_PX,
   CELL_PX,
@@ -23,15 +23,26 @@ import {
   columnsForWidth,
   compact,
   moveByKey,
+  nearestStep,
   reflow,
   rowsForHeight,
   settle,
+  spanFromPoint,
+  variantFromDrag,
+  widthLabel,
   type Heights,
   type KeyMove,
   type Placement,
 } from '../lib/gridLayout.ts'
 import Emerge from './Emerge.tsx'
 import './GridWorkspace.css'
+
+// How an item can be resized from its right edge.
+export type ResizeSpec =
+  // A panel: its width snaps to one of these column counts.
+  | { mode: 'columns'; steps: number[] }
+  // A toolbar: it steps between versions of itself (the first is the default). Each version is as wide as its contents.
+  | { mode: 'variant'; current: number; labels: string[] }
 
 export type WorkspaceItem = {
   id: string
@@ -48,6 +59,7 @@ export type WorkspaceItem = {
   fill?: boolean
   // Corner radius, so the drop outline matches the item it stands in for.
   radius?: string
+  resize?: ResizeSpec
 }
 
 type Props = {
@@ -55,6 +67,10 @@ type Props = {
   items: WorkspaceItem[]
   layout: Placement[]
   onLayoutChange: (next: Placement[]) => void
+  // Called as an item is resized: the new column count for a panel, or the new version for a toolbar.
+  onResize?: (id: string, value: number) => void
+  // Reports where each item is drawn and how tall it is, for anything that needs to place one relative to another.
+  onResolved?: (resolved: Placement[], heights: Heights) => void
 }
 
 // Below this width the items would be too narrow for the components, so items stack and cannot be moved.
@@ -67,6 +83,64 @@ const GHOST_SIZE = 56
 // How long a component takes to glide to its new place, in milliseconds.
 const MOVE_DURATION_MS = 650
 const MOVE_EASING = 'cubic-bezier(0.16, 1, 0.3, 1)'
+
+type ResizeDrag = {
+  id: string
+  pointerId: number
+  startX: number
+  startValue: number
+  startIndex: number
+  lastValue: number
+}
+
+// Where an item stands among its sizes: its position in the list, the value it stands for, and how to say it.
+function resizeInfo(item: WorkspaceItem, placement: Placement) {
+  const spec = item.resize!
+  if (spec.mode === 'columns') {
+    const index = spec.steps.indexOf(nearestStep(spec.steps, placement.w))
+    return { index, count: spec.steps.length, value: spec.steps[index], label: widthLabel(spec.steps[index]) }
+  }
+  return { index: spec.current, count: spec.labels.length, value: spec.current, label: spec.labels[spec.current] }
+}
+
+const valueAt = (item: WorkspaceItem, index: number) => {
+  const spec = item.resize!
+  return spec.mode === 'columns' ? spec.steps[index] : index
+}
+
+const labelFor = (item: WorkspaceItem, value: number) => {
+  const spec = item.resize!
+  return spec.mode === 'columns' ? widthLabel(value) : spec.labels[value]
+}
+
+type ResizeHandleProps = {
+  item: WorkspaceItem
+  placement: Placement
+  onPointerDown: (event: PointerEvent<HTMLElement>, item: WorkspaceItem) => void
+  onKeyDown: (event: KeyboardEvent<HTMLElement>, item: WorkspaceItem) => void
+}
+
+// The grip on an item's right edge. It is a slider: drag it, or use the arrow keys.
+function ResizeHandle({ item, placement, onPointerDown, onKeyDown }: ResizeHandleProps) {
+  const { index, count, label } = resizeInfo(item, placement)
+  return (
+    <div
+      className="gw__resize"
+      role="slider"
+      tabIndex={0}
+      aria-label={`Resize ${item.title}`}
+      aria-orientation="horizontal"
+      aria-valuemin={0}
+      aria-valuemax={count - 1}
+      aria-valuenow={index}
+      aria-valuetext={label}
+      onPointerDown={(event) => onPointerDown(event, item)}
+      onKeyDown={(event) => onKeyDown(event, item)}
+    >
+      <GripVerticalIcon size={14} aria-hidden="true" />
+    </div>
+  )
+}
 
 type DragState = {
   id: string
@@ -86,7 +160,7 @@ const KEY_MOVES: Record<string, KeyMove> = {
 // A 24-column grid whose items can be dragged anywhere. While dragging, a grey box with the item's icon
 // follows the pointer and a dashed outline shows where it will land. The real component then animates to
 // its new position when dropped.
-export default function GridWorkspace({ items, layout, onLayoutChange }: Props) {
+export default function GridWorkspace({ items, layout, onLayoutChange, onResize, onResolved }: Props) {
   const rootRef = useRef<HTMLDivElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
   const ghostRef = useRef<HTMLDivElement | null>(null)
@@ -100,6 +174,7 @@ export default function GridWorkspace({ items, layout, onLayoutChange }: Props) 
   const [sizesPx, setSizesPx] = useState<Record<string, { w: number; h: number }>>({})
   const [ready, setReady] = useState(false)
   const [drag, setDrag] = useState<DragState | null>(null)
+  const [resizingId, setResizingId] = useState<string | null>(null)
   const [announcement, setAnnouncement] = useState('')
 
   const wide = width !== null && width >= MIN_GRID_WIDTH
@@ -259,10 +334,12 @@ export default function GridWorkspace({ items, layout, onLayoutChange }: Props) 
   // The latest state, readable from window listeners without going stale.
   const dragRef = useRef<DragState | null>(null)
   const layoutRef = useRef(resolved)
-  const latest = useRef({ layout: resolved, heights, onLayoutChange })
+  const resizeRef = useRef<ResizeDrag | null>(null)
+  const latest = useRef({ layout: resolved, heights, onLayoutChange, onResize })
   useLayoutEffect(() => {
     layoutRef.current = resolved
-    latest.current = { layout: resolved, heights, onLayoutChange }
+    latest.current = { layout: resolved, heights, onLayoutChange, onResize }
+    onResolved?.(resolved, heights)
   })
 
   const dragId = drag?.id ?? null
@@ -330,6 +407,102 @@ export default function GridWorkspace({ items, layout, onLayoutChange }: Props) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dragId])
 
+  const beginResize = (event: PointerEvent<HTMLElement>, item: WorkspaceItem) => {
+    if (event.button !== 0 || dragRef.current || resizeRef.current) return
+    event.preventDefault()
+    const placement = layoutRef.current.find((p) => p.id === item.id)!
+    const { index, value } = resizeInfo(item, placement)
+    resizeRef.current = { id: item.id, pointerId: event.pointerId, startX: event.clientX, startValue: value, startIndex: index, lastValue: value }
+    setResizingId(item.id)
+  }
+
+  // Like a move, a resize is tracked on the window so it always ends: on release anywhere, and it is undone on
+  // Escape, window blur, right-click or pointer cancel. The size changes live as the pointer crosses a snap point.
+  useEffect(() => {
+    if (!resizingId) return
+
+    const finish = (keep: boolean) => {
+      const current = resizeRef.current
+      if (current) {
+        const { onResize: apply } = latest.current
+        const item = itemById(current.id)
+        if (!keep && current.lastValue !== current.startValue) apply?.(current.id, current.startValue)
+        else if (keep && current.lastValue !== current.startValue) setAnnouncement(`${item.title} is now ${labelFor(item, current.lastValue)}.`)
+      }
+      resizeRef.current = null
+      setResizingId(null)
+    }
+
+    const onMove = (event: globalThis.PointerEvent) => {
+      const current = resizeRef.current
+      if (!current || event.pointerId !== current.pointerId) return
+      if (event.pointerType === 'mouse' && event.buttons === 0) {
+        finish(true)
+        return
+      }
+      const item = itemById(current.id)
+      const spec = item.resize!
+      let value: number
+      if (spec.mode === 'columns') {
+        const placement = layoutRef.current.find((p) => p.id === current.id)!
+        const box = gridRef.current!.getBoundingClientRect()
+        value = nearestStep(spec.steps, spanFromPoint(event.clientX, box, placement.col))
+      } else {
+        value = variantFromDrag(current.startIndex, event.clientX - current.startX, spec.labels.length)
+      }
+      if (value === current.lastValue) return
+      current.lastValue = value
+      latest.current.onResize?.(current.id, value)
+    }
+    const onUp = (event: globalThis.PointerEvent) => {
+      if (event.pointerId === resizeRef.current?.pointerId) finish(true)
+    }
+    const onCancel = (event: globalThis.PointerEvent) => {
+      if (event.pointerId === resizeRef.current?.pointerId) finish(false)
+    }
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') finish(false)
+    }
+    const onAbort = () => finish(false)
+
+    document.body.classList.add('gw-resizing')
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onCancel)
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('blur', onAbort)
+    window.addEventListener('contextmenu', onAbort)
+    return () => {
+      document.body.classList.remove('gw-resizing')
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onCancel)
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('blur', onAbort)
+      window.removeEventListener('contextmenu', onAbort)
+    }
+    // itemById only reads props that do not change during a resize.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resizingId])
+
+  // Left and right step through the sizes; Home and End go to the smallest and the largest.
+  const onResizeKeyDown = (event: KeyboardEvent<HTMLElement>, item: WorkspaceItem) => {
+    const placement = resolved.find((p) => p.id === item.id)!
+    const { index, count } = resizeInfo(item, placement)
+    const target =
+      event.key === 'ArrowLeft' || event.key === 'ArrowDown' ? index - 1
+      : event.key === 'ArrowRight' || event.key === 'ArrowUp' ? index + 1
+      : event.key === 'Home' ? 0
+      : event.key === 'End' ? count - 1
+      : null
+    if (target === null) return
+    event.preventDefault()
+    const next = Math.min(count - 1, Math.max(0, target))
+    if (next === index) return
+    onResize?.(item.id, valueAt(item, next))
+    setAnnouncement(`${item.title} is now ${labelFor(item, valueAt(item, next))}.`)
+  }
+
   const onHandleKeyDown = (event: KeyboardEvent<HTMLButtonElement>, id: string) => {
     const move = KEY_MOVES[event.key]
     if (!move) return
@@ -368,7 +541,7 @@ export default function GridWorkspace({ items, layout, onLayoutChange }: Props) 
         }}
       >
         {/* The grid, columns and rows, only while something is being dragged. */}
-        {drag?.moved && (
+        {(drag?.moved || resizingId) && (
           <div
             className="gw__guides"
             aria-hidden="true"
@@ -394,6 +567,7 @@ export default function GridWorkspace({ items, layout, onLayoutChange }: Props) 
               }}
               data-id={item.id}
               data-dragging={dragging}
+              data-resizing={resizingId === item.id || undefined}
               className="gw__item"
               style={{
                 gridColumn: `${placement.col + 1} / span ${placement.w}`,
@@ -413,6 +587,7 @@ export default function GridWorkspace({ items, layout, onLayoutChange }: Props) 
                 >
                   <GripHorizontalIcon size={16} aria-hidden="true" />
                 </button>
+                {item.resize && <ResizeHandle item={item} placement={placement} onPointerDown={beginResize} onKeyDown={onResizeKeyDown} />}
               </div>
             </div>
           )

@@ -11,10 +11,12 @@ type Props = {
   onChooseTask?: (id: TaskId) => void
   // Sits in the side panel beside a thread instead of centred beneath the workspace.
   docked?: boolean
+  // A request is being worked on. The field stays editable, but another cannot be sent yet.
+  busy?: boolean
 }
 
 // The two equal ways in: describe what you need, or choose a task from the menu.
-export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false }: Props) {
+export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false, busy = false }: Props) {
   const [text, setText] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -28,7 +30,7 @@ export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false
     if (docked) inputRef.current?.focus()
   }, [docked])
 
-  const canSend = text.trim().length > 0
+  const canSend = text.trim().length > 0 && !busy
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
