@@ -1,17 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
-import {
-  BillListIcon,
-  CheckIcon,
-  DisketteIcon,
-  LayersMinimalisticIcon,
-  MagicWand3Icon,
-  PaletteIcon,
-  RestartIcon,
-  TagIcon,
-  UndoLeftIcon,
-  UndoRightIcon,
-} from '@solar-icons/react/linear'
+import { useCallback, useMemo, useState } from 'react'
+import { MagicWand3Icon, PaletteIcon, TagIcon } from '@solar-icons/react/linear'
 import type { Heights, Placement } from '../lib/gridLayout.ts'
 import { replaceableIds } from '../lib/harmony.ts'
 import { resolveRoles, type ColourRole } from '../lib/palette.ts'
@@ -20,32 +8,29 @@ import { loadPalette, savePalette, type PaletteSave } from '../lib/projectStore.
 import {
   MAX_BLOCKS,
   MIN_BLOCKS,
-  PANEL_STEPS,
-  TOOLBAR_VERSIONS,
+  PALETTE_SPEC,
+  PANEL_MIN_COLS,
+  WINDOW_SIZES,
   canRedoState,
   canUndoState,
   docOf,
   isUnsaved,
-  isVisible,
-  layoutIsDefault,
-  mergeLayout,
   selectedBlock,
   type WorkspaceAction,
   type WorkspaceState,
 } from '../lib/workspaceState.ts'
 import ColourPicker from './ColourPicker.tsx'
-import ComponentsMenu from './ComponentsMenu.tsx'
+import ColourWheelWindow from './ColourWheelWindow.tsx'
 import DocumentPreview from './DocumentPreview.tsx'
 import ExportButton from './ExportButton.tsx'
 import GenerateToolbar from './GenerateToolbar.tsx'
-import GridWorkspace, { type WorkspaceItem } from './GridWorkspace.tsx'
+import GenerateWindow from './GenerateWindow.tsx'
+import type { WorkspaceItem } from './GridWorkspace.tsx'
 import PaletteCanvas from './PaletteCanvas.tsx'
 import RoleToolbar from './RoleToolbar.tsx'
-import './PaletteWorkspace.css'
-
-// True when the key press belongs to a text field, which has its own undo.
-const inTextField = (target: EventTarget | null) =>
-  target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+import RoleWindow from './RoleWindow.tsx'
+import type { ShelfTool } from './ToolShelf.tsx'
+import WorkspaceShell, { type HeaderSlots } from './WorkspaceShell.tsx'
 
 type Props = {
   projectId: string
@@ -56,17 +41,14 @@ type Props = {
   dispatch: (action: WorkspaceAction) => void
   // Reports where each item is drawn and how tall, so the AI can place one component relative to another.
   onResolved?: (resolved: Placement[], heights: Heights) => void
-  // Where the controls go: the left and right of the screen's fixed header, beside the logo. Without them the
-  // controls are drawn above the grid.
-  headerSlots?: { start: HTMLElement | null; end: HTMLElement | null }
+  headerSlots?: HeaderSlots
 }
 
-// The palette workspace: a canvas of colour blocks with the toolbars and panels that work on it, all of which can be
-// dragged anywhere on the grid. "Save" saves the palette and the layout to the project.
+// The palette workspace: tools for the colours in the toolbar and windows (the palette canvas, the document preview), on
+// the shared workspace shell. "Save" saves the palette, the tools and the layout.
 export default function PaletteWorkspace({ projectId, projectName, state, dispatch, onResolved, headerSlots }: Props) {
   const [saved, setSaved] = useState<PaletteSave | null>(() => loadPalette(projectId))
   const [saveFailed, setSaveFailed] = useState(false)
-  const [historyNote, setHistoryNote] = useState('')
 
   const doc = docOf(state)
   const { blocks } = doc
@@ -77,123 +59,75 @@ export default function PaletteWorkspace({ projectId, projectName, state, dispat
   const roles = useMemo(() => resolveRoles(docOf(state).blocks), [state])
   const fillCount = replaceableIds(blocks, activeId).length
 
-  const undoStep = useCallback(() => {
-    if (!canUndoState(state)) return
-    dispatch({ type: 'undo' })
-    setHistoryNote('Undone.')
-  }, [state, dispatch])
-
-  const redoStep = useCallback(() => {
-    if (!canRedoState(state)) return
-    dispatch({ type: 'redo' })
-    setHistoryNote('Redone.')
-  }, [state, dispatch])
-
-  // Ctrl or Cmd with Z undoes, with Shift (or Y) redoes. A text field keeps its own undo.
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || event.altKey || inTextField(event.target)) return
-      const key = event.key.toLowerCase()
-      if (key === 'z') {
-        event.preventDefault()
-        if (event.shiftKey) redoStep()
-        else undoStep()
-      } else if (key === 'y') {
-        event.preventDefault()
-        redoStep()
-      }
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [undoStep, redoStep])
-
   const unsaved = isUnsaved(doc, saved)
 
   const save = () => {
-    const result = savePalette(projectId, { blocks, layout: doc.layout, sizes: doc.sizes, hidden: doc.hidden })
+    const result = savePalette(projectId, { blocks, layout: doc.layout, tools: doc.tools, expanded: doc.expanded, hidden: doc.hidden })
     setSaveFailed(result === null)
     if (result) setSaved(result)
   }
 
-  const resize = useCallback((id: string, value: number) => dispatch({ type: 'resize', id, value }), [dispatch])
   const exportSheet = useCallback(() => exportBrandSheet(blocks, projectName), [blocks, projectName])
 
-  const items: WorkspaceItem[] = useMemo(
-    () => [
-      {
+  // The tools, each a segment of the toolbar. The reason is shown from the tool's icon.
+  const tools: Record<string, ShelfTool> = useMemo(
+    () => ({
+      picker: {
         id: 'picker',
         title: 'Colour picker',
         icon: PaletteIcon,
-        w: 8,
-        radius: 'var(--radius-xl)',
-        delay: 0.45,
-        distance: 0.9,
-        resize: { mode: 'variant', current: doc.sizes.picker ?? 0, labels: TOOLBAR_VERSIONS },
+        reason: doc.reasons.picker ?? 'Shown because you asked for a colour palette. Click the colour to open the full spectrum.',
         node: (
           <ColourPicker
-            size={doc.sizes.picker ?? 0}
             value={selected.hex}
             onChange={(hex) => dispatch({ type: 'set_hex', id: activeId, hex })}
             editing={label}
-            reason={doc.reasons.picker ?? 'Shown because you asked for a colour palette. Click the colour to open the full spectrum.'}
           />
         ),
       },
-      {
+      role: {
         id: 'role',
         title: 'Colour role',
         icon: TagIcon,
-        w: 10,
-        radius: 'var(--radius-xl)',
-        delay: 0.9,
-        distance: 0.4,
-        resize: { mode: 'variant', current: doc.sizes.role ?? 0, labels: TOOLBAR_VERSIONS },
+        reason: doc.reasons.role ?? 'Says what the selected colour is for, so the preview and the brand sheet know which colour is the text.',
         node: (
           <RoleToolbar
-            size={doc.sizes.role ?? 0}
-            roles={roles}
             hex={selected.hex}
             editing={label}
             role={selected.role}
             onChange={(role: ColourRole | null) => dispatch({ type: 'set_role', id: activeId, role })}
-            reason={doc.reasons.role ?? 'Says what the selected colour is for, so the preview and the brand sheet know which colour is the text.'}
           />
         ),
       },
-      {
+      generate: {
         id: 'generate',
         title: 'Generate',
         icon: MagicWand3Icon,
-        w: 9,
-        radius: 'var(--radius-xl)',
-        delay: 1.1,
-        distance: 0.7,
-        resize: { mode: 'variant', current: doc.sizes.generate ?? 0, labels: TOOLBAR_VERSIONS },
+        reason: doc.reasons.generate ?? 'Suggests colours that go with the selected one. Keep a colour with its lock and Generate will leave it alone.',
         node: (
           <GenerateToolbar
-            size={doc.sizes.generate ?? 0}
-            fills={fillCount}
-            keeps={blocks.length - fillCount}
             harmony={state.harmony}
             onHarmonyChange={(harmony) => dispatch({ type: 'set_harmony', harmony })}
             onGenerate={() => dispatch({ type: 'generate' })}
             canGenerate={fillCount > 0}
             from={label}
-            reason={doc.reasons.generate ?? 'Suggests colours that go with the selected one. Keep a colour with its lock and Generate will leave it alone.'}
           />
         ),
       },
+    }),
+    [doc.reasons, selected, activeId, label, state.harmony, fillCount, dispatch],
+  )
+  // The windows on the grid.
+  const items: WorkspaceItem[] = useMemo(
+    () => [
       {
         id: 'canvas',
         title: 'Palette canvas',
-        icon: LayersMinimalisticIcon,
-        w: 24,
-        fill: true,
-        radius: 'var(--radius-xl)',
+        w: WINDOW_SIZES.canvas.w,
+        minCols: PANEL_MIN_COLS,
         distance: 0.12,
-        resize: { mode: 'columns', steps: PANEL_STEPS },
         node: (
-          <div className="palette-workspace__canvas">
+          <div className="workspace__card">
             <PaletteCanvas
               blocks={blocks}
               selectedId={activeId}
@@ -211,15 +145,12 @@ export default function PaletteWorkspace({ projectId, projectName, state, dispat
       {
         id: 'preview',
         title: 'Preview',
-        icon: BillListIcon,
-        w: 12,
-        fill: true,
-        radius: 'var(--radius-xl)',
-        delay: 1.6,
+        w: WINDOW_SIZES.preview.w,
+        minCols: PANEL_MIN_COLS,
+        delay: 0.6,
         distance: 0.8,
-        resize: { mode: 'columns', steps: PANEL_STEPS },
         node: (
-          <div className="palette-workspace__canvas">
+          <div className="workspace__card">
             <DocumentPreview
               roles={roles}
               businessName={doc.businessName}
@@ -228,66 +159,94 @@ export default function PaletteWorkspace({ projectId, projectName, state, dispat
           </div>
         ),
       },
+      // The tools, as the bigger windows they become when dragged out of the toolbar.
+      {
+        id: 'picker',
+        title: 'Colour wheel',
+        tool: true,
+        w: WINDOW_SIZES.picker.w,
+        minCols: 8,
+        distance: 0.3,
+        node: (
+          <div className="workspace__card">
+            <ColourWheelWindow
+              blocks={blocks}
+              selectedId={activeId}
+              onSelect={(id) => dispatch({ type: 'select', id })}
+              onChange={(id, hex) => dispatch({ type: 'set_hex', id, hex })}
+              reason={doc.reasons.picker ?? 'The colour picker made big: every colour in the palette on one wheel. Drag a colour to change it.'}
+            />
+          </div>
+        ),
+      },
+      {
+        id: 'role',
+        title: 'Colour roles',
+        tool: true,
+        w: WINDOW_SIZES.role.w,
+        minCols: PANEL_MIN_COLS,
+        distance: 0.3,
+        node: (
+          <div className="workspace__card">
+            <RoleWindow
+              roles={roles}
+              selected={{ number: blocks.findIndex((block) => block.id === activeId) + 1, hex: selected.hex, role: selected.role }}
+              numberOf={(blockId) => blocks.findIndex((block) => block.id === blockId) + 1}
+              onChange={(role: ColourRole | null) => dispatch({ type: 'set_role', id: activeId, role })}
+              onSelect={(id) => dispatch({ type: 'select', id })}
+              reason={doc.reasons.role ?? 'The role tool made big: every role and the colour that holds it.'}
+            />
+          </div>
+        ),
+      },
+      {
+        id: 'generate',
+        title: 'Harmonies',
+        tool: true,
+        w: WINDOW_SIZES.generate.w,
+        minCols: PANEL_MIN_COLS,
+        distance: 0.3,
+        node: (
+          <div className="workspace__card">
+            <GenerateWindow
+              blocks={blocks}
+              selectedId={activeId}
+              harmony={state.harmony}
+              variation={state.variation}
+              canGenerate={fillCount > 0}
+              onHarmonyChange={(harmony) => dispatch({ type: 'set_harmony', harmony })}
+              onGenerate={() => dispatch({ type: 'generate' })}
+              reason={doc.reasons.generate ?? 'The generate tool made big: each harmony with a preview of the palette it would make.'}
+            />
+          </div>
+        ),
+      },
     ],
-    [blocks, doc.sizes, doc.reasons, doc.businessName, selected, activeId, label, roles, state.harmony, fillCount, dispatch],
+    [blocks, doc.reasons, doc.businessName, activeId, selected, roles, state.harmony, state.variation, fillCount, dispatch],
   )
 
-  // Hidden components are off the grid, and keep their place in the layout for when they come back.
-  const visibleItems = items.filter((item) => isVisible(doc, item.id))
-  const visibleLayout = doc.layout.filter((placement) => isVisible(doc, placement.id))
-  const changeVisibleLayout = (next: Placement[]) => dispatch({ type: 'layout', layout: mergeLayout(doc.layout, next) })
+  const windowsById = useMemo(() => Object.fromEntries(items.map((item) => [item.id, item])), [items])
 
   // A short word beside the Save button. Nothing is saved until the founder saves.
-  const statusText = saveFailed ? 'Could not save' : !saved ? 'Not saved yet' : unsaved ? 'Unsaved changes' : 'All changes saved'
-
-  const startControls = (
-    <>
-      <div className="palette-workspace__history" role="group" aria-label="History">
-        <button type="button" className="palette-workspace__icon-button" disabled={!canUndoState(state)} onClick={undoStep} aria-label="Undo">
-          <UndoLeftIcon size={18} aria-hidden="true" />
-        </button>
-        <button type="button" className="palette-workspace__icon-button" disabled={!canRedoState(state)} onClick={redoStep} aria-label="Redo">
-          <UndoRightIcon size={18} aria-hidden="true" />
-        </button>
-      </div>
-      <ComponentsMenu
-        hidden={doc.hidden}
-        onShow={(component) => dispatch({ type: 'show', component })}
-        onHide={(component) => dispatch({ type: 'hide', component })}
-      />
-      <button type="button" className="palette-workspace__button" disabled={layoutIsDefault(doc)} onClick={() => dispatch({ type: 'reset_layout' })}>
-        <RestartIcon size={18} aria-hidden="true" />
-        <span className="palette-workspace__label">Reset layout</span>
-      </button>
-    </>
-  )
-
-  const endControls = (
-    <>
-      <span className="palette-workspace__status" role="status">
-        {statusText}
-      </span>
-      <button type="button" className="palette-workspace__button palette-workspace__button--primary" disabled={!unsaved} onClick={save}>
-        {unsaved ? <DisketteIcon size={18} aria-hidden="true" /> : <CheckIcon size={18} aria-hidden="true" />}
-        <span className="palette-workspace__label">{unsaved ? 'Save' : 'Saved'}</span>
-      </button>
-      <ExportButton onExport={exportSheet} />
-    </>
-  )
-
-  const place = (slot: HTMLElement | null | undefined, controls: ReactNode) =>
-    headerSlots ? slot && createPortal(controls, slot) : <div className="palette-workspace__actions">{controls}</div>
-
+  const saveStatus = saveFailed ? 'Could not save' : !saved ? 'Not saved yet' : unsaved ? 'Unsaved changes' : 'All changes saved'
 
   return (
-    <div className="palette-workspace">
-      {place(headerSlots?.start, startControls)}
-      {place(headerSlots?.end, endControls)}
-      <p className="visually-hidden" role="status">
-        {historyNote}
-      </p>
-
-      <GridWorkspace items={visibleItems} layout={visibleLayout} onLayoutChange={changeVisibleLayout} onResize={resize} onResolved={onResolved} />
-    </div>
+    <WorkspaceShell
+      spec={PALETTE_SPEC}
+      arrangement={doc}
+      dispatch={dispatch}
+      tools={tools}
+      windows={windowsById}
+      canUndo={canUndoState(state)}
+      canRedo={canRedoState(state)}
+      onUndo={() => dispatch({ type: 'undo' })}
+      onRedo={() => dispatch({ type: 'redo' })}
+      saveStatus={saveStatus}
+      unsaved={unsaved}
+      onSave={save}
+      exportButton={<ExportButton onExport={exportSheet} />}
+      onResolved={onResolved}
+      headerSlots={headerSlots}
+    />
   )
 }

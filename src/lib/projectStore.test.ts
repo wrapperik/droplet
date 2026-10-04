@@ -17,6 +17,13 @@ describe('projectStore', () => {
     expect(loadPalette('typography')).toBeNull()
   })
 
+  it('keeps the order of the tools in the toolbar', () => {
+    savePalette('duckstack', { ...data, tools: ['generate', 'picker', 'role'] })
+    expect(loadPalette('duckstack')?.tools).toEqual(['generate', 'picker', 'role'])
+    savePalette('duckstack', data)
+    expect(loadPalette('duckstack')?.tools).toBeUndefined()
+  })
+
   it('keeps the role given to a colour', () => {
     const withRoles = { ...data, blocks: [{ id: 1, hex: '#1F8FE0', role: 'primary' as const }, { id: 2, hex: '#0B4F8A' }] }
     savePalette('duckstack', withRoles)
@@ -24,19 +31,20 @@ describe('projectStore', () => {
     expect(loadPalette('duckstack')?.blocks[1].role).toBeUndefined()
   })
 
-  it('keeps which version each toolbar is on', () => {
-    savePalette('duckstack', { ...data, sizes: { picker: 1, role: 1 } })
-    expect(loadPalette('duckstack')?.sizes).toEqual({ picker: 1, role: 1 })
+  it('keeps which tools were dragged out of the toolbar to be windows', () => {
+    savePalette('duckstack', { ...data, expanded: ['picker'] })
+    expect(loadPalette('duckstack')?.expanded).toEqual(['picker'])
     savePalette('duckstack', data)
-    expect(loadPalette('duckstack')?.sizes).toBeUndefined()
+    expect(loadPalette('duckstack')?.expanded).toBeUndefined()
   })
 
-  it('rejects a toolbar version that cannot exist', () => {
+  it('still loads a save from when tools had versions, and ignores them', () => {
     window.localStorage.setItem(
       'droplet-project-duckstack-palette',
-      JSON.stringify({ ...data, sizes: { picker: -1 }, savedAt: new Date().toISOString() }),
+      JSON.stringify({ ...data, sizes: { picker: 1 }, savedAt: new Date().toISOString() }),
     )
-    expect(loadPalette('duckstack')).toBeNull()
+    expect(loadPalette('duckstack')).toMatchObject(data)
+    expect(loadPalette('duckstack')).not.toHaveProperty('sizes')
   })
 
   it('rejects a role that does not exist', () => {

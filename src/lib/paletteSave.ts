@@ -24,8 +24,10 @@ export const paletteSaveSchema = z.object({
     .min(1)
     .max(8),
   layout: z.array(placementSchema),
-  // Which version each toolbar is on (0 is the default), by item id.
-  sizes: z.record(z.string(), z.number().int().min(0).max(3)).optional(),
+  // The order of the tools in the toolbar, by id.
+  tools: z.array(z.string()).optional(),
+  // Tools that were dragged out of the toolbar and are windows, by id.
+  expanded: z.array(z.string()).optional(),
   // Components taken off the screen, by item id.
   hidden: z.array(z.string()).optional(),
   savedAt: z.string(),

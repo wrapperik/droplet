@@ -60,3 +60,9 @@
   margin-left: auto;
   font-size: 0.75rem;
 }
+
+/* The tools' menu opens from the end of the toolbar, so it lines up with the button's right edge. */
+.components__menu--end {
+  right: 0;
+  left: auto;
+}

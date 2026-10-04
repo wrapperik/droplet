@@ -1,0 +1,122 @@
+/* The toolbar under the header: one bar, always in the same place. Segments are tools, with a divider between them. */
+.shelf {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: 0.25rem;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.25rem 0.5rem 0.25rem 0.625rem;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+  /* A stacking context of its own, so the glass can sit behind the tools without being their ancestor. */
+  isolation: isolate;
+}
+
+/* The bar's glass is drawn behind it, not on it. An element with a backdrop blur makes everything inside it blur only
+   what is inside it, so with the blur on the bar itself the menus and tooltips that open from a tool would only get a
+   lower opacity instead of blurring the window beneath. */
+.shelf::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border: 1px solid var(--glass-border);
+  border-radius: inherit;
+  background: var(--glass-fill-fallback);
+}
+
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .shelf::before {
+    background: var(--glass-fill-strong);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
+  }
+}
+
+.shelf__tool {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+/* A divider, drawn on the left of every tool after the first. */
+.shelf__tool + .shelf__tool {
+  margin-left: 0.5rem;
+  padding-left: 0.5rem;
+}
+
+.shelf__tool + .shelf__tool::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 1px;
+  height: 1.5rem;
+  background: var(--overlay-10);
+  transform: translateY(-50%);
+}
+
+.shelf__body {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+/* The tool's icon is its handle and its label: drag it to move the tool, and hover for what it is. */
+.shelf__grip {
+  cursor: grab;
+  touch-action: none;
+}
+
+.shelf__grip:active {
+  cursor: grabbing;
+}
+
+.shelf__tip {
+  top: calc(100% + 0.75rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.shelf__tip strong {
+  font-weight: 600;
+}
+
+/* The tool stays in the bar, dimmed, while its lifted copy is carried, and is hidden while the copy settles onto it. */
+.shelf__tool .shelf__body {
+  transition: opacity var(--duration-base) var(--ease-out);
+}
+
+.shelf__tool[data-dragging] .shelf__body {
+  opacity: 0.35;
+}
+
+.shelf__tool[data-landing] .shelf__body {
+  opacity: 0;
+  transition: none;
+}
+
+.shelf__add {
+  display: flex;
+  margin-left: 0.25rem;
+}
+
+body.shelf-dragging {
+  cursor: grabbing;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* The carried copy is a piece of the bar: it brings its own glass. */
+.shelf__lift .lift__inner {
+  border: 1px solid var(--glass-border);
+  background: var(--glass-fill-fallback);
+}
+
+/* A window carried over the bar: the bar lights up as a place it can go back to. */
+.shelf[data-target]::before {
+  border-color: color-mix(in srgb, var(--focus) 75%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus) 55%, transparent);
+}

@@ -1,3 +1,4 @@
+/* A grid of 24 columns, never drawn. Items sit on it, so their edges line up, but nothing about it is visible. */
 .gw {
   position: relative;
   width: 100%;
@@ -9,32 +10,11 @@
   gap: 1rem;
 }
 
+
 .gw__grid {
   position: relative;
   display: grid;
   column-gap: 1rem;
-}
-
-/* The grid: twelve columns and rows of cells. Only drawn while something is being dragged. */
-.gw__guides {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  gap: 1rem;
-  overflow: hidden;
-  pointer-events: none;
-  animation: gw-guides-in var(--duration-base) var(--ease-out);
-}
-
-.gw__guide {
-  border-radius: 0.375rem;
-  background: var(--overlay-06);
-}
-
-@keyframes gw-guides-in {
-  from {
-    opacity: 0;
-  }
 }
 
 /* No text selection or stray cursors while a drag is in progress. */
@@ -51,24 +31,31 @@ body.gw-dragging {
   min-width: 0;
 }
 
-/* Every item fills the columns it is given, so its edges always sit on grid lines. */
-
 /* A popover or tooltip inside an item must paint above the items around it. */
 .gw__item:hover,
 .gw__item:focus-within {
   z-index: 5;
 }
 
-/* The grip is centred on the content, which fills the item. */
+/* A window fills the columns it is given. */
 .gw__content {
   position: relative;
   width: 100%;
   transition: opacity var(--duration-base) var(--ease-out);
 }
 
-/* The component stays where it was while its grey stand-in is dragged, then animates to the new spot. */
-.gw__item[data-dragging='true'] .gw__content {
+.gw__emerge > * {
+  width: 100%;
+}
+
+/* The component stays where it was while its lifted copy is carried, then it is shown again where it landed. */
+.gw__item[data-dragging] .gw__content {
   opacity: 0.35;
+}
+
+.gw__item[data-landing] .gw__content {
+  opacity: 0;
+  transition: none;
 }
 
 /* The grip stays out of the way until the item is hovered or focused. Touch screens always show it. */
@@ -158,33 +145,12 @@ body.gw-resizing {
   -webkit-user-select: none;
 }
 
-/* Where the item will land: a thin outline with the item's own corners and the faintest fill. */
+/* Where the item will land: the outline of its own box, with the faintest fill. It moves between spots on a spring. */
 .gw__drop {
   position: absolute;
-  z-index: 0;
-  border: 1.5px dashed color-mix(in srgb, var(--focus) 65%, transparent);
-  border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--focus) 7%, transparent);
+  z-index: 4;
+  border: 2px solid color-mix(in srgb, var(--focus) 70%, transparent);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--focus) 10%, transparent);
   pointer-events: none;
-}
-
-/* Rendered in a portal so no transformed ancestor can offset it. */
-.gw__ghost {
-  position: fixed;
-  top: 0;
-  left: 0;
-  z-index: 100;
-  display: grid;
-  place-items: center;
-  width: 3.5rem;
-  height: 3.5rem;
-  border: 1px solid var(--overlay-10);
-  border-radius: var(--radius-md);
-  background: var(--overlay-10);
-  box-shadow: var(--shadow-lg);
-  color: var(--text-muted);
-  cursor: grabbing;
-  pointer-events: none;
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
 }

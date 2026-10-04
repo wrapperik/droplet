@@ -1,19 +1,29 @@
 import { useCallback, useId, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { CheckIcon, Widget2Icon } from '@solar-icons/react/linear'
+import { AddCircleIcon, CheckIcon, Widget2Icon } from '@solar-icons/react/linear'
 import { useDismiss } from '../hooks/useDismiss.ts'
-import { COMPONENTS } from '../lib/workspaceState.ts'
+import type { ComponentDef, ComponentKind } from '../lib/arrangement.ts'
 import './ComponentsMenu.css'
 
 type Props = {
+  // Every component of the workspace.
+  components: ComponentDef[]
+  // Which components the menu lists: the windows on the grid, or the tools in the toolbar.
+  kind: ComponentKind
   hidden: string[]
   onShow: (id: string) => void
   onHide: (id: string) => void
 }
 
-// Which components are on screen. A person can take any toolbar or panel away and bring it back, and so can the AI,
+const MENUS: Record<ComponentKind, { label: string; menuLabel: string }> = {
+  panel: { label: 'Windows', menuLabel: 'Windows on screen' },
+  toolbar: { label: 'Add or remove a tool', menuLabel: 'Tools in the toolbar' },
+}
+
+// Which components are on screen. A person can take any tool or window away and bring it back, and so can the AI,
 // through the same two actions. The palette canvas is the work itself, so it is always shown.
-export default function ComponentsMenu({ hidden, onShow, onHide }: Props) {
+export default function ComponentsMenu({ components, kind, hidden, onShow, onHide }: Props) {
+  const { label, menuLabel } = MENUS[kind]
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
   const menuId = useId()
@@ -24,28 +34,29 @@ export default function ComponentsMenu({ hidden, onShow, onHide }: Props) {
     <div className="components" ref={wrapRef}>
       <button
         type="button"
-        className="palette-workspace__button"
+        className={kind === 'toolbar' ? 'toolbar__button' : 'workspace__button'}
+        aria-label={kind === 'toolbar' ? label : undefined}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={menuId}
         onClick={() => setOpen((value) => !value)}
       >
-        <Widget2Icon size={18} aria-hidden="true" />
-        <span className="palette-workspace__label">Components</span>
+        {kind === 'toolbar' ? <AddCircleIcon size={20} aria-hidden="true" /> : <Widget2Icon size={18} aria-hidden="true" />}
+        {kind === 'panel' && <span className="workspace__label">{label}</span>}
       </button>
       <AnimatePresence>
         {open && (
           <motion.div
             id={menuId}
-            className="components__menu glass glass--strong"
+            className={`components__menu glass glass--strong${kind === 'toolbar' ? ' components__menu--end' : ''}`}
             role="menu"
-            aria-label="Components on screen"
+            aria-label={menuLabel}
             initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
           >
-            {COMPONENTS.map((component) => {
+            {components.filter((component) => component.kind === kind).map((component) => {
               const shown = !hidden.includes(component.id)
               return (
                 <button

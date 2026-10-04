@@ -1,5 +1,29 @@
 import { shiftHue } from './colour.ts'
-import { AUTO_COL, nearestStep, reconcile, samePlacements, type Placement } from './gridLayout.ts'
+import {
+  PANEL_MIN_COLS,
+  arrangementIsDefault,
+  arrangementUnsaved,
+  clampPanelWidth,
+  isArrangementAction,
+  isExpanded as isExpandedIn,
+  isVisible as isVisibleIn,
+  isWindow as isWindowIn,
+  kindOf as kindOfIn,
+  mergeLayout,
+  normaliseExpanded as normaliseExpandedIn,
+  normaliseTools as normaliseToolsIn,
+  openArrangement,
+  panelIds,
+  reduceArrangement,
+  shownWindows as shownWindowsIn,
+  toolIds,
+  toolbarTools as toolbarToolsIn,
+  type Arrangement,
+  type ArrangementAction,
+  type ArrangementSpec,
+  type ComponentKind,
+} from './arrangement.ts'
+import type { Placement } from './gridLayout.ts'
 import { generatePalette, replaceableIds, type Harmony } from './harmony.ts'
 import { canRedo, canUndo, commit, createHistory, redo, undo, type History } from './history.ts'
 import { assignRole, withHex, type ColourRole, type PaletteBlock } from './palette.ts'
@@ -12,43 +36,51 @@ import type { PaletteSave } from './paletteSave.ts'
 export const MAX_BLOCKS = 8
 export const MIN_BLOCKS = 2 // a palette needs at least a pair, and the checks need a colour to read against
 
-// Panels snap to these widths, in columns (out of 24): a third, half, two thirds and the full width.
-export const PANEL_STEPS = [8, 12, 16, 24]
-// A toolbar has two versions, the compact one it starts as and a larger one with more in it.
-export const TOOLBAR_VERSIONS = ['Compact', 'Large']
+export { PANEL_MIN_COLS, clampPanelWidth, mergeLayout }
+export type { ComponentKind }
 
-export type ComponentKind = 'toolbar' | 'panel'
-export const COMPONENTS: { id: string; label: string; kind: ComponentKind; hideable: boolean }[] = [
+export const COMPONENTS: ArrangementSpec['components'] = [
   { id: 'picker', label: 'Colour picker', kind: 'toolbar', hideable: true },
   { id: 'role', label: 'Colour role', kind: 'toolbar', hideable: true },
   { id: 'generate', label: 'Generate', kind: 'toolbar', hideable: true },
   { id: 'canvas', label: 'Palette canvas', kind: 'panel', hideable: false },
   { id: 'preview', label: 'Preview', kind: 'panel', hideable: true },
 ]
-export const PANELS = COMPONENTS.filter((c) => c.kind === 'panel').map((c) => c.id)
-export const kindOf = (id: string) => COMPONENTS.find((c) => c.id === id)?.kind
 
-// Where things start, and where "Reset layout" puts them. The three toolbars in one row across the top: each starts
-// where the one before it ends, so neighbours are exactly one grid gap apart, and one that does not fit in what is
-// left of the row drops beneath the first, lined up with it. Then the white canvas full width, and the document
-// preview under that. Toolbar widths come from their content and rows are only a preference.
+// How big each window starts, in columns, and roughly how tall it is in pixels.
+export const WINDOW_SIZES: ArrangementSpec['windowSizes'] = {
+  canvas: { w: 14, heightPx: 240 },
+  preview: { w: 10, heightPx: 420 },
+  picker: { w: 10, heightPx: 440 },
+  role: { w: 8, heightPx: 300 },
+  generate: { w: 8, heightPx: 340 },
+}
+
+// Where the windows start, and where "Reset layout" puts them: the palette canvas beside the document preview, sharing the
+// row fourteen columns to ten. Tools that are windows have a place too, kept for when they are dragged out. Rows are only
+// a preference, and each window rises as far as it can.
 export const DEFAULT_LAYOUT: Placement[] = [
-  { id: 'picker', col: 0, row: 0, w: 8 },
-  { id: 'role', col: AUTO_COL, row: 0, w: 10 },
-  { id: 'generate', col: AUTO_COL, row: 0, w: 9 },
-  { id: 'canvas', col: 0, row: 10, w: 24 },
-  { id: 'preview', col: 0, row: 20, w: 12 },
+  { id: 'canvas', col: 0, row: 0, w: 14 },
+  { id: 'preview', col: 14, row: 0, w: 10 },
+  { id: 'picker', col: 0, row: 30, w: WINDOW_SIZES.picker.w },
+  { id: 'role', col: 10, row: 30, w: WINDOW_SIZES.role.w },
+  { id: 'generate', col: 16, row: 30, w: WINDOW_SIZES.generate.w },
 ]
 
-export type Doc = {
+// How the palette workspace is arranged: its tools, its windows and where they start.
+export const PALETTE_SPEC: ArrangementSpec = { components: COMPONENTS, layout: DEFAULT_LAYOUT, windowSizes: WINDOW_SIZES }
+
+export const PANELS = panelIds(PALETTE_SPEC)
+export const TOOLS = toolIds(PALETTE_SPEC)
+export const kindOf = (id: string) => kindOfIn(PALETTE_SPEC, id)
+
+// The order the tools start in, left to right.
+export const DEFAULT_TOOLS = [...TOOLS]
+export const normaliseTools = (order: string[] | undefined) => normaliseToolsIn(PALETTE_SPEC, order)
+export const normaliseExpanded = (ids: string[] | undefined) => normaliseExpandedIn(PALETTE_SPEC, ids)
+
+export type Doc = Arrangement & {
   blocks: PaletteBlock[]
-  layout: Placement[]
-  // Which version each toolbar is on; 0 (the default) is left out.
-  sizes: Record<string, number>
-  // Components the founder (or the AI) has taken off the screen.
-  hidden: string[]
-  // One line on why a component is on screen, where the composer gave one.
-  reasons: Record<string, string>
   businessName?: string
 }
 
@@ -69,30 +101,15 @@ export type WorkspaceAction =
   | { type: 'toggle_keep'; id: number; keep?: boolean }
   | { type: 'set_harmony'; harmony: Harmony }
   | { type: 'generate'; fromId?: number }
-  | { type: 'layout'; layout: Placement[] }
-  | { type: 'resize'; id: string; value: number }
-  | { type: 'show'; component: string; reason?: string }
-  | { type: 'hide'; component: string }
-  | { type: 'reset_layout' }
+  | ArrangementAction
   | { type: 'undo' }
   | { type: 'redo' }
   // Several actions applied together and undone together.
   | { type: 'batch'; actions: WorkspaceAction[] }
 
-// A layout of the visible items put back into the full layout, which also remembers where hidden items belong.
-export const mergeLayout = (all: Placement[], visible: Placement[]): Placement[] => [
-  ...visible,
-  ...all.filter((placement) => !visible.some((v) => v.id === placement.id)),
-]
-
-export const changedSizes = (sizes: Record<string, number>) => Object.fromEntries(Object.entries(sizes).filter(([, version]) => version > 0))
-
 // A workspace with these colours, arranged as the project's saved layout if there is one.
 export function openWorkspace(blocks: PaletteBlock[], saved?: PaletteSave | null): WorkspaceState {
-  const layout = saved
-    ? reconcile(saved.layout, DEFAULT_LAYOUT, PANELS).map((p) => (PANELS.includes(p.id) ? { ...p, w: nearestStep(PANEL_STEPS, p.w) } : p))
-    : DEFAULT_LAYOUT
-  const doc: Doc = { blocks, layout, sizes: changedSizes(saved?.sizes ?? {}), hidden: saved?.hidden ?? [], reasons: {} }
+  const doc: Doc = { blocks, ...openArrangement(PALETTE_SPEC, saved) }
   return { history: createHistory(doc), selectedId: blocks[0].id, harmony: 'analogous', variation: 0 }
 }
 
@@ -101,20 +118,21 @@ export const selectedBlock = (state: WorkspaceState): PaletteBlock => {
   const { blocks } = docOf(state)
   return blocks.find((block) => block.id === state.selectedId) ?? blocks[0]
 }
-export const isVisible = (doc: Doc, id: string) => !doc.hidden.includes(id)
+export const isVisible = (doc: Doc, id: string) => isVisibleIn(doc, id)
+export const isExpanded = (doc: Doc, id: string) => isExpandedIn(doc, id)
+// The tools that are in the toolbar, left to right.
+export const toolbarTools = (doc: Doc) => toolbarToolsIn(doc)
+// What is a window on the grid: the panels, and the tools that have been dragged out of the toolbar.
+export const isWindow = (doc: Doc, id: string) => isWindowIn(PALETTE_SPEC, doc, id)
+export const shownWindows = (doc: Doc) => shownWindowsIn(PALETTE_SPEC, doc)
 export const canUndoState = (state: WorkspaceState) => canUndo(state.history)
 export const canRedoState = (state: WorkspaceState) => canRedo(state.history)
 
-export const layoutIsDefault = (doc: Doc) => samePlacements(doc.layout, DEFAULT_LAYOUT) && Object.keys(doc.sizes).length === 0
+// Whether everything is where it starts: the same windows in the same places, and the tools in the toolbar in order.
+export const layoutIsDefault = (doc: Doc) => arrangementIsDefault(PALETTE_SPEC, doc)
 
 export function isUnsaved(doc: Doc, saved: PaletteSave | null): boolean {
-  return (
-    !saved ||
-    JSON.stringify(doc.blocks) !== JSON.stringify(saved.blocks) ||
-    !samePlacements(doc.layout, saved.layout) ||
-    JSON.stringify(doc.sizes) !== JSON.stringify(changedSizes(saved.sizes ?? {})) ||
-    JSON.stringify([...doc.hidden].sort()) !== JSON.stringify([...(saved.hidden ?? [])].sort())
-  )
+  return !saved || JSON.stringify(doc.blocks) !== JSON.stringify(saved.blocks) || arrangementUnsaved(PALETTE_SPEC, doc, saved)
 }
 
 type Working = { doc: Doc; selectedId: number; harmony: Harmony; variation: number }
@@ -203,40 +221,19 @@ function step(w: Working, action: WorkspaceAction): Working {
       return { ...withBlocks(w, generatePalette(blocks, base, w.harmony, w.variation)), selectedId: base, variation: w.variation + 1 }
     }
 
-    case 'layout':
-      return { ...w, doc: { ...w.doc, layout: action.layout } }
-
-    case 'resize': {
-      const kind = kindOf(action.id)
-      if (kind === 'panel') {
-        const width = nearestStep(PANEL_STEPS, action.value)
-        return { ...w, doc: { ...w.doc, layout: w.doc.layout.map((p) => (p.id === action.id ? { ...p, w: width } : p)) } }
-      }
-      if (kind === 'toolbar') return { ...w, doc: { ...w.doc, sizes: changedSizes({ ...w.doc.sizes, [action.id]: action.value }) } }
-      return w
-    }
-
-    case 'show': {
-      const reasons = action.reason ? { ...w.doc.reasons, [action.component]: action.reason } : w.doc.reasons
-      if (!w.doc.hidden.includes(action.component) && reasons === w.doc.reasons) return w
-      return { ...w, doc: { ...w.doc, hidden: w.doc.hidden.filter((id) => id !== action.component), reasons } }
-    }
-
-    case 'hide': {
-      const component = COMPONENTS.find((c) => c.id === action.component)
-      if (!component?.hideable || w.doc.hidden.includes(action.component)) return w
-      return { ...w, doc: { ...w.doc, hidden: [...w.doc.hidden, action.component] } }
-    }
-
-    case 'reset_layout':
-      return { ...w, doc: { ...w.doc, layout: DEFAULT_LAYOUT, sizes: {} } }
-
     case 'batch':
       return action.actions.reduce(step, w)
 
     case 'undo':
     case 'redo':
       return w
+
+    default: {
+      // Everything else is the arrangement: layout, tools, expanded tools, and what is hidden.
+      if (!isArrangementAction(action)) return w
+      const next = reduceArrangement(PALETTE_SPEC, w.doc, action)
+      return next === w.doc ? w : { ...w, doc: next }
+    }
   }
 }
 

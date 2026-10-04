@@ -115,6 +115,19 @@ export function cellFromPoint(
   return { col, row }
 }
 
+// Which grid cell an item's top-left corner is nearest to. Used while an item is carried: the outline lands under the
+// carried copy, wherever it was picked up from.
+export function cellFromCorner(
+  corner: { left: number; top: number },
+  box: { left: number; top: number; width: number },
+  width: number,
+): { col: number; row: number } {
+  const colWidth = (box.width - GAP_PX * (COLS - 1)) / COLS
+  const col = clamp(Math.round((corner.left - box.left) / (colWidth + GAP_PX)), 0, COLS - width)
+  const row = Math.max(0, Math.round((corner.top - box.top) / CELL_PX)) * ROWS_PER_CELL
+  return { col, row }
+}
+
 export function moveTo(placements: Placement[], id: string, cell: { col: number; row: number }): Placement[] {
   return placements.map((p) => (p.id === id ? { ...p, col: cell.col, row: cell.row } : p))
 }

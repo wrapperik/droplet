@@ -5,6 +5,7 @@ import {
   GAP_ROWS,
   ROWS_PER_CELL,
   boxForPlacement,
+  cellFromCorner,
   cellFromPoint,
   columnsForWidth,
   compact,
@@ -98,6 +99,22 @@ describe('cellFromPoint', () => {
     const colWidth = (1196 - 16 * (COLS - 1)) / COLS
     const x = 100 + 5 * (colWidth + 16) + colWidth / 2 // middle of column 5
     expect(cellFromPoint({ x, y: 50 }, box, 1).col).toBe(5)
+  })
+})
+
+describe('cellFromCorner', () => {
+  const box = { left: 0, top: 0, width: 1000 }
+  const column = (1000 - 16 * 23) / 24 + 16
+
+  it('takes the column the corner is nearest to, and the cell row beneath it', () => {
+    expect(cellFromCorner({ left: 0, top: 0 }, box, 8)).toEqual({ col: 0, row: 0 })
+    expect(cellFromCorner({ left: column * 3 + 2, top: 41 }, box, 8)).toEqual({ col: 3, row: ROWS_PER_CELL })
+    expect(cellFromCorner({ left: column * 3.6, top: 0 }, box, 8).col).toBe(4)
+  })
+
+  it('stays inside the grid', () => {
+    expect(cellFromCorner({ left: -300, top: -80 }, box, 8)).toEqual({ col: 0, row: 0 })
+    expect(cellFromCorner({ left: 5000, top: 0 }, box, 8).col).toBe(16)
   })
 })
 

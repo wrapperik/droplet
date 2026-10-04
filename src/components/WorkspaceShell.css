@@ -1,4 +1,4 @@
-.palette-workspace {
+.workspace {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
@@ -6,20 +6,20 @@
 }
 
 /* A short note beside the Save button. */
-.palette-workspace__status {
+.workspace__status {
   color: var(--text-muted);
   font-size: 0.875rem;
   white-space: nowrap;
 }
 
 /* Only used when the controls are not placed in a header. */
-.palette-workspace__actions {
+.workspace__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
 }
 
-.palette-workspace__button {
+.workspace__button {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
@@ -33,34 +33,34 @@
     box-shadow var(--duration-fast) var(--ease-out);
 }
 
-.palette-workspace__button:not(:disabled):hover {
+.workspace__button:not(:disabled):hover {
   background: var(--accent-tint-soft);
 }
 
-.palette-workspace__button:disabled {
+.workspace__button:disabled {
   color: var(--text-muted);
   cursor: default;
   opacity: 0.7;
 }
 
-.palette-workspace__button--primary {
+.workspace__button--primary {
   border-color: transparent;
   background: var(--button);
   color: var(--on-button);
 }
 
-.palette-workspace__button--primary:not(:disabled):hover {
+.workspace__button--primary:not(:disabled):hover {
   background: var(--button);
   box-shadow: var(--shadow-md);
 }
 
-.palette-workspace__button--primary:disabled {
+.workspace__button--primary:disabled {
   background: var(--overlay-06);
   color: var(--text-muted);
 }
 
 /* The canvas is the white space where the work happens. */
-.palette-workspace__canvas {
+.workspace__card {
   padding: 1.125rem 1.25rem 1.25rem;
   border: 1px solid var(--overlay-10);
   border-radius: var(--radius-xl);
@@ -69,7 +69,7 @@
 }
 
 /* Undo and redo sit together, as one control. */
-.palette-workspace__history {
+.workspace__history {
   display: flex;
   padding: 0.125rem;
   border: 1px solid var(--overlay-10);
@@ -77,7 +77,7 @@
   background: var(--overlay-06);
 }
 
-.palette-workspace__icon-button {
+.workspace__icon-button {
   display: grid;
   place-items: center;
   width: 2.25rem;
@@ -89,18 +89,24 @@
   transition: background var(--duration-fast) var(--ease-out);
 }
 
-.palette-workspace__icon-button:not(:disabled):hover {
+.workspace__icon-button:not(:disabled):hover {
   background: var(--accent-tint-soft);
 }
 
-.palette-workspace__icon-button:disabled {
+.workspace__icon-button:disabled {
   color: var(--text-muted);
   cursor: default;
   opacity: 0.6;
 }
 
 /* The export button keeps one width whatever it says. */
-.palette-workspace__button--fixed {
+.workspace__button--fixed {
   justify-content: center;
   min-width: 8.5rem;
+}
+
+/* An export that cannot be made yet stays pressable, so it can say why, but it looks as though it is waiting. */
+.workspace__button--blocked {
+  color: var(--text-muted);
+  cursor: help;
 }

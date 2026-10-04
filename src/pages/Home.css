@@ -16,6 +16,9 @@
 }
 
 .home__header {
+  /* Above the toolbar beneath it, so a note that opens from a header button is not covered by it. */
+  position: relative;
+  z-index: 30;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
@@ -45,7 +48,7 @@
 
 /* Not enough width for the words: the buttons keep their icons and the words stay for screen readers. */
 @container (max-width: 74rem) {
-  .home__tools .palette-workspace__label {
+  .home__tools .workspace__label {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -55,11 +58,11 @@
     white-space: nowrap;
   }
 
-  .home__tools .palette-workspace__button {
+  .home__tools .workspace__button {
     padding: 0.5rem 0.75rem;
   }
 
-  .home__tools .palette-workspace__button--fixed {
+  .home__tools .workspace__button--fixed {
     min-width: 0;
   }
 }
@@ -70,6 +73,18 @@
 
 .home__brand {
   grid-column: 2;
+}
+
+.home__shelf {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  justify-content: center;
+  padding: 1rem 1.5rem 0;
+}
+
+.home__shelf:empty {
+  display: none;
 }
 
 .home__canvas {

@@ -1,0 +1,19 @@
+.window {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.window__header {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.window__title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}

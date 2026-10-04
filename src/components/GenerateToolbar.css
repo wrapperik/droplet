@@ -58,39 +58,3 @@
   color: var(--text-muted);
   cursor: default;
 }
-
-/* The larger toolbar lists every harmony instead of tucking them into a menu. */
-.generate__options {
-  display: flex;
-  gap: 0.25rem;
-}
-
-.generate__option {
-  height: 2.25rem;
-  padding: 0 0.75rem;
-  border: 0;
-  border-radius: var(--radius-pill);
-  background: transparent;
-  color: var(--text);
-  font-size: 0.875rem;
-  font-weight: 600;
-  white-space: nowrap;
-  transition: background var(--duration-fast) var(--ease-out);
-}
-
-.generate__option:hover {
-  background: var(--overlay-06);
-}
-
-/* The chosen harmony has a tint and a ring, so it differs from the others in more than hue. */
-.generate__option[aria-checked='true'] {
-  background: var(--accent-tint);
-  box-shadow: inset 0 0 0 1.5px var(--accent);
-  color: var(--accent);
-}
-
-.generate__count {
-  color: var(--text-muted);
-  font-size: 0.8125rem;
-  white-space: nowrap;
-}
