@@ -1,0 +1,179 @@
+/*
+ * A few orbs of blue drifting slowly, like the light on moving water. Each orb is a radial gradient with no edge of its own, and
+ * each one follows a closed path of its own, at its own pace, so the pattern never settles into a rhythm. The layer fades out
+ * towards its sides with a mask, so no orb is ever cut off by the edge of the screen. It fades in when Droplet starts working and
+ * out when it stops.
+ */
+.glow {
+  --glow-deep: color-mix(in srgb, var(--focus) 58%, transparent);
+  --glow-mid: color-mix(in srgb, var(--focus) 30%, transparent);
+  --glow-sky: color-mix(in srgb, color-mix(in srgb, var(--focus) 55%, white) 50%, transparent);
+  --glow-sky-mid: color-mix(in srgb, color-mix(in srgb, var(--focus) 55%, white) 24%, transparent);
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+  -webkit-mask-image: radial-gradient(ellipse 72% 72% at 50% 52%, #000 38%, transparent 100%);
+  mask-image: radial-gradient(ellipse 72% 72% at 50% 52%, #000 38%, transparent 100%);
+}
+
+.glow[data-state='on'] {
+  animation: glow-in 1.2s ease-out both;
+}
+
+.glow[data-state='off'] {
+  animation: glow-out 1.4s ease-in forwards;
+}
+
+@keyframes glow-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes glow-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* On a dark screen the light is made differently, not only blended differently:
+   - It adds to what is there (screen), so the blue glows instead of tinting.
+   - The lighter orbs are the theme's own sky blue, not blue mixed with white, which would go milky and grey on a dark surface.
+   - A soft gradient on a dark ground shows its steps as rings (banding), so each orb falls off over many small steps along an eased
+     curve instead of three, which the eye cannot find the edge of.
+   - The drift is a little slower, for a calmer, heavier water. */
+:root[data-theme='dark'] .glow {
+  --strength: 64%;
+  --drift: 1.3;
+  mix-blend-mode: screen;
+}
+
+:root[data-theme='dark'] .glow__orb--1,
+:root[data-theme='dark'] .glow__orb--3 {
+  --orb: var(--focus);
+}
+
+:root[data-theme='dark'] .glow__orb--2,
+:root[data-theme='dark'] .glow__orb--4 {
+  --orb: var(--accent);
+  --strength: 46%;
+}
+
+:root[data-theme='dark'] .glow__orb {
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--orb) var(--strength), transparent) 0%,
+    color-mix(in srgb, var(--orb) calc(var(--strength) * 0.88), transparent) 10%,
+    color-mix(in srgb, var(--orb) calc(var(--strength) * 0.68), transparent) 20%,
+    color-mix(in srgb, var(--orb) calc(var(--strength) * 0.47), transparent) 30%,
+    color-mix(in srgb, var(--orb) calc(var(--strength) * 0.29), transparent) 40%,
+    color-mix(in srgb, var(--orb) calc(var(--strength) * 0.15), transparent) 50%,
+    color-mix(in srgb, var(--orb) calc(var(--strength) * 0.06), transparent) 59%,
+    color-mix(in srgb, var(--orb) calc(var(--strength) * 0.015), transparent) 66%,
+    transparent 72%
+  );
+}
+
+.glow__orb {
+  position: absolute;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  will-change: transform;
+}
+
+.glow__orb--1 {
+  top: 14%;
+  left: 14%;
+  width: 46%;
+  background: radial-gradient(circle, var(--glow-deep) 0%, var(--glow-mid) 38%, transparent 68%);
+  animation: glow-drift-1 calc(11s * var(--drift, 1)) ease-in-out infinite;
+}
+
+.glow__orb--2 {
+  top: 34%;
+  left: 48%;
+  width: 40%;
+  background: radial-gradient(circle, var(--glow-sky) 0%, var(--glow-sky-mid) 40%, transparent 68%);
+  animation: glow-drift-2 calc(14s * var(--drift, 1)) ease-in-out infinite;
+}
+
+.glow__orb--3 {
+  top: 50%;
+  left: 24%;
+  width: 32%;
+  background: radial-gradient(circle, var(--glow-deep) 0%, var(--glow-mid) 36%, transparent 66%);
+  animation: glow-drift-3 calc(9s * var(--drift, 1)) ease-in-out infinite;
+}
+
+.glow__orb--4 {
+  top: 4%;
+  left: 52%;
+  width: 34%;
+  background: radial-gradient(circle, var(--glow-sky) 0%, var(--glow-sky-mid) 40%, transparent 68%);
+  animation: glow-drift-4 calc(12.5s * var(--drift, 1)) ease-in-out infinite;
+}
+
+/* Closed paths, so each orb comes round to where it began and the loop has no seam. The distances are shares of the orb's own size. */
+@keyframes glow-drift-1 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  25% {
+    transform: translate(34%, 14%) scale(1.12);
+  }
+  50% {
+    transform: translate(18%, 40%) scale(0.94);
+  }
+  75% {
+    transform: translate(-16%, 22%) scale(1.06);
+  }
+}
+
+@keyframes glow-drift-2 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  30% {
+    transform: translate(-38%, -10%) scale(0.92);
+  }
+  60% {
+    transform: translate(-14%, 30%) scale(1.14);
+  }
+  80% {
+    transform: translate(20%, 12%) scale(1);
+  }
+}
+
+@keyframes glow-drift-3 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(50%, -26%) scale(1.15);
+  }
+  66% {
+    transform: translate(70%, 14%) scale(0.9);
+  }
+}
+
+@keyframes glow-drift-4 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  40% {
+    transform: translate(-44%, 34%) scale(1.1);
+  }
+  70% {
+    transform: translate(-20%, 62%) scale(0.95);
+  }
+}
