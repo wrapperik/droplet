@@ -26,7 +26,4 @@ export function invoiceTotals(lines: SampleLine[], vatRate: number): InvoiceTota
   return { lines: priced, subtotalCents, vatCents, totalCents: subtotalCents + vatCents }
 }
 
-const rand = new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' })
-
-// 123456 becomes "R 1 234,56" (the exact spacing comes from the locale).
-export const formatRand = (cents: number) => rand.format(cents / 100)
+export { formatRand } from './money.ts'
