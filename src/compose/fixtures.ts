@@ -2,6 +2,11 @@ import { emptyClient, newContent } from '../lib/invoice.ts'
 import { openInvoiceWorkspace } from '../lib/invoiceState.ts'
 import { emptyMemory, withClient } from '../lib/projectMemory.ts'
 import { openWorkspace } from '../lib/workspaceState.ts'
+import { openBoard, reduceBoard, type BoardState } from '../lib/boardState.ts'
+import { groupFor, instantiateTemplate, templateById } from '../lib/boardTemplates.ts'
+import type { BoardItem } from '../lib/boardTypes.ts'
+import { snapshotOfBoard } from './boardSnapshot.ts'
+import type { BoardSnapshot } from './boardSpec.ts'
 import { snapshotOfInvoice } from './invoiceSnapshot.ts'
 import type { InvoiceSnapshot } from './invoiceSpec.ts'
 import { snapshotOfState } from './snapshot.ts'
@@ -54,4 +59,34 @@ export const openSnapshot = (): WorkspaceSnapshot => {
 export const openInvoiceSnapshot = (): InvoiceSnapshot => {
   const memory = withClient(emptyMemory(), { ...emptyClient(), name: 'Pretoria Print Works', address: '5 Church Square' }, '2026-10-01T10:00', 'c1')
   return snapshotOfInvoice(openInvoiceWorkspace(newContent('2026-10-04', 'INV-0007'), null, 'i1'), memory, '2026-10-04')
+}
+
+// A board with a frame of name ideas holding two notes, and three loose notes about the business, as the founder might have left it. The first
+// loose note is selected, unless others are given.
+export const openBoardState = (): BoardState => {
+  const note = (id: string, x: number, y: number, text: string): BoardItem => ({ id, kind: 'note', x, y, w: 200, h: 180, text, colour: 'yellow', author: 'you' })
+  return openBoard([
+    { id: 'names', kind: 'frame', x: 1000, y: 1000, w: 1000, h: 560, title: 'Name ideas', colour: 'lilac' },
+    note('a', 1060, 1060, 'Kindred Gifting'),
+    note('b', 1340, 1060, 'Maker Box'),
+    note('c', 2400, 1000, 'Corporate clients in Pretoria'),
+    note('d', 2400, 1300, 'Boxes from R200 to R500'),
+    note('e', 2400, 1600, 'Only local makers'),
+  ])
+}
+
+export const emptyBoardSnapshot = (): BoardSnapshot => snapshotOfBoard(openBoard(), { x: 2400, y: 1600 }, 'none')
+
+export const openBoardSnapshot = (selected: string[] = ['c']): BoardSnapshot => {
+  const state = reduceBoard(openBoardState(), { type: 'select', ids: selected })
+  return snapshotOfBoard(state, { x: 2200, y: 1400 }, 'none')
+}
+
+// A board with the customer and problem template put on it and nothing filled in, so every prompt is empty.
+export const templateBoardSnapshot = (): BoardSnapshot => {
+  let n = 0
+  const template = templateById('customer_problem')!
+  const items = instantiateTemplate(template, { x: 600, y: 600 }, () => `t${++n}`, groupFor(template.id, 'one'))
+  const state = openBoard(items)
+  return snapshotOfBoard(state, { x: 1400, y: 1000 }, 'none')
 }

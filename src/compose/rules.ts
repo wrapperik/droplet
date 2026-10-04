@@ -1,10 +1,13 @@
 import { openWorkspace } from '../lib/workspaceState.ts'
 import { applyTurnActions } from './applyActions.ts'
+import { applyBoardTurnActions } from './boardActions.ts'
+import { stateOfBoardSnapshot } from './boardSnapshot.ts'
+import type { BoardSnapshot, BoardTurn } from './boardSpec.ts'
 import { stateOfSnapshot } from './snapshot.ts'
 import { amountsIn, applyInvoiceTurnActions, priceWasGiven } from './invoiceActions.ts'
 import type { InvoiceSnapshot } from './invoiceSpec.ts'
 import { stateOfInvoiceSnapshot } from './invoiceSnapshot.ts'
-import { isInvoiceAction, type AnyTurn, type ComposeRequest, type InvoiceTurn, type Turn, type WorkspaceSnapshot } from './spec.ts'
+import { isBoardAction, isInvoiceAction, type AnyTurn, type ComposeRequest, type InvoiceTurn, type Turn, type WorkspaceSnapshot } from './spec.ts'
 
 // Business rules for a turn, checked in code after the shape is right. The actions are tried against the workspace
 // the founder is looking at, through the same code that will apply them, so anything that could not be done is
@@ -50,6 +53,22 @@ export function checkInvoiceTurn(turn: InvoiceTurn, invoice: InvoiceSnapshot | u
   return result.skipped.map((skipped) => `Action ${skipped.position + 1} (${skipped.action.type}): ${skipped.reason}`)
 }
 
+// The same checks for a reply about the board: the actions are tried against the board the founder is looking at, through the same code that
+// will apply them, including where things are to go, which that code finds and the model never gives.
+export function checkBoardTurn(turn: BoardTurn, board: BoardSnapshot | undefined): string[] {
+  if (turn.actions.length === 0) return []
+  if (turn.task !== 'ideation') {
+    return [`Only an ideation task may include actions on the board. Leave actions empty for the task "${turn.task}", and put your answer in the message.`]
+  }
+  if (!board) return ['There is no board open to act on. Leave actions empty.']
+  const counter = (() => {
+    let n = 0
+    return () => `check-${++n}`
+  })()
+  const result = applyBoardTurnActions({ base: stateOfBoardSnapshot(board), actions: turn.actions, view: board.view, newId: counter })
+  return result.skipped.map((skipped) => `Action ${skipped.position + 1} (${skipped.action.type}): ${skipped.reason}`)
+}
+
 // A rand amount written in a suggested reply, such as "R450" or "250 rand".
 const RAND_AMOUNT = /\bR\s?\d|\d\s?(?:rand|zar)\b/i
 
@@ -74,6 +93,9 @@ export function checkConversation(turn: AnyTurn, request: Pick<ComposeRequest, '
 // A reply checked for whichever workspace the request was about: the invoice, or the palette.
 export function checkTurnFor(turn: AnyTurn, request: ComposeRequest): string[] {
   const talk = checkConversation(turn, request)
+  if (request.view === 'board') return [...talk, ...checkBoardTurn(turn as BoardTurn, request.board)]
+  // An action for the board has no place on another workspace, or when no workspace is open.
+  if (turn.actions.some(isBoardAction)) return [...talk, 'Those actions are for the board, which is not the workspace on screen. Leave them out.']
   if (request.view === 'invoice') return [...talk, ...checkInvoiceTurn(turn as InvoiceTurn, request.invoice, founderTextOf(request))]
   // An action for the invoice has no place on the palette workspace, or when no workspace is open.
   if (turn.actions.some(isInvoiceAction)) return [...talk, 'Those actions are for the invoice, which is not the workspace on screen. Leave them out.']

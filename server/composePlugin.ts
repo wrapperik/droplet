@@ -9,7 +9,8 @@ import { createRateLimiter } from './rateLimit.ts'
 // on. The key is read here, on the server, from .env.local (a name without the VITE_ prefix, so it can never be
 // bundled into the browser code). In production the same service runs as a Supabase Edge Function.
 
-const MAX_BODY_BYTES = 20_000
+// A board is sent with the request, up to 120 things with their words, so this is room for one.
+const MAX_BODY_BYTES = 90_000
 const HOUR_MS = 60 * 60 * 1000
 
 function readBody(req: IncomingMessage): Promise<unknown> {

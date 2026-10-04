@@ -2,8 +2,9 @@ import { z } from 'zod'
 import { fallbackTurn, FALLBACK_NOTE } from './fallback.ts'
 import { buildUserContent, systemPromptFor } from './prompt.ts'
 import { checkTurnFor } from './rules.ts'
+import { boardTurnSchema } from './boardSpec.ts'
 import { invoiceTurnSchema } from './invoiceSpec.ts'
-import { TASKS, isInvoiceAction, turnJsonSchema, turnSchema, type AnyTurn, type ComposeRequest, type Outcome, type Task, type Turn } from './spec.ts'
+import { TASKS, isBoardAction, isInvoiceAction, turnJsonSchema, turnSchema, type AnyTurn, type ComposeRequest, type Outcome, type Task, type Turn } from './spec.ts'
 
 // The composition loop: ask the model, check the answer against the workspace, and if it is no good ask once more
 // with the reasons. A second failure uses the fixed fallback. Invalid output never reaches the screen.
@@ -43,7 +44,7 @@ function describeIssues(error: z.ZodError): string[] {
 }
 
 // What a reply is checked against: the request it answers, which says which workspace was on screen and what it held.
-type Asked = Pick<ComposeRequest, 'intent' | 'history' | 'view' | 'workspace' | 'invoice'>
+type Asked = Pick<ComposeRequest, 'intent' | 'history' | 'view' | 'workspace' | 'invoice' | 'board'>
 
 // One reply, checked: it must parse, match the schema, and pass the business rules for the workspace it was meant for.
 export function checkReply(text: string, asked: Partial<Asked> = {}): { turn?: AnyTurn; errors: string[]; task?: Task } {
@@ -57,7 +58,7 @@ export function checkReply(text: string, asked: Partial<Asked> = {}): { turn?: A
   const taskGuess = (data as { task?: unknown } | null)?.task
   const task = TASKS.find((candidate) => candidate === taskGuess)
 
-  const parsed = (asked.view === 'invoice' ? invoiceTurnSchema : turnSchema).safeParse(data)
+  const parsed = (asked.view === 'invoice' ? invoiceTurnSchema : asked.view === 'board' ? boardTurnSchema : turnSchema).safeParse(data)
   if (!parsed.success) return { errors: describeIssues(parsed.error), task }
 
   const errors = checkTurnFor(parsed.data, { intent: '', ...asked })
@@ -67,8 +68,8 @@ export function checkReply(text: string, asked: Partial<Asked> = {}): { turn?: A
 
 // Hex values are stored the same way everywhere: six digits, upper case.
 function normalise(turn: AnyTurn): AnyTurn {
-  // Invoice actions hold no colours, so there is nothing to tidy.
-  if (turn.actions.some(isInvoiceAction)) return turn
+  // Invoice and board actions hold no colours, so there is nothing to tidy.
+  if (turn.actions.some(isInvoiceAction) || turn.actions.some(isBoardAction)) return turn
   const brand = turn as Turn
   return {
     ...brand,
@@ -96,5 +97,5 @@ export async function composeWorkspace(request: ComposeRequest, call: ModelCalle
     task = checked.task ?? task
   }
 
-  return { outcome: 'fallback', turn: fallbackTurn(task, Boolean(request.workspace ?? request.invoice)), note: FALLBACK_NOTE, attempts }
+  return { outcome: 'fallback', turn: fallbackTurn(task, Boolean(request.workspace ?? request.invoice ?? request.board)), note: FALLBACK_NOTE, attempts }
 }

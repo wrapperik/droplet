@@ -8,6 +8,7 @@ export const MAX_MESSAGE_LENGTH = 1200
 export const MAX_QUESTION_LENGTH = 200
 export const MAX_REPLY_LENGTH = 40
 export const MAX_REPLIES = 4
+export const MAX_TITLE_LENGTH = 100
 
 export const messageField = z
   .string()
@@ -31,3 +32,13 @@ export const repliesField = z
   .max(MAX_REPLIES)
   .optional()
   .describe('Two to four likely answers to your question, as the founder would say them, each a few words. Only with a question. Never a price.')
+
+export const titleField = z
+  .string()
+  .trim()
+  .min(1)
+  .max(MAX_TITLE_LENGTH)
+  .optional()
+  .describe(
+    'A name for this chat in the founder\'s history: two to five words on its subject, such as "Pricing gift boxes". Give it when the chat has no name yet and has a subject, or when the subject has clearly changed. Otherwise leave it out. Sentence case, no quotation marks, no full stop, under 40 characters.',
+  )

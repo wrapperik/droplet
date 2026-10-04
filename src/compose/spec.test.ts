@@ -21,11 +21,21 @@ describe('a turn that asks a question', () => {
     expect(turnSchema.safeParse({ ...chatTurn, message: 'x'.repeat(1201) }).success).toBe(false)
   })
 
+  it('takes a title for the chat, which is never needed', () => {
+    expect(turnSchema.safeParse({ ...chatTurn, title: 'Pricing gift boxes' }).success).toBe(true)
+    expect(turnSchema.safeParse({ ...chatTurn, title: '' }).success).toBe(false)
+    // a long one is accepted and shortened by the app, rather than costing a retry
+    expect(turnSchema.safeParse({ ...chatTurn, title: 'x'.repeat(100) }).success).toBe(true)
+    expect(turnSchema.safeParse({ ...chatTurn, title: 'x'.repeat(101) }).success).toBe(false)
+    expect(composeRequestSchema.safeParse({ intent: 'hi', chatTitle: 'Pricing gift boxes' }).success).toBe(true)
+  })
+
   it('is in the schema sent to the model, for the palette and for the invoice', () => {
     for (const view of [undefined, 'invoice'] as const) {
       const properties = (turnJsonSchema(view) as { properties: Record<string, unknown> }).properties
-      expect(Object.keys(properties)).toEqual(expect.arrayContaining(['message', 'question', 'replies']))
+      expect(Object.keys(properties)).toEqual(expect.arrayContaining(['message', 'question', 'replies', 'title']))
       expect((turnJsonSchema(view) as { required: string[] }).required).not.toContain('question')
+      expect((turnJsonSchema(view) as { required: string[] }).required).not.toContain('title')
     }
   })
 })

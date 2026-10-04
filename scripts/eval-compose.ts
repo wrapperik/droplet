@@ -24,7 +24,7 @@ const requests = filter ? TEST_REQUESTS.filter((test) => test.id.includes(filter
 const PAUSE_MS = Number(process.env.EVAL_PAUSE_MS) || 4000
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-type Row = { id: string; outcome: string; task: string; actions: string; pass: boolean; problems: string[]; seconds: number; message: string; question?: string; replies?: string[] }
+type Row = { id: string; outcome: string; task: string; actions: string; pass: boolean; problems: string[]; seconds: number; message: string; question?: string; replies?: string[]; title?: string }
 
 async function run(test: TestRequest): Promise<Row> {
   const started = Date.now()
@@ -38,8 +38,13 @@ async function run(test: TestRequest): Promise<Row> {
     if (test.expect.firstAction && !test.expect.firstAction.includes(turn.actions[0]?.type ?? 'none')) {
       problems.push(`first action was "${turn.actions[0]?.type ?? 'none'}", expected one of ${test.expect.firstAction.join(', ')}`)
     }
+    if (test.expect.addsNotes !== undefined) {
+      const writes = turn.actions.filter((action) => action.type === 'add_note' || action.type === 'fill_prompt' || action.type === 'add_template').length
+      if (writes < test.expect.addsNotes) problems.push(`expected at least ${test.expect.addsNotes} notes written, got ${writes}`)
+    }
     if (test.expect.noPrice && JSON.stringify(turn.actions).includes('unitPrice')) problems.push('an action set a price, but the founder gave none')
     if (test.expect.asks !== undefined && test.expect.asks !== Boolean(turn.question)) problems.push(test.expect.asks ? 'expected a follow-up question, got none' : 'expected no question, got one')
+    if (test.expect.titles !== undefined && test.expect.titles !== Boolean(turn.title)) problems.push(test.expect.titles ? 'expected a title for the chat, got none' : 'expected no title, got one')
     if (test.expect.list && !/^\s*(?:[-*•]|\d+[.)])\s/m.test(turn.message)) problems.push('expected the message to be laid out as a list')
     if (test.expect.messageMustNotInclude && turn.message.toLowerCase().includes(test.expect.messageMustNotInclude)) {
       problems.push(`the message includes "${test.expect.messageMustNotInclude}"`)
@@ -55,6 +60,7 @@ async function run(test: TestRequest): Promise<Row> {
       message: turn.message,
       question: turn.question,
       replies: turn.replies,
+      title: turn.title,
     }
   } catch (error) {
     const kind = error instanceof ComposeError ? error.kind : 'error'
@@ -70,6 +76,7 @@ for (const [index, test] of requests.entries()) {
   console.log(`${row.pass ? 'PASS' : 'FAIL'}  ${row.id.padEnd(18)} ${row.outcome.padEnd(9)} ${row.task.padEnd(14)} ${row.seconds.toFixed(1).padStart(5)}s  ${row.actions}`)
   for (const problem of row.problems) console.log(`        - ${problem}`)
   if (row.message) console.log(`        "${row.message.replace(/\n+/g, ' / ').slice(0, 220)}${row.message.length > 220 ? '...' : ''}"`)
+  if (row.title) console.log(`        title: ${row.title}`)
   if (row.question) console.log(`        ? ${row.question}${row.replies?.length ? `  [${row.replies.join(' | ')}]` : ''}`)
   if (index < requests.length - 1) await sleep(PAUSE_MS)
 }

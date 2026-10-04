@@ -1,5 +1,5 @@
 import type { ComposeRequest, Task } from './spec.ts'
-import { openInvoiceSnapshot, openSnapshot } from './fixtures.ts'
+import { emptyBoardSnapshot, openBoardSnapshot, openInvoiceSnapshot, openSnapshot, templateBoardSnapshot } from './fixtures.ts'
 
 // The fixed set of test requests. The pitch pins the model and only changes it after these have been run again:
 //   node --env-file=.env scripts/eval-compose.ts
@@ -20,12 +20,18 @@ export type Expectation = {
   asks?: boolean
   // The message is laid out as a list.
   list?: boolean
+  // The reply puts notes by Droplet on the board, or does not (the board requests). How many at least, when it does.
+  addsNotes?: number
+  // The reply names the chat (true) or leaves it as it is (false). Left out where either is fine.
+  titles?: boolean
 }
 
 export type TestRequest = { id: string; why: string; request: ComposeRequest; expect: Expectation }
 
 const open = openSnapshot()
 const invoice = openInvoiceSnapshot()
+const board = openBoardSnapshot()
+const templateBoard = templateBoardSnapshot()
 const withHistory = (history: ComposeRequest['history']) => ({ history })
 
 export const TEST_REQUESTS: TestRequest[] = [
@@ -57,25 +63,25 @@ export const TEST_REQUESTS: TestRequest[] = [
     id: 'chat-pricing',
     why: 'Ordinary conversation: it should answer and leave the screen alone',
     request: { intent: 'How should I think about pricing my gift boxes?' },
-    expect: { task: 'ideation', acts: false, asks: true },
+    expect: { task: 'chat', acts: false, asks: true, titles: true },
   },
   {
     id: 'chat-greeting',
     why: 'A greeting with no workspace open',
     request: { intent: 'Hi, what can you help me with?' },
-    expect: { task: 'chat', acts: false, asks: true },
+    expect: { task: 'chat', acts: false, asks: true, titles: false },
   },
   {
     id: 'chat-names',
     why: 'Several options asked for: the message should be a list, and it should ask which way to go',
     request: { intent: 'Give me three name ideas for a corporate gift box business' },
-    expect: { task: 'ideation', acts: false, asks: true, list: true },
+    expect: { task: 'chat', acts: false, asks: true, list: true },
   },
   {
     id: 'chat-thanks',
     why: 'The founder is finished: it should say so briefly and not ask a question to keep things going',
-    request: { intent: 'Thanks, that is all I need for now', history: [{ role: 'founder', text: 'Is my text readable?' }, { role: 'droplet', text: 'Yes, it reaches 12.7:1.' }] },
-    expect: { task: 'chat', acts: false, asks: false },
+    request: { intent: 'Thanks, that is all I need for now', chatTitle: 'Checking text contrast', history: [{ role: 'founder', text: 'Is my text readable?' }, { role: 'droplet', text: 'Yes, it reaches 12.7:1.' }] },
+    expect: { task: 'chat', acts: false, asks: false, titles: false },
   },
   {
     id: 'advice-readable',
@@ -195,5 +201,89 @@ export const TEST_REQUESTS: TestRequest[] = [
     why: 'A palette request while the invoice is on screen: name the task and change nothing, so the app opens the palette and asks again',
     request: { intent: 'Which of my brand colours has the best contrast?', view: 'invoice', invoice },
     expect: { task: 'brand', acts: false },
+  },
+  {
+    id: 'board-ideas',
+    why: 'Names asked for on the board: it should add short notes of its own, near what is selected or in the frame of names, and never choose where',
+    request: { intent: 'Add some more name ideas to the Name ideas frame', view: 'board', board },
+    expect: { task: 'ideation', acts: true, firstAction: ['add_note'], addsNotes: 3, asks: true },
+  },
+  {
+    id: 'board-expand',
+    why: 'Expand the selected note: related notes beside it, each joined to it by an arrow',
+    request: { intent: 'Expand this note into a few related ideas', view: 'board', board },
+    expect: { task: 'ideation', acts: true, firstAction: ['add_note'], addsNotes: 3 },
+  },
+  {
+    id: 'board-cluster',
+    why: 'Asked to group loose notes: gather them into titled frames, each thing in one group only',
+    request: { intent: 'Group my loose notes by theme', view: 'board', board },
+    expect: { task: 'ideation', acts: true, firstAction: ['cluster'] },
+  },
+  {
+    id: 'board-template',
+    why: 'Asked to set up a way of comparing offers: add the offer comparison template, empty',
+    request: { intent: 'Set me up to compare three offers', view: 'board', board },
+    expect: { task: 'ideation', acts: true, firstAction: ['add_template'] },
+  },
+  {
+    id: 'board-fill',
+    why: 'A template with every prompt empty, and a business described: fill the prompts it can, in answer to their hints',
+    request: { intent: 'Fill in what you can for a pet sitting business in Pretoria East', view: 'board', board: templateBoard },
+    expect: { task: 'ideation', acts: true, firstAction: ['fill_prompt'], addsNotes: 2 },
+  },
+  {
+    id: 'board-summary',
+    why: 'Asked where they have got to: write the summary card from the board, deciding nothing that the board does not settle',
+    request: { intent: 'Summarise where I have got to', view: 'board', board },
+    expect: { task: 'ideation', acts: true, firstAction: ['write_summary'] },
+  },
+  {
+    id: 'board-summary-empty',
+    why: 'Nothing on the board: it should say there is nothing to summarise, and not invent a decision',
+    request: { intent: 'Summarise what we have decided', view: 'board', board: emptyBoardSnapshot() },
+    expect: { task: 'ideation', acts: false, asks: true },
+  },
+  {
+    id: 'board-remember-refused',
+    why: 'It cannot remember a name or an offer for the project: it must say the founder does that from a note, and change nothing',
+    request: { intent: 'Remember Kindred Gifting as my business name for the project', view: 'board', board },
+    expect: { task: 'ideation', acts: false, messageMustNotInclude: 'i have saved' },
+  },
+  {
+    id: 'board-advice',
+    why: 'A question about the board: it should read the board and answer, and change nothing',
+    request: { intent: 'Which of my name ideas sounds the most trustworthy?', view: 'board', board },
+    expect: { task: 'ideation', acts: false, asks: true },
+  },
+  {
+    id: 'board-delete-refused',
+    why: 'It can only add: asked to delete the founder\'s notes it must say it cannot, say how, and change nothing',
+    request: { intent: 'Delete all my notes and start again', view: 'board', board },
+    expect: { task: 'ideation', acts: false },
+  },
+  {
+    id: 'board-edit-refused',
+    why: 'It cannot rewrite the founder\'s words: it must offer to add alternatives instead, and change nothing',
+    request: { intent: 'Rewrite my notes so they sound more professional', view: 'board', board },
+    expect: { task: 'ideation', acts: false },
+  },
+  {
+    id: 'board-not-live',
+    why: 'It acts only when asked: told to keep going in the background it must say it works only when asked, and change nothing',
+    request: { intent: 'Keep brainstorming on the board in the background while I work', view: 'board', board },
+    expect: { task: 'ideation', acts: false },
+  },
+  {
+    id: 'board-route-invoice',
+    why: 'An invoice request while the board is on screen: name the task and change nothing, so the app opens the invoice and asks again',
+    request: { intent: 'Make an invoice for Pretoria Print Works for 12 gift boxes', view: 'board', board },
+    expect: { task: 'invoice', acts: false },
+  },
+  {
+    id: 'route-board',
+    why: 'A brainstorm request with no board open: name the task and change nothing, so the app opens the board and asks again',
+    request: { intent: 'I want to brainstorm names for my business on a board', workspace: open },
+    expect: { task: 'ideation', acts: false },
   },
 ]

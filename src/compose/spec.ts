@@ -1,5 +1,6 @@
 import { z } from 'zod'
-import { messageField, questionField, repliesField } from './conversationFields.ts'
+import { boardSnapshotSchema, boardTurnSchema, type BoardTurn } from './boardSpec.ts'
+import { messageField, questionField, repliesField, titleField } from './conversationFields.ts'
 import { invoiceSnapshotSchema, invoiceTurnSchema, type InvoiceTurn } from './invoiceSpec.ts'
 import { TASKS, type Task } from './taskNames.ts'
 
@@ -110,12 +111,16 @@ export const turnSchema = z.object({
   replies: repliesField,
   actions: z.array(actionSchema).max(MAX_ACTIONS).describe('What to do on the workspace. Empty when the founder only wants an answer.'),
   memoryUsed: z.array(z.string().max(60)).max(6).describe('Which saved decisions you used, by key, such as brand.palette.'),
+  title: titleField,
 })
 
 export type Turn = z.infer<typeof turnSchema>
-export type { InvoiceTurn }
-// A reply for either workspace.
-export type AnyTurn = Turn | InvoiceTurn
+export type { InvoiceTurn, BoardTurn }
+// A reply for any of the workspaces.
+export type AnyTurn = Turn | InvoiceTurn | BoardTurn
+
+// The workspaces the composer can work on.
+export type View = 'brand' | 'invoice' | 'board'
 
 const placementSchema = z.object({
   id: z.string().max(20),
@@ -171,12 +176,16 @@ export const composeRequestSchema = z.object({
     .array(z.object({ role: z.enum(['founder', 'droplet']), text: z.string().trim().min(1).max(1500) }))
     .max(MAX_HISTORY_MESSAGES)
     .optional(),
-  // Which workspace is on screen. The composer works on that one: the palette (brand) or the invoice. Absent when none is open.
-  view: z.enum(['brand', 'invoice']).optional(),
+  // Which workspace is on screen. The composer works on that one: the palette (brand), the invoice, or the board. Absent when none is open.
+  view: z.enum(['brand', 'invoice', 'board']).optional(),
+  // What this chat is called in the founder's history, if it has been named, so the composer only renames it when the subject changes.
+  chatTitle: z.string().trim().max(80).optional(),
   // The palette workspace, when it is the one on screen.
   workspace: workspaceSnapshotSchema.optional(),
   // The invoice workspace, when it is the one on screen.
   invoice: invoiceSnapshotSchema.optional(),
+  // The board, when it is the one on screen.
+  board: boardSnapshotSchema.optional(),
   memory: paletteSnapshotSchema.optional(),
 })
 export type ComposeRequest = z.infer<typeof composeRequestSchema>
@@ -186,8 +195,8 @@ export type Outcome = (typeof OUTCOMES)[number]
 
 export const composeResponseSchema = z.object({
   outcome: z.enum(OUTCOMES),
-  // A reply for the palette workspace or for the invoice. A reply with no actions fits both.
-  turn: z.union([turnSchema, invoiceTurnSchema]),
+  // A reply for the palette workspace, the invoice or the board. A reply with no actions fits all of them.
+  turn: z.union([turnSchema, invoiceTurnSchema, boardTurnSchema]),
   // Set when a simpler view was used, so the interface can say so.
   note: z.string().max(200).optional(),
 })
@@ -213,19 +222,23 @@ function simplify(node: unknown): unknown {
 // The JSON schema for the model's reply, generated from the Zod contract above.
 // The palette workspace's schema by default. The invoice has its own, with its own actions, so each stays small enough for the model
 // to take. Which one is used depends on which workspace is on screen.
-export function turnJsonSchema(view?: 'brand' | 'invoice'): Record<string, unknown> {
-  return simplify(z.toJSONSchema(view === 'invoice' ? invoiceTurnSchema : turnSchema)) as Record<string, unknown>
+export function turnJsonSchema(view?: View): Record<string, unknown> {
+  return simplify(z.toJSONSchema(view === 'invoice' ? invoiceTurnSchema : view === 'board' ? boardTurnSchema : turnSchema)) as Record<string, unknown>
 }
 
-// Which actions in a reply are for which workspace. An action type belongs to one workspace, except undo and redo, which fit both.
+// Which actions in a reply are for which workspace. An action type belongs to one workspace, except undo and redo, which fit all of them.
 const INVOICE_ONLY = ['set_client', 'use_saved_client', 'set_terms', 'set_date', 'set_note', 'set_vat_registered', 'add_line', 'update_line', 'remove_line']
 export const isInvoiceAction = (action: { type: string }) => INVOICE_ONLY.includes(action.type)
+const BOARD_ONLY = ['add_note', 'fill_prompt', 'cluster', 'add_template', 'connect', 'write_summary']
+export const isBoardAction = (action: { type: string }) => BOARD_ONLY.includes(action.type)
 
-// Where a reply asks to be taken. The composer names the task (that is what it is for), and when that task belongs to the other
-// workspace and there is nothing to do yet, the app opens that workspace and asks again with it in front of the composer.
-export function routedTo(turn: AnyTurn, view?: 'brand' | 'invoice'): 'brand' | 'invoice' | null {
+// Where a reply asks to be taken. The composer names the task (that is what it is for), and when that task belongs to another workspace and
+// there is nothing to do yet, the app opens that workspace and asks again with it in front of the composer. Ideation is the board: a reply
+// that names it, does nothing and asks nothing is the composer saying it is opening the board. Advice about names or offers carries a question, or is "chat", and does not open it.
+export function routedTo(turn: AnyTurn, view?: View): View | null {
   if (turn.actions.length > 0) return null
   if (turn.task === 'invoice' && view !== 'invoice') return 'invoice'
-  if (turn.task === 'brand' && view === 'invoice') return 'brand'
+  if (turn.task === 'brand' && (view === 'invoice' || view === 'board')) return 'brand'
+  if (turn.task === 'ideation' && view !== 'board' && !turn.question) return 'board'
   return null
 }

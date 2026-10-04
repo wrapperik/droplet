@@ -22,6 +22,8 @@ export const chatSchema = z.object({
   title: z.string().max(80),
   updatedAt: z.string(),
   messages: z.array(messageSchema).max(MAX_STORED_MESSAGES),
+  // The title was chosen by the composer, rather than being the founder's first words.
+  named: z.boolean().optional(),
 })
 
 export type StoredMessage = z.infer<typeof messageSchema>
@@ -40,7 +42,19 @@ export function storableMessages(thread: { id: number; from: StoredMessage['from
 // A chat counts once the founder has said something in it.
 export const hasFounderMessage = (messages: { from: string }[]) => messages.some((item) => item.from === 'you')
 
-// What a chat is called in the list: how it began, on one line.
+// A title from the composer, tidied: one line, no quotation marks or markup, no full stop at the end, and not too long. Empty if nothing is left.
+export function cleanTitle(raw: string): string {
+  const title = raw
+    .replace(/\s+/g, ' ')
+    .replace(/[*_`#<>]/g, '')
+    .replace(/^["'“‘\s]+|["'”’\s]+$/g, '')
+    .replace(/[.!?,:;\s]+$/, '')
+    .trim()
+  if (title === '') return ''
+  return title.length > TITLE_LENGTH ? `${title.slice(0, TITLE_LENGTH - 1).trimEnd()}…` : title
+}
+
+// What a chat is called in the list when the composer has not named it: how it began, on one line.
 export function chatTitle(messages: { from: string; text: string }[]): string {
   const first = messages.find((item) => item.from === 'you')?.text.replace(/\s+/g, ' ').trim()
   if (!first) return 'New chat'

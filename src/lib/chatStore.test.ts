@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { MAX_CHATS, chatTitle, whenLabel, hasFounderMessage, loadChats, removeChat, saveChats, storableMessages, upsertChat, type StoredChat } from './chatStore.ts'
+import { MAX_CHATS, chatTitle, cleanTitle, whenLabel, hasFounderMessage, loadChats, removeChat, saveChats, storableMessages, upsertChat, type StoredChat } from './chatStore.ts'
 
 const chat = (id: string, updatedAt: string, text = 'Hello'): StoredChat => ({ id, title: text, updatedAt, messages: [{ id: 1, from: 'you', text }] })
 
@@ -30,6 +30,32 @@ describe('a question Droplet asked', () => {
   it('comes back from storage', () => {
     saveChats('p', [{ id: 'c', title: 'x', updatedAt: '2026-10-04T10:00:00.000Z', messages: [{ id: 1, from: 'droplet', text: 'Hi', question: 'Ready?' }] }])
     expect(loadChats('p')[0].messages[0].question).toBe('Ready?')
+  })
+})
+
+describe('cleanTitle', () => {
+  it('tidies a title from the composer to one plain line', () => {
+    expect(cleanTitle('  "Pricing gift boxes."  ')).toBe('Pricing gift boxes')
+    expect(cleanTitle('**Warm brand palette**')).toBe('Warm brand palette')
+    expect(cleanTitle('Naming\nthe business!')).toBe('Naming the business')
+    expect(cleanTitle('# `Pricing` _boxes_')).toBe('Pricing boxes')
+  })
+
+  it('is empty when nothing is left, and cut short with an ellipsis when long', () => {
+    expect(cleanTitle('  "." ')).toBe('')
+    expect(cleanTitle('')).toBe('')
+    const long = cleanTitle('a'.repeat(200))
+    expect(long).toHaveLength(60)
+    expect(long.endsWith('…')).toBe(true)
+  })
+})
+
+describe('a chat the composer named', () => {
+  it('comes back from storage marked as named, and a chat without the mark still reads', () => {
+    saveChats('p', [{ ...chat('a', '2026-10-04T10:00:00.000Z'), title: 'Pricing gift boxes', named: true }, chat('b', '2026-10-03T10:00:00.000Z')])
+    const loaded = loadChats('p')
+    expect(loaded[0]).toMatchObject({ title: 'Pricing gift boxes', named: true })
+    expect(loaded[1].named).toBeUndefined()
   })
 })
 
