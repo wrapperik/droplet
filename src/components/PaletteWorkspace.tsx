@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import {
   BillListIcon,
   CheckIcon,
@@ -55,11 +56,14 @@ type Props = {
   dispatch: (action: WorkspaceAction) => void
   // Reports where each item is drawn and how tall, so the AI can place one component relative to another.
   onResolved?: (resolved: Placement[], heights: Heights) => void
+  // Where the controls go: the left and right of the screen's fixed header, beside the logo. Without them the
+  // controls are drawn above the grid.
+  headerSlots?: { start: HTMLElement | null; end: HTMLElement | null }
 }
 
 // The palette workspace: a canvas of colour blocks with the toolbars and panels that work on it, all of which can be
 // dragged anywhere on the grid. "Save" saves the palette and the layout to the project.
-export default function PaletteWorkspace({ projectId, projectName, state, dispatch, onResolved }: Props) {
+export default function PaletteWorkspace({ projectId, projectName, state, dispatch, onResolved, headerSlots }: Props) {
   const [saved, setSaved] = useState<PaletteSave | null>(() => loadPalette(projectId))
   const [saveFailed, setSaveFailed] = useState(false)
   const [historyNote, setHistoryNote] = useState('')
@@ -233,37 +237,52 @@ export default function PaletteWorkspace({ projectId, projectName, state, dispat
   const visibleLayout = doc.layout.filter((placement) => isVisible(doc, placement.id))
   const changeVisibleLayout = (next: Placement[]) => dispatch({ type: 'layout', layout: mergeLayout(doc.layout, next) })
 
+  // A short word beside the Save button. Nothing is saved until the founder saves.
+  const statusText = saveFailed ? 'Could not save' : !saved ? 'Not saved yet' : unsaved ? 'Unsaved changes' : 'All changes saved'
+
+  const startControls = (
+    <>
+      <div className="palette-workspace__history" role="group" aria-label="History">
+        <button type="button" className="palette-workspace__icon-button" disabled={!canUndoState(state)} onClick={undoStep} aria-label="Undo">
+          <UndoLeftIcon size={18} aria-hidden="true" />
+        </button>
+        <button type="button" className="palette-workspace__icon-button" disabled={!canRedoState(state)} onClick={redoStep} aria-label="Redo">
+          <UndoRightIcon size={18} aria-hidden="true" />
+        </button>
+      </div>
+      <ComponentsMenu
+        hidden={doc.hidden}
+        onShow={(component) => dispatch({ type: 'show', component })}
+        onHide={(component) => dispatch({ type: 'hide', component })}
+      />
+      <button type="button" className="palette-workspace__button" disabled={layoutIsDefault(doc)} onClick={() => dispatch({ type: 'reset_layout' })}>
+        <RestartIcon size={18} aria-hidden="true" />
+        <span className="palette-workspace__label">Reset layout</span>
+      </button>
+    </>
+  )
+
+  const endControls = (
+    <>
+      <span className="palette-workspace__status" role="status">
+        {statusText}
+      </span>
+      <button type="button" className="palette-workspace__button palette-workspace__button--primary" disabled={!unsaved} onClick={save}>
+        {unsaved ? <DisketteIcon size={18} aria-hidden="true" /> : <CheckIcon size={18} aria-hidden="true" />}
+        <span className="palette-workspace__label">{unsaved ? 'Save' : 'Saved'}</span>
+      </button>
+      <ExportButton onExport={exportSheet} />
+    </>
+  )
+
+  const place = (slot: HTMLElement | null | undefined, controls: ReactNode) =>
+    headerSlots ? slot && createPortal(controls, slot) : <div className="palette-workspace__actions">{controls}</div>
+
+
   return (
     <div className="palette-workspace">
-      <div className="palette-workspace__toolbar">
-        <p className="palette-workspace__status" role="status">
-          {saveFailed ? 'Could not save in this browser.' : !saved ? '' : unsaved ? `Changes since you last saved to ${projectName} are not saved.` : `Saved to ${projectName}.`}
-        </p>
-        <div className="palette-workspace__actions">
-          <div className="palette-workspace__history" role="group" aria-label="History">
-            <button type="button" className="palette-workspace__icon-button" disabled={!canUndoState(state)} onClick={undoStep} aria-label="Undo">
-              <UndoLeftIcon size={18} aria-hidden="true" />
-            </button>
-            <button type="button" className="palette-workspace__icon-button" disabled={!canRedoState(state)} onClick={redoStep} aria-label="Redo">
-              <UndoRightIcon size={18} aria-hidden="true" />
-            </button>
-          </div>
-          <ComponentsMenu
-            hidden={doc.hidden}
-            onShow={(component) => dispatch({ type: 'show', component })}
-            onHide={(component) => dispatch({ type: 'hide', component })}
-          />
-          <button type="button" className="palette-workspace__button" disabled={layoutIsDefault(doc)} onClick={() => dispatch({ type: 'reset_layout' })}>
-            <RestartIcon size={18} aria-hidden="true" />
-            Reset layout
-          </button>
-          <button type="button" className="palette-workspace__button palette-workspace__button--primary" disabled={!unsaved} onClick={save}>
-            {unsaved ? <DisketteIcon size={18} aria-hidden="true" /> : <CheckIcon size={18} aria-hidden="true" />}
-            {unsaved ? 'Save' : 'Saved'}
-          </button>
-          <ExportButton onExport={exportSheet} />
-        </div>
-      </div>
+      {place(headerSlots?.start, startControls)}
+      {place(headerSlots?.end, endControls)}
       <p className="visually-hidden" role="status">
         {historyNote}
       </p>

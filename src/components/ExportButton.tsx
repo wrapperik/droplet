@@ -38,7 +38,9 @@ export default function ExportButton({ onExport }: Props) {
         aria-label="Export brand sheet"
       >
         {phase === 'done' ? <CheckIcon size={18} strokeWidth={2.25} aria-hidden="true" /> : <DownloadMinimalisticIcon size={18} aria-hidden="true" />}
-        {phase === 'working' ? 'Preparing' : phase === 'done' ? 'Exported' : phase === 'failed' ? 'Not exported' : 'Export'}
+        <span className="palette-workspace__label">
+          {phase === 'working' ? 'Preparing' : phase === 'done' ? 'Exported' : phase === 'failed' ? 'Not exported' : 'Export'}
+        </span>
       </button>
       <span className="visually-hidden" role="status">
         {phase === 'done' ? 'Brand sheet downloaded.' : phase === 'failed' ? 'Could not make the brand sheet.' : ''}

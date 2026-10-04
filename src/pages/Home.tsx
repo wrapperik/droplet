@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { HamburgerMenuIcon } from '@solar-icons/react/linear'
 import ChatThread, { type ThreadMessage } from '../components/ChatThread.tsx'
 import IntentBar from '../components/IntentBar.tsx'
+import LoaderPreview from '../components/LoaderPreview.tsx'
 import PaletteWorkspace from '../components/PaletteWorkspace.tsx'
 import Sidebar from '../components/Sidebar.tsx'
 import Wordmark from '../components/Wordmark.tsx'
@@ -40,6 +41,9 @@ export default function Home() {
   // The palette workspace, once there is one. The AI and the person both change it through `reduce`.
   const [workspace, setWorkspace] = useState<WorkspaceState | null>(null)
   const [composing, setComposing] = useState(false)
+  // The two ends of the header, where the workspace puts its controls beside the logo.
+  const [headerStart, setHeaderStart] = useState<HTMLElement | null>(null)
+  const [headerEnd, setHeaderEnd] = useState<HTMLElement | null>(null)
   const [thread, setThread] = useState<ThreadMessage[]>([])
   const nextMessageId = useRef(1)
   const busyRef = useRef(false)
@@ -188,24 +192,32 @@ export default function Home() {
 
       <div className="home__screen glass glass--strong">
         <header className="home__header">
-          <div className="home__menu">
-            <button
-              type="button"
-              className="home__menu-button"
-              aria-label="Open sidebar"
-              aria-expanded={mobileOpen}
-              onClick={() => setMobileOpen(true)}
-            >
-              <HamburgerMenuIcon size={22} aria-hidden="true" />
-            </button>
+          <div className="home__header-start">
+            <div className="home__menu">
+              <button
+                type="button"
+                className="home__menu-button"
+                aria-label="Open sidebar"
+                aria-expanded={mobileOpen}
+                onClick={() => setMobileOpen(true)}
+              >
+                <HamburgerMenuIcon size={22} aria-hidden="true" />
+              </button>
+            </div>
+            <div className="home__tools" ref={setHeaderStart} />
           </div>
           <div className="home__brand">
             <Wordmark />
+          </div>
+          <div className="home__header-end">
+            <div className="home__tools" ref={setHeaderEnd} />
           </div>
         </header>
 
         <main className={docked ? 'home__canvas' : 'home__canvas home__canvas--chat'} aria-busy={composing}>
           <h1 className="visually-hidden">Home</h1>
+          {/* TEMPORARY: a looping thinking animation, for feedback. Shown until the first message. */}
+          {!docked && thread.length === 0 && <LoaderPreview />}
           {/* Before there is a workspace, the whole screen is the conversation. Droplet answers like any assistant until it is asked to build something. */}
           {!docked && thread.length > 0 && (
             <div className="home__conversation">
@@ -225,6 +237,7 @@ export default function Home() {
                   projectName={projectName(currentProjectId)}
                   state={workspace}
                   dispatch={dispatch}
+                  headerSlots={{ start: headerStart, end: headerEnd }}
                   onResolved={(layout, heights) => {
                     drawnRef.current = { layout, heights }
                   }}

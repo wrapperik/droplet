@@ -1,0 +1,204 @@
+/*
+ * One loop is 2.4 seconds (or whatever --loader-loop says, so a preview can slow it right down):
+ *
+ *    0 to  8%   crouch, the hole pinching
+ *    8 to 16%   spring up, stretching tall
+ *   16 to 36%   rise to the top of the hop, turning edge-on like a coin
+ *   36 to 58%   fall, stretching, and turn back
+ *   58%         land: squash flat, the hole pinched tight
+ *   58 to 86%   wobble like jelly until it is still
+ *   86 to 100%  rest, then again
+ *
+ * Each movement has its own layer, and each layer turns about a fixed point in the artboard (not about its own box,
+ * which changes as its children move), so nothing drifts. The mark stands on the line at y = 936.
+ */
+.loader {
+  --loop: var(--loader-loop, 2.4s);
+  display: block;
+  flex: none;
+  height: auto;
+  aspect-ratio: 1;
+  overflow: visible;
+  color: var(--text);
+}
+
+.loader__hop,
+.loader__flip,
+.loader__squash,
+.loader__hole {
+  transform-box: view-box;
+}
+
+.loader__body {
+  fill: currentcolor;
+}
+
+/* The hop, and a little tilt on the way up and the way down. */
+.loader__hop {
+  transform-origin: 540px 540px;
+  animation: loader-hop var(--loop) infinite;
+}
+
+@keyframes loader-hop {
+  0%,
+  14% {
+    transform: translateY(0) rotate(0);
+    animation-timing-function: cubic-bezier(0.2, 0.75, 0.35, 1);
+  }
+  16% {
+    transform: translateY(-50px) rotate(-6deg);
+    animation-timing-function: cubic-bezier(0.2, 0.75, 0.35, 1);
+  }
+  36% {
+    transform: translateY(-250px) rotate(0);
+    animation-timing-function: cubic-bezier(0.6, 0, 0.9, 0.5);
+  }
+  48% {
+    transform: translateY(-120px) rotate(5deg);
+    animation-timing-function: cubic-bezier(0.6, 0, 0.9, 0.5);
+  }
+  58% {
+    transform: translateY(0) rotate(0);
+  }
+  64% {
+    transform: translateY(0) rotate(3.5deg);
+  }
+  72% {
+    transform: translateY(0) rotate(-2.5deg);
+  }
+  80% {
+    transform: translateY(0) rotate(1deg);
+  }
+  88%,
+  100% {
+    transform: translateY(0) rotate(0);
+  }
+}
+
+/* The coin turn at the top of the hop. Squeezed to a sliver halfway, then back to full width. */
+.loader__flip {
+  transform-origin: 540px 540px;
+  animation: loader-flip var(--loop) ease-in-out infinite;
+}
+
+@keyframes loader-flip {
+  0%,
+  22% {
+    transform: scaleX(1);
+  }
+  29% {
+    transform: scaleX(0.55);
+  }
+  36% {
+    transform: scaleX(0.07);
+  }
+  43% {
+    transform: scaleX(0.55);
+  }
+  50%,
+  100% {
+    transform: scaleX(1);
+  }
+}
+
+/* Squash and stretch, from the line the mark stands on. */
+.loader__squash {
+  transform-origin: 540px 936px;
+  animation: loader-squash var(--loop) infinite;
+}
+
+@keyframes loader-squash {
+  0%,
+  86%,
+  100% {
+    transform: scale(1, 1);
+    animation-timing-function: ease-in-out;
+  }
+  8% {
+    transform: scale(1.15, 0.83);
+    animation-timing-function: cubic-bezier(0.2, 0.75, 0.35, 1);
+  }
+  16% {
+    transform: scale(0.86, 1.22);
+    animation-timing-function: ease-in-out;
+  }
+  36% {
+    transform: scale(0.97, 1.04);
+    animation-timing-function: ease-in;
+  }
+  54% {
+    transform: scale(0.9, 1.15);
+    animation-timing-function: linear;
+  }
+  58% {
+    transform: scale(1.24, 0.72);
+    animation-timing-function: ease-out;
+  }
+  65% {
+    transform: scale(0.92, 1.1);
+    animation-timing-function: ease-in-out;
+  }
+  72% {
+    transform: scale(1.06, 0.94);
+    animation-timing-function: ease-in-out;
+  }
+  79% {
+    transform: scale(0.98, 1.025);
+    animation-timing-function: ease-in-out;
+  }
+}
+
+/* The hole pinches when the mark crouches and lands, and swells as the mark springs back, so it feels soft. */
+.loader__hole {
+  transform-origin: 540px 540px;
+  animation: loader-hole var(--loop) ease-in-out infinite;
+}
+
+@keyframes loader-hole {
+  0%,
+  86%,
+  100% {
+    transform: translateX(0) scale(1);
+  }
+  8% {
+    transform: translateX(0) scale(0.8);
+  }
+  16% {
+    transform: translateX(0) scale(1.12);
+  }
+  /* as the mark turns, the hole slides across the face, which is what makes it look solid */
+  28% {
+    transform: translateX(-34px) scale(1.05);
+  }
+  36% {
+    transform: translateX(0) scale(1);
+  }
+  44% {
+    transform: translateX(34px) scale(1.05);
+  }
+  54% {
+    transform: translateX(0) scale(1.08);
+  }
+  58% {
+    transform: translateX(0) scale(0.62);
+  }
+  65% {
+    transform: translateX(0) scale(1.2);
+  }
+  72% {
+    transform: translateX(0) scale(0.92);
+  }
+  79% {
+    transform: translateX(0) scale(1.04);
+  }
+}
+
+/* Reduced motion: the mark stands still. */
+@media (prefers-reduced-motion: reduce) {
+  .loader__hop,
+  .loader__flip,
+  .loader__squash,
+  .loader__hole {
+    animation: none;
+  }
+}

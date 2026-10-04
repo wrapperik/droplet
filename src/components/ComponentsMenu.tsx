@@ -31,7 +31,7 @@ export default function ComponentsMenu({ hidden, onShow, onHide }: Props) {
         onClick={() => setOpen((value) => !value)}
       >
         <Widget2Icon size={18} aria-hidden="true" />
-        Components
+        <span className="palette-workspace__label">Components</span>
       </button>
       <AnimatePresence>
         {open && (

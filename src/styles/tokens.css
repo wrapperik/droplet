@@ -58,6 +58,12 @@
   --status-outstanding: var(--outstanding);
   --on-status: var(--white); /* Icon inside a status circle */
 
+  /* The founder's chat bubbles: Deep Water, lit from above. White text is 5.8 to 8.4 on it. */
+  --bubble-top: color-mix(in srgb, var(--droplet-blue) 40%, var(--deep-water));
+  --bubble-bottom: var(--deep-water);
+  --bubble-highlight: rgb(255 255 255 / 0.22); /* A thin light edge along the top */
+  --on-bubble: var(--white);
+
   --overlay-06: rgb(14 26 43 / 0.06); /* Quiet fills: icon wells, active nav item */
   --overlay-10: rgb(14 26 43 / 0.1); /* Hairlines and dividers */
   --canvas: var(--white); /* The white space where the actual work is done */
@@ -93,6 +99,12 @@
   --status-resolved: var(--mint);
   --status-outstanding: var(--amber);
   --on-status: var(--ink);
+
+  /* Chat bubbles keep their blue in the dark theme, a touch brighter on top so the light still comes from above. */
+  --bubble-top: color-mix(in srgb, var(--droplet-blue) 44%, var(--deep-water));
+  --bubble-bottom: var(--deep-water);
+  --bubble-highlight: rgb(255 255 255 / 0.2);
+  --on-bubble: var(--white);
 
   --overlay-06: rgb(255 255 255 / 0.07);
   --overlay-10: rgb(255 255 255 / 0.12);

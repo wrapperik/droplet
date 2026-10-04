@@ -34,7 +34,6 @@ export default function PaletteCanvas({ blocks, selectedId, max, min, onSelect, 
   const gridRef = useRef<HTMLFieldSetElement>(null)
   const refocus = useRef(false)
   const canRemove = blocks.length > min
-  const selectedNote = blocks.find((block) => block.id === selectedId)?.note
 
   useEffect(() => {
     if (copiedId === null) return
@@ -76,9 +75,6 @@ export default function PaletteCanvas({ blocks, selectedId, max, min, onSelect, 
         <div className="palette__heading">
           <h2 className="palette__title">Palette</h2>
           <ReasonTip reason={reason} />
-          <p className="palette__hint">
-            {blocks.length} of {max} colours. Select one to edit it.
-          </p>
         </div>
         <button type="button" className="palette__add" disabled={full} onClick={onAdd}>
           <AddCircleIcon size={18} aria-hidden="true" />
@@ -173,11 +169,6 @@ export default function PaletteCanvas({ blocks, selectedId, max, min, onSelect, 
           })}
         </AnimatePresence>
       </fieldset>
-      {selectedNote && (
-        <p className="palette__note">
-          <span className="palette__note-label">Why this colour</span> {selectedNote}
-        </p>
-      )}
       <p className="visually-hidden" role="status">
         {copiedId !== null ? 'Hex value copied.' : removedNote}
       </p>

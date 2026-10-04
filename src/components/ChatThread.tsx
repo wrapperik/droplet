@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import DropletLoader from './DropletLoader.tsx'
 import './ChatThread.css'
 
 export type ThreadMessage = {
@@ -27,16 +28,12 @@ export default function ChatThread({ messages }: Props) {
   return (
     <ol ref={listRef} className="thread" role="log" aria-label="Conversation" aria-live="polite" tabIndex={0}>
       {messages.map((message) => (
-        <li key={message.id} className={`thread__message thread__message--${message.from}`}>
+        <li key={message.id} className={`thread__message thread__message--${message.from}${message.pending ? ' thread__message--pending' : ''}`}>
           <span className="visually-hidden">{message.from === 'you' ? 'You: ' : 'Droplet: '}</span>
           {message.pending ? (
             <span className="thread__pending">
+              <DropletLoader />
               Thinking
-              <span className="thread__dots" aria-hidden="true">
-                <span />
-                <span />
-                <span />
-              </span>
             </span>
           ) : (
             message.text
