@@ -7,6 +7,9 @@
 
 /* The working screen is a slightly smaller rounded box sitting inside the page, beside the sidebar. */
 .home__screen {
+  position: relative;
+  /* A stacking context of its own, so the backdrop can sit behind the screen's content and in front of its glass. */
+  isolation: isolate;
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -230,12 +233,64 @@
   min-height: 0;
 }
 
-/* The workspace is dimmed while the next answer is worked out. */
-.home__component {
-  transition: opacity var(--duration-base) var(--ease-out);
+/* While the next answer is worked out the windows ripple (see useRipple). They are not dimmed, but they cannot be pressed. */
+.home__component--busy {
+  pointer-events: none;
 }
 
-.home__component--busy {
-  opacity: 0.6;
+/*
+ * The wave behind the conversation, before anything has been said: pale at the top, sweeping on a slow diagonal into deep blue at the
+ * bottom, as in the reference. It is CSS only (no image), made of a few overlapping gradients on a layer larger than the screen that
+ * drifts slowly. It fades out when the first message is sent, and comes back with a new chat.
+ */
+.home__backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  border-radius: inherit;
   pointer-events: none;
+  opacity: 1;
+  transition:
+    opacity 0.9s var(--ease-out),
+    visibility 0s linear 0s;
+}
+
+.home__backdrop[data-gone] {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.9s var(--ease-out),
+    visibility 0s linear 0.9s;
+}
+
+.home__wave {
+  position: absolute;
+  inset: -12%;
+  background:
+    radial-gradient(70% 58% at 86% 104%, var(--wave-deep) 0%, transparent 72%),
+    radial-gradient(62% 46% at 24% 110%, var(--wave-light) 0%, transparent 72%),
+    radial-gradient(78% 40% at 56% 102%, var(--wave-mid) 0%, transparent 78%),
+    radial-gradient(34% 26% at 0% 44%, var(--wave-edge) 0%, transparent 72%),
+    linear-gradient(164deg, transparent 0%, transparent 42%, var(--wave-edge) 53%, var(--wave-mid) 66%, var(--wave-deep) 100%);
+  animation: home-wave 18s ease-in-out infinite alternate;
+}
+
+[data-gone] .home__wave {
+  animation-play-state: paused;
+}
+
+@keyframes home-wave {
+  from {
+    transform: translate(-2.5%, 1.5%) rotate(-1.2deg) scale(1);
+  }
+  to {
+    transform: translate(2.5%, -2%) rotate(1.2deg) scale(1.06);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home__wave {
+    animation: none;
+  }
 }

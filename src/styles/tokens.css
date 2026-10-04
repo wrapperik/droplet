@@ -75,6 +75,12 @@
   --glass-fill-fallback: rgb(255 255 255 / 0.96);
   --glass-border: rgb(255 255 255 / 0.9);
 
+  /* The wave behind the conversation before anything has been said: pale where it meets the page, deepening to a royal blue. */
+  --wave-edge: #8fd3f6;
+  --wave-light: #5aa7f0;
+  --wave-mid: #1b95ee;
+  --wave-deep: #0361dd;
+
   --illustration-shadow: rgb(11 79 138 / 0.32); /* Soft blue glow under 3D object icons */
 
   --shadow-sm: 0 1px 2px rgb(14 26 43 / 0.04), 0 4px 14px rgb(14 26 43 / 0.05);
@@ -116,6 +122,12 @@
   --glass-fill-strong: rgb(18 32 52 / 0.84);
   --glass-fill-fallback: rgb(18 32 52 / 0.97);
   --glass-border: rgb(255 255 255 / 0.1);
+
+  /* The same wave on a dark screen: it glows out of the dark instead of covering it, so the text on top keeps its contrast. */
+  --wave-edge: rgb(60 170 240 / 0.26);
+  --wave-light: rgb(31 143 224 / 0.42);
+  --wave-mid: rgb(24 120 220 / 0.58);
+  --wave-deep: rgb(8 80 200 / 0.72);
 
   --illustration-shadow: rgb(0 0 0 / 0.5);
 

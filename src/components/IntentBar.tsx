@@ -13,10 +13,12 @@ type Props = {
   docked?: boolean
   // A request is being worked on. The field stays editable, but another cannot be sent yet.
   busy?: boolean
+  // The tip above the bar, which offers the menu of workspaces. It is for the very start, before anything has been said.
+  showTip?: boolean
 }
 
 // The two equal ways in: describe what you need, or choose a task from the menu.
-export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false, busy = false }: Props) {
+export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false, busy = false, showTip = true }: Props) {
   const [text, setText] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -49,19 +51,21 @@ export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false
     <div className={docked ? 'intent intent--docked' : 'intent'} ref={wrapRef}>
       <AnimatePresence>{menuOpen && <TaskMenu onSelect={choose} />}</AnimatePresence>
 
-      <button
-        ref={chipRef}
-        type="button"
-        className="intent__chip glass"
-        aria-haspopup="menu"
-        aria-expanded={menuOpen}
-        onClick={() => setMenuOpen((value) => !value)}
-      >
-        <span className="intent__chip-icon" aria-hidden="true">
-          <Widget2Icon size={18} />
-        </span>
-        Show me a menu of available workspaces
-      </button>
+      {showTip && (
+        <button
+          ref={chipRef}
+          type="button"
+          className="intent__chip glass"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen((value) => !value)}
+        >
+          <span className="intent__chip-icon" aria-hidden="true">
+            <Widget2Icon size={18} />
+          </span>
+          Show me a menu of available workspaces
+        </button>
+      )}
 
       <form className="intent__bar glass" onSubmit={submit}>
         <button
