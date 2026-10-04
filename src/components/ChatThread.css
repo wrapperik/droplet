@@ -19,7 +19,7 @@
   overflow-wrap: anywhere;
 }
 
-/* The founder's own words sit in a deep blue bubble on the right, lit from above; Droplet's replies in a light grey bubble on the left. */
+/* The founder's own words sit in a mid blue bubble on the right, lit from above; Droplet's replies in a light grey bubble on the left. */
 .thread__message--you {
   align-self: flex-end;
   padding: 0.625rem 1rem;

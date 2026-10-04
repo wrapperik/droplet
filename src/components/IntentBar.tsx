@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { AnimatePresence } from 'framer-motion'
-import { AddIcon, ReplyIcon, Widget2Icon } from '@solar-icons/react/linear'
+import { AddIcon, ReplyIcon } from '@solar-icons/react/linear'
 import { useDismiss } from '../hooks/useDismiss.ts'
 import type { TaskId } from '../lib/tasks.ts'
 import TaskMenu from './TaskMenu.tsx'
@@ -61,7 +61,7 @@ export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false
           onClick={() => setMenuOpen((value) => !value)}
         >
           <span className="intent__chip-icon" aria-hidden="true">
-            <Widget2Icon size={18} />
+            <ReplyIcon size={18} />
           </span>
           Show me a menu of available workspaces
         </button>

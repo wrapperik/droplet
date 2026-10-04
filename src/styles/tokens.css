@@ -16,14 +16,12 @@
   --mist: #f4f8fb;
   --slate: #4a5a70;
   --outstanding: #b45309;
-  --resolved: #15803d;
   --white: #ffffff;
 
   /* Raw palette: dark companions */
   --night: #0a1320; /* Dark page background, one step below Ink */
   --haze: #a9b8cb; /* Dark secondary text */
   --sky: #7cc0f5; /* Dark accent for text and icons */
-  --mint: #4ade80; /* Dark resolved */
   --amber: #fbbf24; /* Dark outstanding */
 
   /* Shape, motion, layout and type do not change with the theme */
@@ -54,13 +52,17 @@
   --button: var(--deep-water);
   --on-button: var(--white);
   --focus: var(--droplet-blue);
-  --status-resolved: var(--resolved);
+  --status-resolved: var(--droplet-blue); /* A finished thing: the brand blue, with a white tick on it (3.46, enough for an icon) */
   --status-outstanding: var(--outstanding);
+  --status-pending: #d6dde7; /* An asset still to do: a quiet grey, because orange reads as a warning */
+  --on-pending: var(--slate); /* Icon inside it: 5.0 on the grey */
+  --bg-start: var(--white); /* The page behind the conversation before anything has been said */
   --on-status: var(--white); /* Icon inside a status circle */
 
-  /* The founder's chat bubbles: Deep Water, lit from above. White text is 5.8 to 8.4 on it. */
-  --bubble-top: color-mix(in srgb, var(--droplet-blue) 40%, var(--deep-water));
-  --bubble-bottom: var(--deep-water);
+  /* The founder's chat bubbles: a mid blue, lit from above. As light as it can be with white text still reading: 4.6 at the top, 5.9 at
+     the bottom (AA is 4.5), so a lighter blue than this would need dark text. */
+  --bubble-top: color-mix(in srgb, var(--droplet-blue) 65%, var(--deep-water));
+  --bubble-bottom: color-mix(in srgb, var(--droplet-blue) 38%, var(--deep-water));
   --bubble-highlight: rgb(255 255 255 / 0.22); /* A thin light edge along the top */
   --on-bubble: var(--white);
 
@@ -74,6 +76,19 @@
   --glass-fill-strong: rgb(255 255 255 / 0.84);
   --glass-fill-fallback: rgb(255 255 255 / 0.96);
   --glass-border: rgb(255 255 255 / 0.9);
+
+  /* Sticky notes are paper: the same soft colours on a light or a dark screen, with Ink on them (15 or more). Pink is Droplet's alone, so
+     a pink note was written by the AI. */
+  --note-yellow: #fff1a8;
+  --note-mint: #c9f0d8;
+  --note-sky: #cfe6fb;
+  --note-lilac: #e0d7f8;
+  --note-peach: #ffd9bf;
+  --note-grey: #e3e8ee;
+  --note-pink: #ffcfe0;
+  --note-white: #ffffff;
+  --note-ink: var(--ink);
+  --intent-fill: rgb(255 255 255 / 0.94); /* The message bar and the tip above it: nearly solid, so they read clearly over the wave */
 
   /* The wave behind the conversation before anything has been said: pale where it meets the page, deepening to a royal blue. */
   --wave-edge: #8fd3f6;
@@ -102,13 +117,16 @@
   --button: var(--droplet-blue);
   --on-button: var(--ink);
   --focus: var(--droplet-blue);
-  --status-resolved: var(--mint);
+  --status-resolved: var(--droplet-blue); /* With an Ink tick on it: 5.05 */
   --status-outstanding: var(--amber);
+  --status-pending: rgb(255 255 255 / 0.2);
+  --on-pending: var(--haze); /* About 6 on the grey over Night */
+  --bg-start: transparent; /* On a dark screen the page is the same before and after */
   --on-status: var(--ink);
 
   /* Chat bubbles keep their blue in the dark theme, a touch brighter on top so the light still comes from above. */
-  --bubble-top: color-mix(in srgb, var(--droplet-blue) 44%, var(--deep-water));
-  --bubble-bottom: var(--deep-water);
+  --bubble-top: color-mix(in srgb, var(--droplet-blue) 65%, var(--deep-water));
+  --bubble-bottom: color-mix(in srgb, var(--droplet-blue) 38%, var(--deep-water));
   --bubble-highlight: rgb(255 255 255 / 0.2);
   --on-bubble: var(--white);
 
@@ -122,6 +140,7 @@
   --glass-fill-strong: rgb(18 32 52 / 0.84);
   --glass-fill-fallback: rgb(18 32 52 / 0.97);
   --glass-border: rgb(255 255 255 / 0.1);
+  --intent-fill: var(--glass-fill); /* On a dark screen the glass is already right */
 
   /* The same wave on a dark screen: it glows out of the dark instead of covering it, so the text on top keeps its contrast. */
   --wave-edge: rgb(60 170 240 / 0.26);

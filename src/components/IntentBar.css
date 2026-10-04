@@ -45,6 +45,11 @@
   color: var(--text-muted);
 }
 
+.intent .intent__chip,
+.intent .intent__bar {
+  background: var(--intent-fill);
+}
+
 .intent__bar {
   display: flex;
   align-items: center;
