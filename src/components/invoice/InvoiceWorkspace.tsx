@@ -3,7 +3,7 @@ import type { InvoiceContent } from '../../lib/invoice.ts'
 import { BillListIcon, BuildingsIcon, CalculatorIcon, CalendarIcon, CheckCircleIcon, SaleIcon, UserIcon } from '@solar-icons/react/linear'
 import { toolbarTools } from '../../lib/arrangement.ts'
 import { exportInvoice } from '../../lib/exportInvoice.ts'
-import { checkInvoice, type Issue } from '../../lib/invoiceReadiness.ts'
+import { checkInvoice, stepsDone, type Issue } from '../../lib/invoiceReadiness.ts'
 import { resolveRoles } from '../../lib/palette.ts'
 import { starterBlocks } from '../../compose/fallback.ts'
 import { loadPalette } from '../../lib/projectStore.ts'
@@ -40,12 +40,11 @@ import type { ShelfTool } from '../ToolShelf.tsx'
 import WorkspaceShell, { type HeaderSlots } from '../WorkspaceShell.tsx'
 import ConfirmSave, { type ConfirmItem } from './ConfirmSave.tsx'
 import InvoiceDocument from './InvoiceDocument.tsx'
-import { InvoicesTool, InvoicesWindow } from './InvoicesPanel.tsx'
+import { InvoicesWindow } from './InvoicesPanel.tsx'
 import LeaveDialog from './LeaveDialog.tsx'
-import { BusinessTool, ClientTool, TermsTool, TotalTool, VatTool } from './InvoiceTools.tsx'
 import { BusinessWindow, ClientWindow, DetailsWindow, TotalsWindow, VatWindow } from './InvoiceWindows.tsx'
 import LineItemsEditor from './LineItemsEditor.tsx'
-import { ReadyTool, ReadyWindow } from './ReadyPanel.tsx'
+import { ReadyWindow } from './ReadyPanel.tsx'
 
 type Props = {
   projectId: string
@@ -54,19 +53,23 @@ type Props = {
   dispatch: (action: InvoiceAction) => void
   // Another invoice takes the workspace's place: a new one, or one that was saved.
   onReplace: (state: InvoiceState) => void
+  // Asks for the note of what would be remembered to be opened (each change of the number is one ask), as the chat does when the
+  // founder is about to leave. And told when the founder has confirmed.
+  saveSignal?: number
+  onConfirmed?: () => void
   headerSlots?: HeaderSlots
 }
 
 // What each tool is for, said once, shown as its tooltip and as its window's reason.
 const REASONS = {
-  invoices: 'Which invoice this is. An invoice keeps its number when you change it. Drag this down to see them all, or to start a new one.',
-  business: 'Your business details are entered once and go on every invoice. Drag this down to add your address, VAT number and bank details.',
-  client: 'Who the invoice is for. Drag this down for their address, VAT number and reference.',
-  terms: 'When payment is due. Drag this down for the invoice number, the date and a note.',
-  vat: 'Whether you charge VAT. A business registered for VAT issues a tax invoice. Drag this down to see what changes.',
-  total: 'What the invoice comes to, worked out in code from the lines. Drag this down to see the working.',
-  ready: 'Checks the invoice before you export it, and names whatever is missing. Drag this down to see the list.',
-  document: 'The invoice as your client will read it, in the colours and type you confirmed for the brand.',
+  invoices: 'Which invoice this is. An invoice keeps its number when you change it. Open it to see them all, or to start a new one.',
+  business: 'Your business details are entered once and go on every invoice. Open it to add your address and bank details.',
+  client: 'Who the invoice is for. Open it for their address, VAT number and reference.',
+  terms: 'When payment is due. Open it for the invoice number, the date and a note.',
+  vat: 'Whether you charge VAT. A business registered for VAT issues a tax invoice. Open it to see what changes.',
+  total: 'What the invoice comes to, worked out in code from the lines. Open it to see the working.',
+  ready: 'Checks the invoice before you export it, and names whatever is missing. Open it to see the list.',
+  document: 'The invoice as it will print on A4, in the colours you confirmed for the brand, so what you edit is what your client gets.',
   lines: 'What you are charging for. Each line is a quantity and a price, and the amounts are worked out for you.',
 }
 
@@ -76,7 +79,7 @@ const sameContent = (a: InvoiceContent, b: InvoiceContent) => JSON.stringify(a) 
 // the shared workspace shell. The document is drawn in the founder's confirmed palette. The project remembers the founder's
 // business, their clients and their invoices, so none is typed twice, but only what the founder confirms: Save opens a note of what
 // would be remembered, and nothing is kept unless it is confirmed. Leaving an invoice with unsaved changes asks first.
-export default function InvoiceWorkspace({ projectId, projectName, state, dispatch, onReplace, headerSlots }: Props) {
+export default function InvoiceWorkspace({ projectId, projectName, state, dispatch, onReplace, saveSignal, onConfirmed, headerSlots }: Props) {
   const [memory, setMemory] = useState<ProjectMemory>(() => loadMemory(projectId))
   const [arrangementSave, setArrangementSave] = useState(() => loadInvoice(projectId))
   const [saveFailed, setSaveFailed] = useState(false)
@@ -133,6 +136,7 @@ export default function InvoiceWorkspace({ projectId, projectName, state, dispat
     const arrangement = saveArrangement(projectId, doc)
     if (arrangement) setArrangementSave(arrangement)
     setSaveFailed(!remembered || arrangement === null)
+    if (remembered && arrangement !== null) onConfirmed?.()
   }
 
   // Leaving saves nothing, so an invoice with changes asks first.
@@ -175,27 +179,21 @@ export default function InvoiceWorkspace({ projectId, projectName, state, dispat
     [doc, dispatch],
   )
 
+  // The toolbar holds each tool as its icon and name. A tick shows once its part of the invoice is complete.
+  const done = useMemo(() => stepsDone(readiness), [readiness])
   const tools: Record<string, ShelfTool> = useMemo(
     () => ({
-      invoices: {
-        id: 'invoices',
-        title: 'Invoices',
-        icon: BillListIcon,
-        reason: reason('invoices'),
-        node: <InvoicesTool currentId={doc.invoiceId} current={content} saved={memory.invoices} onOpen={openInvoice} onNew={newInvoice} />,
-      },
-      business: { id: 'business', title: 'Your business', icon: BuildingsIcon, reason: reason('business'), node: <BusinessTool content={content} dispatch={dispatch} /> },
-      client: { id: 'client', title: 'Client', icon: UserIcon, reason: reason('client'), node: <ClientTool content={content} remembered={memory.clients} dispatch={dispatch} /> },
-      terms: { id: 'terms', title: 'Terms', icon: CalendarIcon, reason: reason('terms'), node: <TermsTool details={content.details} dispatch={dispatch} /> },
-      vat: { id: 'vat', title: 'VAT', icon: SaleIcon, reason: reason('vat'), node: <VatTool content={content} dispatch={dispatch} /> },
-      total: { id: 'total', title: 'Total', icon: CalculatorIcon, reason: reason('total'), node: <TotalTool content={content} /> },
-      ready: { id: 'ready', title: 'Ready to export?', icon: CheckCircleIcon, reason: reason('ready'), node: <ReadyTool readiness={readiness} /> },
+      invoices: { id: 'invoices', title: 'Invoices', icon: BillListIcon, reason: reason('invoices') },
+      business: { id: 'business', title: 'Your business', icon: BuildingsIcon, reason: reason('business'), done: done.business },
+      client: { id: 'client', title: 'Client', icon: UserIcon, reason: reason('client'), done: done.client },
+      terms: { id: 'terms', title: 'Terms', icon: CalendarIcon, reason: reason('terms'), done: done.terms },
+      vat: { id: 'vat', title: 'VAT', icon: SaleIcon, reason: reason('vat'), done: done.vat },
+      total: { id: 'total', title: 'Total', icon: CalculatorIcon, reason: reason('total'), done: done.total },
+      ready: { id: 'ready', title: 'Ready to export?', icon: CheckCircleIcon, reason: reason('ready'), done: done.ready },
     }),
     // reason() only reads doc.reasons.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    // The open and new handlers read the latest state each time they are called.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [content, doc.reasons, doc.invoiceId, dispatch, readiness, memory],
+    [doc.reasons, done],
   )
 
   const windows: Record<string, WorkspaceItem> = useMemo(() => {
@@ -233,6 +231,7 @@ export default function InvoiceWorkspace({ projectId, projectName, state, dispat
         dispatch={dispatch}
         tools={tools}
         windows={windows}
+        toolbar="steps"
         canUndo={canUndoInvoice(state)}
         canRedo={canRedoInvoice(state)}
         onUndo={() => dispatch({ type: 'undo' })}
@@ -240,7 +239,7 @@ export default function InvoiceWorkspace({ projectId, projectName, state, dispat
         saveStatus={saveStatus}
         unsaved={unsaved}
         onSave={() => {}}
-        saveControl={<ConfirmSave projectName={projectName} items={items} unsaved={unsaved} status={saveStatus} onConfirm={confirm} />}
+        saveControl={<ConfirmSave projectName={projectName} items={items} unsaved={unsaved} status={saveStatus} onConfirm={confirm} openSignal={saveSignal} />}
         exportButton={
           <ExportButton
             onExport={async () => {

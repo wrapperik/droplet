@@ -4,9 +4,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { emptyBusiness, emptyClient, newContent } from '../../lib/invoice.ts'
 import type { SavedClient, SavedInvoice } from '../../lib/memorySave.ts'
 import ConfirmSave from './ConfirmSave.tsx'
-import { ClientTool } from './InvoiceTools.tsx'
 import { BusinessWindow, ClientWindow } from './InvoiceWindows.tsx'
-import { InvoicesTool, InvoicesWindow } from './InvoicesPanel.tsx'
+import { InvoicesWindow } from './InvoicesPanel.tsx'
 import LeaveDialog from './LeaveDialog.tsx'
 
 const client = { ...emptyClient(), name: 'Pretoria Print Works', address: '5 Church Square' }
@@ -66,38 +65,6 @@ describe('ConfirmSave', () => {
   })
 })
 
-describe('the client tool', () => {
-  it('offers the clients that are remembered, and fills in a remembered client who has nothing else filled in when the field is left', async () => {
-    const user = userEvent.setup()
-    const dispatch = vi.fn()
-    const content = { ...newContent('2026-10-04'), client: { ...emptyClient(), name: 'pretoria print works' } }
-    const { container } = render(<ClientTool content={content} remembered={remembered} dispatch={dispatch} />)
-    expect(container.querySelectorAll('datalist option')).toHaveLength(1)
-    await user.click(screen.getByLabelText('Client name'))
-    await user.tab()
-    expect(dispatch).toHaveBeenCalledWith({ type: 'set_client', patch: client })
-  })
-
-  it('does not overwrite a client who has other details typed already, or a name that is not remembered', async () => {
-    const user = userEvent.setup()
-    const dispatch = vi.fn()
-    const typed = { ...newContent('2026-10-04'), client: { ...emptyClient(), name: 'Pretoria Print Works', email: 'me@example.com' } }
-    const { rerender } = render(<ClientTool content={typed} remembered={remembered} dispatch={dispatch} />)
-    await user.click(screen.getByLabelText('Client name'))
-    await user.tab()
-    expect(dispatch).not.toHaveBeenCalled()
-    rerender(<ClientTool content={{ ...newContent('2026-10-04'), client: { ...emptyClient(), name: 'Someone new' } }} remembered={remembered} dispatch={dispatch} />)
-    await user.click(screen.getByLabelText('Client name'))
-    await user.tab()
-    expect(dispatch).not.toHaveBeenCalled()
-  })
-
-  it('offers no list when nothing is remembered', () => {
-    const { container } = render(<ClientTool content={newContent('2026-10-04')} remembered={[]} dispatch={vi.fn()} />)
-    expect(container.querySelector('datalist')).toBeNull()
-  })
-})
-
 describe('what is remembered, in the windows', () => {
   it('the business window says whether the business is remembered, and forgets it only when asked twice', async () => {
     const user = userEvent.setup()
@@ -146,29 +113,9 @@ describe('what is remembered, in the windows', () => {
   })
 })
 
-describe('the invoices tool and window', () => {
+describe('the invoices window', () => {
   const saved = [invoiceOf('i1', 'INV-0001'), invoiceOf('i2', 'INV-0002', { updatedAt: '2026-10-05T10:00:00', revision: 3 })]
   const current = saved[1].content
-
-  it('the tool lists the saved invoices and a new one, and opens another when chosen', async () => {
-    const user = userEvent.setup()
-    const onOpen = vi.fn()
-    const onNew = vi.fn()
-    render(<InvoicesTool currentId="i2" current={current} saved={saved} onOpen={onOpen} onNew={onNew} />)
-    const select = screen.getByRole('combobox', { name: 'Invoice' })
-    expect(within(select).getAllByRole('option').map((option) => option.textContent)).toEqual(['INV-0001 · Pretoria Print Works', 'INV-0002 · Pretoria Print Works', 'New invoice'])
-    expect(select).toHaveValue('i2')
-    await user.selectOptions(select, 'i1')
-    expect(onOpen).toHaveBeenCalledWith('i1')
-    await user.selectOptions(select, 'New invoice')
-    expect(onNew).toHaveBeenCalledOnce()
-  })
-
-  it('the tool shows an invoice that is not saved yet as the open one', () => {
-    render(<InvoicesTool currentId="new" current={newContent('2026-10-04', 'INV-0003')} saved={saved} onOpen={vi.fn()} onNew={vi.fn()} />)
-    expect(screen.getByRole('option', { name: 'INV-0003 (not saved)' })).toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: 'Invoice' })).toHaveValue('new')
-  })
 
   it('the window lists each invoice with where it stands, newest first, and marks the one that is open', () => {
     const exported = invoiceOf('i3', 'INV-0003', { exportedAt: '2026-10-06T09:00:00', updatedAt: '2026-10-06T09:00:00' })

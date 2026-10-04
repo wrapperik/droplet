@@ -5,7 +5,6 @@ import { newContent, type InvoiceContent } from '../../lib/invoice.ts'
 import { resolveRoles } from '../../lib/palette.ts'
 import { starterBlocks } from '../../compose/fallback.ts'
 import InvoiceDocument from './InvoiceDocument.tsx'
-import { BusinessTool, ClientTool, TermsTool, TotalTool, VatTool } from './InvoiceTools.tsx'
 import { BusinessWindow, ClientWindow, DetailsWindow, TotalsWindow, VatWindow } from './InvoiceWindows.tsx'
 
 const roles = resolveRoles(starterBlocks())
@@ -64,58 +63,6 @@ describe('InvoiceDocument', () => {
     expect(paper.style.getPropertyValue('--paper-primary')).toBe(roles.primary.hex)
     expect(paper.style.getPropertyValue('--paper-background')).toBe(roles.background.hex)
     expect(paper.style.getPropertyValue('--paper-text')).toBe(roles.text.hex)
-  })
-})
-
-describe('the tools', () => {
-  it('change the business and the client from a name field', async () => {
-    const user = userEvent.setup()
-    const dispatch = vi.fn()
-    render(
-      <>
-        <BusinessTool content={newContent('2026-10-04')} dispatch={dispatch} />
-        <ClientTool content={newContent('2026-10-04')} remembered={[]} dispatch={dispatch} />
-      </>,
-    )
-    await user.type(screen.getByLabelText('Your business name'), 'K')
-    expect(dispatch).toHaveBeenLastCalledWith({ type: 'set_business', patch: { name: 'K' } })
-    await user.type(screen.getByLabelText('Client name'), 'P')
-    expect(dispatch).toHaveBeenLastCalledWith({ type: 'set_client', patch: { name: 'P' } })
-  })
-
-  it('choose the terms, and say when payment is due', async () => {
-    const user = userEvent.setup()
-    const dispatch = vi.fn()
-    render(<TermsTool details={newContent('2026-10-04').details} dispatch={dispatch} />)
-    expect(screen.getByText('Due 18 October 2026')).toBeInTheDocument()
-    await user.selectOptions(screen.getByLabelText('Payment is due'), '30')
-    expect(dispatch).toHaveBeenCalledWith({ type: 'set_details', patch: { terms: '30' } })
-  })
-
-  it('say there is no date yet when a chosen date is not one', () => {
-    const details = { ...newContent('2026-10-04').details, terms: 'custom' as const, customDueDate: '' }
-    render(<TermsTool details={details} dispatch={vi.fn()} />)
-    expect(screen.getByText('No date yet')).toBeInTheDocument()
-  })
-
-  it('turn VAT on and off with a switch', async () => {
-    const user = userEvent.setup()
-    const dispatch = vi.fn()
-    const { rerender } = render(<VatTool content={newContent('2026-10-04')} dispatch={dispatch} />)
-    const toggle = screen.getByRole('switch')
-    expect(toggle).toHaveAttribute('aria-checked', 'false')
-    expect(toggle).toHaveTextContent('No VAT')
-    await user.click(toggle)
-    expect(dispatch).toHaveBeenCalledWith({ type: 'set_vat_registered', value: true })
-    rerender(<VatTool content={complete()} dispatch={dispatch} />)
-    expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByRole('switch')).toHaveTextContent('Charging VAT')
-  })
-
-  it('show the total, worked out, and how many lines have no price', () => {
-    render(<TotalTool content={complete()} />)
-    expect(plain(screen.getByRole('status').textContent)).toBe('R 6 210,00')
-    expect(screen.getByText('1 without a price')).toBeInTheDocument()
   })
 })
 

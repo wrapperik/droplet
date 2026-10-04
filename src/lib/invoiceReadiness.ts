@@ -78,3 +78,20 @@ export function checkInvoice(content: InvoiceContent, { usedNumbers = [] }: Chec
   const required = issues.filter((issue) => issue.severity === 'required')
   return { ready: required.length === 0, required, recommended: issues.filter((issue) => issue.severity === 'recommended') }
 }
+
+// Which toolbar steps are complete: a step is complete when nothing required of its part is outstanding. A tool with nothing to
+// complete (the list of invoices) has no entry. Recommended items never hold a step back.
+export type StepId = 'business' | 'client' | 'terms' | 'vat' | 'total' | 'ready'
+
+export function stepsDone(readiness: Readiness): Record<StepId, boolean> {
+  const clear = (fix: Issue['fix']) => !readiness.required.some((issue) => issue.fix === fix)
+  return {
+    business: clear('business'),
+    client: clear('client'),
+    terms: clear('terms'),
+    vat: clear('vat'),
+    // The total is the lines, worked out: it is done when every line is whole and the sum is more than nothing.
+    total: clear('lines'),
+    ready: readiness.ready,
+  }
+}

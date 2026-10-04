@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom'
 import { CheckIcon, DisketteIcon, RestartIcon, UndoLeftIcon, UndoRightIcon } from '@solar-icons/react/linear'
 import {
   arrangementIsDefault,
+  isExpanded,
+  isVisible,
   mergeLayout,
   shownWindows,
   toolbarTools,
@@ -41,6 +43,9 @@ type Props = {
   unsaved: boolean
   onSave: () => void
   saveControl?: ReactNode
+  // 'steps' draws each tool in the toolbar as its icon and name with a tick once its part is done, and keeps it there while it is
+  // open as a window. The default shows the tool's own controls, and a tool that is open leaves the bar.
+  toolbar?: 'tools' | 'steps'
   // The task's own export button, at the right of the header.
   exportButton: ReactNode
   // Reports where each window is drawn and how tall, so the AI can place one component relative to another.
@@ -68,6 +73,7 @@ export default function WorkspaceShell({
   onSave,
   saveControl,
   exportButton,
+  toolbar = 'tools',
   onResolved,
   headerSlots,
 }: Props) {
@@ -133,7 +139,14 @@ export default function WorkspaceShell({
   const visibleItems = shown.map((id) => windows[id]).filter(Boolean)
   const visibleLayout = arrangement.layout.filter((placement) => shown.includes(placement.id))
   const changeVisibleLayout = (next: Placement[]) => dispatch({ type: 'layout', layout: mergeLayout(arrangement.layout, next) })
-  const shelfTools = toolbarTools(arrangement).map((id) => tools[id]).filter(Boolean)
+  const steps = toolbar === 'steps'
+  // In steps mode every tool stays in the bar, open or not.
+  const shelfIds = steps ? arrangement.tools.filter((id) => isVisible(arrangement, id)) : toolbarTools(arrangement)
+  const shelfTools = shelfIds.map((id) => tools[id]).filter(Boolean)
+  const toggleTool = useCallback(
+    (id: string) => dispatch(isExpanded(arrangement, id) ? { type: 'collapse_tool', id } : { type: 'expand_tool', id }),
+    [dispatch, arrangement],
+  )
 
   const startControls = (
     <>
@@ -183,6 +196,7 @@ export default function WorkspaceShell({
       onOutside={carryOut}
       onExpand={expandTool}
       controlRef={shelfControl}
+      steps={steps ? { open: arrangement.expanded, onToggle: toggleTool } : undefined}
       add={
         <ComponentsMenu
           components={spec.components}

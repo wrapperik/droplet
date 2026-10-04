@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
+import { CheckIcon } from '@solar-icons/react/linear'
 import type { Icon } from '@solar-icons/react/lib/types'
 import { fadeLift, flyLift, makeLift, moveLift, toRect, type Rect } from '../lib/lift.ts'
 import './ToolShelf.css'
@@ -10,7 +11,10 @@ export type ShelfTool = {
   // One line on why the tool is on screen (manifesto principle 3). Shown from the tool's icon.
   reason: string
   icon: Icon
-  node: ReactNode
+  // The tool's own controls, drawn beside its icon. A bar in steps mode has none: the tool is its icon and name.
+  node?: ReactNode
+  // In steps mode: whether the part of the work this tool stands for is complete. Left out when it has nothing to complete.
+  done?: boolean
 }
 
 // What the workspace can ask of the toolbar while a window is carried towards it.
@@ -38,6 +42,13 @@ type Props = {
   controlRef: RefObject<ShelfHandle | null>
   // The button that adds and removes tools.
   add: ReactNode
+  // Steps mode: each tool is its icon and name, with a tick once its part is complete, and stays in the bar while it is open as a
+  // window. Pressing it opens or closes the window; dragging it down out of the bar opens it where it is let go.
+  steps?: {
+    // The tools that are open as windows.
+    open: string[]
+    onToggle: (id: string) => void
+  }
 }
 
 const DRAG_THRESHOLD_PX = 6
@@ -63,7 +74,7 @@ type Run = {
 // The toolbar under the header: one bar, always in the same place, with one segment per tool and a divider between
 // segments. The founder chooses which tools are in it and in what order. Drag a tool by its icon to move it: a lifted
 // copy follows the pointer and the others make room as it passes. The arrow keys move a focused icon one place.
-export default function ToolShelf({ tools, onMove, onOutside, onExpand, controlRef, add }: Props) {
+export default function ToolShelf({ tools, onMove, onOutside, onExpand, controlRef, add, steps }: Props) {
   const reduceMotion = useReducedMotion() ?? false
   const tipId = useId()
   const shelfRef = useRef<HTMLDivElement>(null)
@@ -71,10 +82,13 @@ export default function ToolShelf({ tools, onMove, onOutside, onExpand, controlR
   const runRef = useRef<Run | null>(null)
   const landingRef = useRef<{ lift: HTMLDivElement; id: string; from: Rect } | null>(null)
   const committed = tools.map((tool) => tool.id)
-  const latest = useRef({ committed, onMove, onOutside, onExpand })
+  const open = steps?.open ?? []
+  const latest = useRef({ committed, onMove, onOutside, onExpand, steps: !!steps, open })
   useLayoutEffect(() => {
-    latest.current = { committed, onMove, onOutside, onExpand }
+    latest.current = { committed, onMove, onOutside, onExpand, steps: !!steps, open }
   })
+  // A press that ends a drag must not also count as a click on the tool it ends over.
+  const justDragged = useRef(false)
   const [target, setTarget] = useState(false)
 
   // Where a carried tool or window would go among the tools: before every tool that is below or to the right of the point.
@@ -156,6 +170,10 @@ export default function ToolShelf({ tools, onMove, onOutside, onExpand, controlR
       setLifted(false)
       if (!run) return
       const { onOutside: outsideChanged, onExpand: expand, onMove: move } = latest.current
+      if (run.moved) {
+        justDragged.current = true
+        window.setTimeout(() => (justDragged.current = false), 0)
+      }
       // Let go below the bar: the tool becomes a window where its copy is. The copy grows and fades as the window arrives.
       if (run.moved && commit && run.outside && run.lift) {
         const box = run.lift.getBoundingClientRect()
@@ -218,18 +236,22 @@ export default function ToolShelf({ tools, onMove, onOutside, onExpand, controlR
       // Carried below the bar, the tool leaves it (the others close the gap) and the workspace is told where the window
       // would land. Carried back up, it goes back in.
       const bar = shelfRef.current?.getBoundingClientRect()
-      const outside = !!bar && y > bar.bottom + PULL_OUT_PX
+      const below = !!bar && y > bar.bottom + PULL_OUT_PX
+      // In steps mode a tool that is already a window cannot be pulled out again, and carrying it below the bar changes nothing.
+      const pinned = latest.current.steps && latest.current.open.includes(run.id)
+      const outside = below && !pinned
       if (outside !== run.outside) {
         run.outside = outside
         if (!outside) latest.current.onOutside(null)
       }
-      if (outside) {
-        const without = latest.current.committed.filter((other) => other !== run.id)
-        if (run.draft.join() !== without.join()) {
-          run.draft = without
-          setDraft(without)
+      if (below) {
+        // The tool leaves the bar (the others close the gap), except in steps mode, where it stays in its place.
+        const kept = latest.current.steps ? [...latest.current.committed] : latest.current.committed.filter((other) => other !== run.id)
+        if (run.draft.join() !== kept.join()) {
+          run.draft = kept
+          setDraft(kept)
         }
-        latest.current.onOutside({ id: run.id, left: x - run.grab.dx, top: y - run.grab.dy })
+        if (outside) latest.current.onOutside({ id: run.id, left: x - run.grab.dx, top: y - run.grab.dy })
         return
       }
       const next = draftAt(run, x, y)
@@ -297,6 +319,7 @@ export default function ToolShelf({ tools, onMove, onOutside, onExpand, controlR
         const Icon = tool.icon
         const landing = landingId === id
         const glide = !reduceMotion
+        const isOpen = open.includes(id)
         return (
           <motion.div
             key={id}
@@ -314,16 +337,38 @@ export default function ToolShelf({ tools, onMove, onOutside, onExpand, controlR
           >
             <div className="shelf__body">
               <span className="reason shelf__lead">
-                <button
-                  type="button"
-                  className="toolbar__button reason__button shelf__grip"
-                  aria-label={`${tool.title}. Drag to move it, or use the left and right arrow keys.`}
-                  aria-describedby={`${tipId}-${id}`}
-                  onPointerDown={(event) => beginDrag(event, id)}
-                  onKeyDown={(event) => onGripKeyDown(event, id)}
-                >
-                  <Icon size={18} aria-hidden="true" />
-                </button>
+                {steps ? (
+                  <button
+                    type="button"
+                    className="shelf__step"
+                    data-open={isOpen || undefined}
+                    aria-expanded={isOpen}
+                    aria-label={`${tool.title}.${tool.done ? ' Complete.' : ''} Press to ${isOpen ? 'close' : 'open'} it. Drag to move it, or use the left and right arrow keys.`}
+                    aria-describedby={`${tipId}-${id}`}
+                    onPointerDown={(event) => beginDrag(event, id)}
+                    onKeyDown={(event) => onGripKeyDown(event, id)}
+                    onClick={() => !justDragged.current && steps.onToggle(id)}
+                  >
+                    <Icon size={18} aria-hidden="true" />
+                    <span className="shelf__name">{tool.title}</span>
+                    {tool.done !== undefined && (
+                      <span className="shelf__mark" data-done={tool.done || undefined} aria-hidden="true">
+                        {tool.done && <CheckIcon size={12} strokeWidth={2.25} />}
+                      </span>
+                    )}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="toolbar__button reason__button shelf__grip"
+                    aria-label={`${tool.title}. Drag to move it, or use the left and right arrow keys.`}
+                    aria-describedby={`${tipId}-${id}`}
+                    onPointerDown={(event) => beginDrag(event, id)}
+                    onKeyDown={(event) => onGripKeyDown(event, id)}
+                  >
+                    <Icon size={18} aria-hidden="true" />
+                  </button>
+                )}
                 <span role="tooltip" id={`${tipId}-${id}`} className="reason__tip shelf__tip glass glass--strong">
                   <strong>{tool.title}</strong>
                   {tool.reason}

@@ -20,12 +20,15 @@ type Props = {
   status: string
   // Called with the ids of the items the founder left ticked. Not called at all unless the founder presses the confirm button.
   onConfirm: (ids: string[]) => void
+  // A number that goes up each time something outside asks for the note to be opened (such as a button in the chat). It opens only
+  // if there is something to save, and saves nothing by itself: the founder still confirms.
+  openSignal?: number
 }
 
 // Nothing is remembered without the founder's say. Pressing Save does not save: it opens a note of exactly what would be
 // remembered, each item with a tick, and only the confirm button saves. Leaving the note, or pressing Escape or Cancel, saves nothing.
 // How the workspace is arranged is not a memory, so it is kept along with whatever is confirmed, and the note says so.
-export default function ConfirmSave({ projectName, items, unsaved, status, onConfirm }: Props) {
+export default function ConfirmSave({ projectName, items, unsaved, status, onConfirm, openSignal = 0 }: Props) {
   const [open, setOpen] = useState(false)
   // The ids the founder has unticked. Everything is ticked when the note opens.
   const [unticked, setUnticked] = useState<string[]>([])
@@ -33,6 +36,16 @@ export default function ConfirmSave({ projectName, items, unsaved, status, onCon
   const titleId = useId()
   const close = useCallback(() => setOpen(false), [])
   useDismiss(open, close, wrapRef)
+
+  // Opens when asked to from outside, once for each ask.
+  const [seenSignal, setSeenSignal] = useState(openSignal)
+  if (openSignal !== seenSignal) {
+    setSeenSignal(openSignal)
+    if (unsaved) {
+      setUnticked([])
+      setOpen(true)
+    }
+  }
 
   const ticked = items.filter((item) => !unticked.includes(item.id)).map((item) => item.id)
 

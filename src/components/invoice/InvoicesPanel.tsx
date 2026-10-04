@@ -4,52 +4,13 @@ import { computeTotals, formatDate, todayIso, type InvoiceContent } from '../../
 import type { SavedInvoice } from '../../lib/memorySave.ts'
 import { isRevisedSinceExport } from '../../lib/projectMemory.ts'
 import { formatRand } from '../../lib/money.ts'
-import { Toolbar } from '../Toolbar.tsx'
 import ToolWindow from '../ToolWindow.tsx'
 import './InvoicesPanel.css'
-
-const NEW = '__new'
 
 // What an invoice is called in a list: its number and who it is for.
 const labelOf = (content: InvoiceContent) => {
   const client = content.client.name.trim()
   return `${content.details.number.trim() || 'No number'}${client ? ` · ${client}` : ''}`
-}
-
-type ToolProps = {
-  // The invoice that is open, and whether it has been confirmed yet.
-  currentId: string
-  current: InvoiceContent
-  saved: SavedInvoice[]
-  onOpen: (id: string) => void
-  onNew: () => void
-}
-
-// The tool: which invoice this is. Choosing another opens it, and "New invoice" starts one with the next number.
-export function InvoicesTool({ currentId, current, saved, onOpen, onNew }: ToolProps) {
-  const isSaved = saved.some((invoice) => invoice.id === currentId)
-  return (
-    <Toolbar title="Invoices">
-      <label className="invoices__select">
-        <span className="visually-hidden">Invoice</span>
-        <select
-          value={currentId}
-          onChange={(event) => {
-            if (event.target.value === NEW) onNew()
-            else if (event.target.value !== currentId) onOpen(event.target.value)
-          }}
-        >
-          {!isSaved && <option value={currentId}>{labelOf(current)} (not saved)</option>}
-          {saved.map((invoice) => (
-            <option key={invoice.id} value={invoice.id}>
-              {invoice.id === currentId ? labelOf(current) : labelOf(invoice.content)}
-            </option>
-          ))}
-          <option value={NEW}>New invoice</option>
-        </select>
-      </label>
-    </Toolbar>
-  )
 }
 
 function statusOf(invoice: SavedInvoice): string {

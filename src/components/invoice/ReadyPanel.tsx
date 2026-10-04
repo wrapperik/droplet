@@ -1,6 +1,5 @@
 import { CheckIcon, HourglassIcon } from '@solar-icons/react/linear'
 import type { Issue, Readiness } from '../../lib/invoiceReadiness.ts'
-import { Toolbar } from '../Toolbar.tsx'
 import ToolWindow from '../ToolWindow.tsx'
 import '../StatusMark.css'
 import './ReadyPanel.css'
@@ -15,15 +14,6 @@ function Status({ ready, count }: { ready: boolean; count: number }) {
         <StatusIcon size={12} strokeWidth={2.25} />
       </span>
     </span>
-  )
-}
-
-// The tool: whether the invoice can be exported, or how many things stand in the way.
-export function ReadyTool({ readiness }: { readiness: Readiness }) {
-  return (
-    <Toolbar title="Ready to export?">
-      <Status ready={readiness.ready} count={readiness.required.length} />
-    </Toolbar>
   )
 }
 
