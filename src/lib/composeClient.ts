@@ -1,5 +1,5 @@
-import { checkTurn } from '../compose/rules.ts'
-import { composeResponseSchema, type ComposeRequest, type Outcome, type Turn } from '../compose/spec.ts'
+import { checkTurnFor } from '../compose/rules.ts'
+import { composeResponseSchema, type AnyTurn, type ComposeRequest, type Outcome } from '../compose/spec.ts'
 
 // Asks the composer for a workspace. The browser never talks to the model: it asks this app's own server, which holds
 // the key. Whatever comes back is checked again here, with the same schema and the same rules, against the workspace
@@ -18,7 +18,7 @@ export type ComposeFailureKind =
   | 'unavailable'
   | 'blocked'
 
-export type ComposeSuccess = { ok: true; outcome: Outcome; turn: Turn; note?: string }
+export type ComposeSuccess = { ok: true; outcome: Outcome; turn: AnyTurn; note?: string }
 export type ComposeFailure = { ok: false; kind: ComposeFailureKind; message: string }
 
 const TIMEOUT_MS = 60_000
@@ -59,7 +59,7 @@ export async function requestComposition(
   }
 
   const parsed = composeResponseSchema.safeParse(body)
-  if (!parsed.success || checkTurn(parsed.data.turn, request.workspace).length > 0) {
+  if (!parsed.success || checkTurnFor(parsed.data.turn, request).length > 0) {
     return { ok: false, kind: 'bad_response', message: 'I got an answer I could not use. Try again.' }
   }
   return { ok: true, outcome: parsed.data.outcome, turn: parsed.data.turn, ...(parsed.data.note ? { note: parsed.data.note } : {}) }

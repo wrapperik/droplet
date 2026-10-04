@@ -58,7 +58,7 @@ describe('SYSTEM_PROMPT', () => {
   })
 
   it('names every action and component the schema allows', () => {
-    for (const word of ['set_palette', 'set_colour', 'add_colour', 'remove_colour', 'set_role', 'keep_colour', 'select_colour', 'generate', 'show_component', 'hide_component', 'move_component', 'resize_component', 'reset_layout', 'export_brand_sheet', 'undo', 'redo', 'picker', 'preview', 'canvas']) {
+    for (const word of ['set_palette', 'set_colour', 'add_colour', 'remove_colour', 'set_role', 'keep_colour', 'select_colour', 'generate', 'show_component', 'hide_component', 'move_component', 'resize_component', 'expand_tool', 'collapse_tool', 'reset_layout', 'export_brand_sheet', 'undo', 'redo', 'picker', 'preview', 'canvas']) {
       expect(SYSTEM_PROMPT).toContain(word)
     }
   })

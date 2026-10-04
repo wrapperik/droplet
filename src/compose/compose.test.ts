@@ -1,5 +1,5 @@
 import { ComposeError, checkReply, composeWorkspace, type ModelCaller, type ModelRequest } from './compose.ts'
-import { checkTurn } from './rules.ts'
+import { checkTurnFor } from './rules.ts'
 import { fallbackTurn, FALLBACK_NOTE, starterTurn } from './fallback.ts'
 import { chatTurn, openSnapshot, validOpenReply, validOpenTurn } from './fixtures.ts'
 
@@ -42,7 +42,7 @@ describe('checkReply', () => {
 
   it('checks the actions against the workspace it was asked about', () => {
     const turn = JSON.stringify({ task: 'brand', message: 'Done.', memoryUsed: [], actions: [{ type: 'set_colour', index: 8, hex: '#123456' }] })
-    expect(checkReply(turn, openSnapshot()).errors[0]).toMatch(/There is no colour 8/)
+    expect(checkReply(turn, { workspace: openSnapshot() }).errors[0]).toMatch(/There is no colour 8/)
   })
 
   it('keeps the task it saw even when the reply is unusable', () => {
@@ -102,7 +102,7 @@ describe('composeWorkspace', () => {
     expect(result.outcome).toBe('fallback')
     expect(result.note).toBe(FALLBACK_NOTE)
     expect(result.turn.actions[0].type).toBe('set_palette')
-    expect(checkTurn(result.turn)).toEqual([])
+    expect(checkTurnFor(result.turn, { intent: 'x' })).toEqual([])
   })
 
   it('changes nothing after two bad answers when a workspace is open', async () => {
@@ -122,16 +122,16 @@ describe('composeWorkspace', () => {
   it('never lets an invalid turn through', async () => {
     const { call } = scripted(['{"task":"brand","message":"x","actions":[{"type":"set_colour","index":1,"hex":"#1"}],"memoryUsed":[]}', 'nope'])
     const result = await composeWorkspace(request, call)
-    expect(checkTurn(result.turn)).toEqual([])
+    expect(checkTurnFor(result.turn, { intent: 'x' })).toEqual([])
   })
 })
 
 describe('fallbackTurn', () => {
   it('is a valid turn the app can apply', () => {
-    expect(checkTurn(starterTurn('x'))).toEqual([])
-    expect(checkTurn(fallbackTurn('brand', false))).toEqual([])
-    expect(checkTurn(fallbackTurn('chat', false))).toEqual([])
-    expect(checkTurn(fallbackTurn(undefined, true), openSnapshot())).toEqual([])
+    expect(checkTurnFor(starterTurn('x'), { intent: 'x' })).toEqual([])
+    expect(checkTurnFor(fallbackTurn('brand', false), { intent: 'x' })).toEqual([])
+    expect(checkTurnFor(fallbackTurn('chat', false), { intent: 'x' })).toEqual([])
+    expect(checkTurnFor(fallbackTurn(undefined, true), { intent: 'x', workspace: openSnapshot() })).toEqual([])
   })
 
   it('is honest for another task: no palette nobody asked for', () => {

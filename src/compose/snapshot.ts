@@ -1,6 +1,6 @@
 import { createHistory } from '../lib/history.ts'
 import type { Placement } from '../lib/gridLayout.ts'
-import { COMPONENTS, DEFAULT_LAYOUT, canRedoState, canUndoState, docOf, selectedBlock, type WorkspaceState } from '../lib/workspaceState.ts'
+import { COMPONENTS, DEFAULT_LAYOUT, canRedoState, canUndoState, docOf, normaliseExpanded, normaliseTools, selectedBlock, shownWindows, toolbarTools, type WorkspaceState } from '../lib/workspaceState.ts'
 import type { PaletteBlock } from '../lib/palette.ts'
 import type { PaletteSnapshot, WorkspaceSnapshot } from './spec.ts'
 
@@ -9,7 +9,8 @@ import type { PaletteSnapshot, WorkspaceSnapshot } from './spec.ts'
 
 export function snapshotOfState(state: WorkspaceState, drawn: Placement[] | null, saved: WorkspaceSnapshot['saved']): WorkspaceSnapshot {
   const doc = docOf(state)
-  const visible = (placement: Placement) => !doc.hidden.includes(placement.id)
+  const shown = shownWindows(doc)
+  const visible = (placement: Placement) => shown.includes(placement.id)
   return {
     blocks: doc.blocks.map((b) => ({
       id: b.id,
@@ -21,8 +22,9 @@ export function snapshotOfState(state: WorkspaceState, drawn: Placement[] | null
     selectedId: selectedBlock(state).id,
     harmony: state.harmony,
     hidden: doc.hidden,
-    sizes: doc.sizes,
     layout: (drawn ?? doc.layout).filter(visible),
+    tools: toolbarTools(doc),
+    expanded: doc.expanded,
     canUndo: canUndoState(state),
     canRedo: canRedoState(state),
     saved,
@@ -32,8 +34,11 @@ export function snapshotOfState(state: WorkspaceState, drawn: Placement[] | null
 export function stateOfSnapshot(snapshot: WorkspaceSnapshot): WorkspaceState {
   const doc = {
     blocks: snapshot.blocks.map((b) => ({ id: b.id, hex: b.hex, ...(b.role ? { role: b.role } : {}), ...(b.locked ? { locked: true } : {}), ...(b.name ? { name: b.name } : {}) })),
-    layout: snapshot.layout.length > 0 ? snapshot.layout : DEFAULT_LAYOUT,
-    sizes: snapshot.sizes,
+    // The sent layout holds the windows on screen; the rest keep their usual places.
+    layout: [...snapshot.layout, ...DEFAULT_LAYOUT.filter((p) => !snapshot.layout.some((sent) => sent.id === p.id))],
+    // Hidden tools are not in the sent order, so they go after the visible ones.
+    tools: normaliseTools(snapshot.tools),
+    expanded: normaliseExpanded(snapshot.expanded),
     hidden: snapshot.hidden,
     reasons: {},
   }

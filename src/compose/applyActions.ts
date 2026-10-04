@@ -8,8 +8,11 @@ import {
   canRedoState,
   canUndoState,
   docOf,
-  kindOf,
+  isExpanded,
+  isWindow,
   mergeLayout,
+  shownWindows,
+  toolbarTools,
   reduce,
   type WorkspaceAction,
   type WorkspaceState,
@@ -50,7 +53,6 @@ type Input = {
 }
 
 const PANEL_SIZES: Record<string, number> = { third: 8, half: 12, two_thirds: 16, full: 24 }
-const TOOLBAR_SIZES: Record<string, number> = { compact: 0, large: 1 }
 
 export function applyTurnActions({ base, open, actions, env }: Input): ApplyResult {
   const skipped: Skipped[] = []
@@ -75,7 +77,7 @@ export function applyTurnActions({ base, open, actions, env }: Input): ApplyResu
   let opened = false
   let currentLayout: Placement[] = env.layout
 
-  const visibleLayout = (state: WorkspaceState) => docOf(state).layout.filter((p) => !docOf(state).hidden.includes(p.id))
+  const visibleLayout = (state: WorkspaceState) => docOf(state).layout.filter((p) => shownWindows(docOf(state)).includes(p.id))
 
   actions.forEach((action, position) => {
     const skip = (reason: string) => void skipped.push({ position, action, reason })
@@ -92,7 +94,9 @@ export function applyTurnActions({ base, open, actions, env }: Input): ApplyResu
     const blocks = docOf(scratch).blocks
     const idAt = (number: number) => blocks[number - 1]?.id
     const missing = (number: number) => `There is no colour ${number}. The palette has ${blocks.length} colours, numbered 1 to ${blocks.length}.`
-    const isShown = (component: string) => currentLayout.some((p) => p.id === component)
+    // A tool in the toolbar is on screen unless it is hidden. A window is on screen if it is on the grid.
+    const inToolbar = (component: string) => toolbarTools(docOf(scratch!)).includes(component)
+    const isShown = (component: string) => inToolbar(component) || currentLayout.some((p) => p.id === component)
 
     let next: WorkspaceAction[] = []
 
@@ -156,6 +160,25 @@ export function applyTurnActions({ base, open, actions, env }: Input): ApplyResu
         for (const component of [action.component, action.relativeTo]) {
           if (!isShown(component)) return skip(`The "${component}" component is not on screen. Show it first.`)
         }
+        // Tools sit side by side in the toolbar, windows sit on the grid, and the two cannot be placed against each other.
+        const movingTool = inToolbar(action.component)
+        const targetTool = inToolbar(action.relativeTo)
+        if (movingTool !== targetTool) {
+          return skip(
+            `"${movingTool ? action.component : action.relativeTo}" is a tool, which sits in the toolbar, and "${movingTool ? action.relativeTo : action.component}" is a window on the grid, so one cannot be placed relative to the other. Tools go left_of or right_of other tools. Windows go above, below, left_of or right_of other windows.`,
+          )
+        }
+        if (movingTool) {
+          if (action.placement === 'above' || action.placement === 'below') return skip('Tools sit side by side in the toolbar, so use left_of or right_of.')
+          const order = toolbarTools(docOf(scratch))
+          const rest = order.filter((id) => id !== action.component)
+          const at = rest.indexOf(action.relativeTo)
+          const before = action.placement === 'left_of' ? action.relativeTo : (rest[at + 1] ?? null)
+          const result = [...rest.slice(0, before === null ? rest.length : rest.indexOf(before)), action.component, ...rest.slice(before === null ? rest.length : rest.indexOf(before))]
+          if (result.join() === order.join()) return skip(`"${action.component}" is already ${action.placement.replace('_', ' ')} "${action.relativeTo}".`)
+          next = [{ type: 'move_tool', id: action.component, before }]
+          break
+        }
         // Beside another component needs room beside it. A full-width panel has none, and a drop there would only
         // push it down, so say so and let the model make it narrower first, as a person would.
         const target = currentLayout.find((p) => p.id === action.relativeTo)!
@@ -176,19 +199,27 @@ export function applyTurnActions({ base, open, actions, env }: Input): ApplyResu
       }
       case 'resize_component': {
         if (!isShown(action.component)) return skip(`The "${action.component}" component is not on screen. Show it first.`)
-        const kind = kindOf(action.component)
-        const table = kind === 'panel' ? PANEL_SIZES : TOOLBAR_SIZES
-        const value = table[action.size]
-        if (value === undefined) {
-          return skip(
-            kind === 'panel'
-              ? `"${action.component}" is a panel, so its size is third, half, two_thirds or full.`
-              : `"${action.component}" is a toolbar, so its size is compact or large.`,
-          )
+        if (inToolbar(action.component)) {
+          return skip(`"${action.component}" is a tool in the toolbar, which has one size. Use expand_tool to make it a window, then resize it.`)
         }
+        const value = PANEL_SIZES[action.size]
         next = [{ type: 'resize', id: action.component, value }]
-        // A panel's new width counts for the moves that follow in this turn.
-        if (kind === 'panel') currentLayout = currentLayout.map((p) => (p.id === action.component ? { ...p, w: value } : p))
+        // A window's new width counts for the moves that follow in this turn.
+        currentLayout = currentLayout.map((p) => (p.id === action.component ? { ...p, w: value } : p))
+        break
+      }
+      case 'expand_tool': {
+        const doc = docOf(scratch)
+        if (isExpanded(doc, action.component)) return skip(`"${action.component}" is already a window.`)
+        if (doc.hidden.includes(action.component)) return skip(`The "${action.component}" component is not on screen. Show it first.`)
+        next = [{ type: 'expand_tool', id: action.component }]
+        break
+      }
+      case 'collapse_tool': {
+        const doc = docOf(scratch)
+        if (!isExpanded(doc, action.component)) return skip(`"${action.component}" is already in the toolbar.`)
+        if (!isWindow(doc, action.component)) return skip(`"${action.component}" is not a window.`)
+        next = [{ type: 'collapse_tool', id: action.component }]
         break
       }
       case 'reset_layout':
@@ -206,7 +237,7 @@ export function applyTurnActions({ base, open, actions, env }: Input): ApplyResu
     collected.push(...next)
 
     // Keep the picture of what is on screen up to date for the moves that follow.
-    if (action.type === 'show_component' || action.type === 'hide_component' || action.type === 'reset_layout') {
+    if (['show_component', 'hide_component', 'reset_layout', 'expand_tool', 'collapse_tool'].includes(action.type)) {
       currentLayout = visibleLayout(scratch!)
     }
   })

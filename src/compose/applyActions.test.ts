@@ -1,4 +1,4 @@
-import { DEFAULT_LAYOUT, docOf, openWorkspace, type WorkspaceState } from '../lib/workspaceState.ts'
+import { DEFAULT_LAYOUT, docOf, openWorkspace, shownWindows, toolbarTools, type WorkspaceState } from '../lib/workspaceState.ts'
 import { applyTurnActions, type ApplyEnv } from './applyActions.ts'
 import { openSnapshot } from './fixtures.ts'
 import type { TurnAction } from './spec.ts'
@@ -16,6 +16,14 @@ const fresh = () => openWorkspace(blocks())
 
 const apply = (actions: TurnAction[], base: WorkspaceState | null = fresh()) => applyTurnActions({ base, open, actions, env })
 const reasons = (actions: TurnAction[], base?: WorkspaceState | null) => apply(actions, base).skipped.map((s) => s.reason)
+// For a workspace that has already changed, the environment is what is drawn for that workspace.
+const applyOn = (base: WorkspaceState, actions: TurnAction[]) =>
+  applyTurnActions({
+    base,
+    open,
+    actions,
+    env: { layout: docOf(base).layout.filter((p) => shownWindows(docOf(base)).includes(p.id)), heights: { picker: 40, role: 30, generate: 30, canvas: 29, preview: 50 } },
+  })
 const hexes = (state: WorkspaceState | null) => docOf(state!).blocks.map((b) => b.hex)
 
 describe('colours', () => {
@@ -127,23 +135,64 @@ describe('components and layout', () => {
     expect(allowed.skipped).toEqual([])
   })
 
+  it('reorders the toolbar by putting a tool left of or right of another, and says when it is already there', () => {
+    const left = apply([{ type: 'move_component', component: 'generate', relativeTo: 'picker', placement: 'left_of' }])
+    expect(left.skipped).toEqual([])
+    expect(docOf(left.state!).tools).toEqual(['generate', 'picker', 'role'])
+    const right = apply([{ type: 'move_component', component: 'picker', relativeTo: 'role', placement: 'right_of' }])
+    expect(docOf(right.state!).tools).toEqual(['role', 'picker', 'generate'])
+    expect(reasons([{ type: 'move_component', component: 'role', relativeTo: 'picker', placement: 'right_of' }])[0]).toMatch(/already right of "picker"/)
+  })
+
+  it('will not put a tool above or below another, or a tool and a window against each other', () => {
+    expect(reasons([{ type: 'move_component', component: 'role', relativeTo: 'picker', placement: 'above' }])[0]).toMatch(/side by side/)
+    expect(reasons([{ type: 'move_component', component: 'picker', relativeTo: 'canvas', placement: 'left_of' }])[0]).toMatch(/tool.*window/)
+    expect(reasons([{ type: 'move_component', component: 'canvas', relativeTo: 'picker', placement: 'below' }])[0]).toMatch(/tool.*window/)
+  })
+
+  it('skips a hidden tool in the order, so a tool goes next to one that is on screen', () => {
+    const hidden = apply([{ type: 'hide_component', component: 'role' }]).state!
+    const moved = apply([{ type: 'move_component', component: 'generate', relativeTo: 'picker', placement: 'right_of' }], hidden)
+    expect(moved.skipped[0].reason).toMatch(/already right of/)
+    expect(reasons([{ type: 'move_component', component: 'generate', relativeTo: 'role', placement: 'left_of' }], hidden)[0]).toMatch(/not on screen/)
+  })
+
   it('refuses to place a component relative to itself', () => {
     expect(reasons([{ type: 'move_component', component: 'canvas', relativeTo: 'canvas', placement: 'below' }])[0]).toMatch(/relative to itself/)
   })
 
-  it('resizes a panel to a width and a toolbar to a version, and says when the size does not suit', () => {
-    const state = apply([{ type: 'resize_component', component: 'canvas', size: 'two_thirds' }, { type: 'resize_component', component: 'picker', size: 'large' }]).state!
+  it('resizes a window to a width, and says a tool in the toolbar has only one size', () => {
+    const state = apply([{ type: 'resize_component', component: 'canvas', size: 'two_thirds' }]).state!
     expect(docOf(state).layout.find((p) => p.id === 'canvas')?.w).toBe(16)
-    expect(docOf(state).sizes).toEqual({ picker: 1 })
-    expect(reasons([{ type: 'resize_component', component: 'canvas', size: 'large' }])[0]).toMatch(/panel/)
-    expect(reasons([{ type: 'resize_component', component: 'picker', size: 'half' }])[0]).toMatch(/toolbar/)
+    expect(reasons([{ type: 'resize_component', component: 'picker', size: 'half' }])[0]).toMatch(/one size.*expand_tool/)
   })
 
-  it('resets the layout', () => {
-    const moved = apply([{ type: 'resize_component', component: 'picker', size: 'large' }]).state!
+  it('turns a tool into a window and back, and a window can then be resized and placed like any other', () => {
+    const out = apply([{ type: 'expand_tool', component: 'picker' }]).state!
+    expect(docOf(out).expanded).toEqual(['picker'])
+    expect(toolbarTools(docOf(out))).toEqual(['role', 'generate'])
+    const resized = applyOn(out, [{ type: 'resize_component', component: 'picker', size: 'half' }, { type: 'move_component', component: 'picker', relativeTo: 'canvas', placement: 'below' }])
+    expect(resized.skipped).toEqual([])
+    expect(docOf(resized.state!).layout.find((p) => p.id === 'picker')?.w).toBe(12)
+    const back = applyOn(out, [{ type: 'collapse_tool', component: 'picker' }]).state!
+    expect(docOf(back).expanded).toEqual([])
+    expect(toolbarTools(docOf(back))).toEqual(['picker', 'role', 'generate'])
+  })
+
+  it('says when a tool is already a window or already in the toolbar, and keeps tools and windows apart for moves', () => {
+    const out = apply([{ type: 'expand_tool', component: 'picker' }]).state!
+    const why = (actions: TurnAction[]) => applyOn(out, actions).skipped.map((skipped) => skipped.reason)
+    expect(why([{ type: 'expand_tool', component: 'picker' }])[0]).toMatch(/already a window/)
+    expect(why([{ type: 'collapse_tool', component: 'role' }])[0]).toMatch(/already in the toolbar/)
+    expect(why([{ type: 'move_component', component: 'picker', relativeTo: 'role', placement: 'left_of' }])[0]).toMatch(/tool.*window/)
+    expect(why([{ type: 'move_component', component: 'role', relativeTo: 'generate', placement: 'right_of' }])).toEqual([])
+  })
+
+  it('resets the layout, bringing every tool back to the toolbar', () => {
+    const moved = apply([{ type: 'expand_tool', component: 'picker' }, { type: 'resize_component', component: 'canvas', size: 'half' }]).state!
     const reset = apply([{ type: 'reset_layout' }], moved).state!
     expect(docOf(reset).layout).toEqual(DEFAULT_LAYOUT)
-    expect(docOf(reset).sizes).toEqual({})
+    expect(docOf(reset).expanded).toEqual([])
   })
 })
 

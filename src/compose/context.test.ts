@@ -9,7 +9,7 @@ type Described = {
   pairsReachingAA: string
   harmony: string
   components: { id: string; onScreen: boolean; size?: string }[]
-  arrangement: string[][]
+  arrangement: { toolbar: string[]; windows: string[][] }
   saved: string
 }
 const describe_ = (snapshot = openSnapshot()) => describeWorkspace(snapshot) as unknown as Described
@@ -43,17 +43,24 @@ describe('describeWorkspace', () => {
     const d = describe_()
     expect(d.components.find((c) => c.id === 'canvas')).toMatchObject({ onScreen: true, size: 'full width' })
     expect(d.components.find((c) => c.id === 'preview')).toMatchObject({ onScreen: true, size: 'half the width' })
-    expect(d.components.find((c) => c.id === 'picker')).toMatchObject({ onScreen: true, size: 'compact' })
-    expect(d.arrangement).toEqual([['picker', 'role', 'generate'], ['canvas'], ['preview']])
+    expect(d.components.find((c) => c.id === 'picker')).toMatchObject({ onScreen: true, form: 'tool in the toolbar' })
+    expect(d.components.find((c) => c.id === 'canvas')).toMatchObject({ form: 'window' })
+    expect(d.arrangement).toEqual({ toolbar: ['picker', 'role', 'generate'], windows: [['canvas'], ['preview']] })
   })
 
-  it('shows a hidden component as off screen, and a large toolbar as large', () => {
+  it('shows a hidden component as off screen, and a tool that has been made a window as a window', () => {
     const snapshot = openSnapshot()
-    const d = describe_({ ...snapshot, hidden: ['preview'], sizes: { picker: 1 }, layout: snapshot.layout.filter((p) => p.id !== 'preview') })
+    const d = describe_({
+      ...snapshot,
+      hidden: ['preview'],
+      tools: ['role', 'generate'],
+      expanded: ['picker'],
+      layout: [...snapshot.layout.filter((p) => p.id !== 'preview'), { id: 'picker', col: 0, row: 20, w: 10 }],
+    })
     expect(d.components.find((c) => c.id === 'preview')).toEqual(expect.objectContaining({ onScreen: false }))
     expect(d.components.find((c) => c.id === 'preview')?.size).toBeUndefined()
-    expect(d.components.find((c) => c.id === 'picker')?.size).toBe('large')
-    expect(d.arrangement).toEqual([['picker', 'role', 'generate'], ['canvas']])
+    expect(d.components.find((c) => c.id === 'picker')).toMatchObject({ onScreen: true, form: 'window' })
+    expect(d.arrangement).toEqual({ toolbar: ['role', 'generate'], windows: [['canvas'], ['picker']] })
   })
 
   it('passes on the history and save state', () => {

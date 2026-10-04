@@ -1,4 +1,8 @@
 import { z } from 'zod'
+import { invoiceSnapshotSchema, invoiceTurnSchema, type InvoiceTurn } from './invoiceSpec.ts'
+import { TASKS, type Task } from './taskNames.ts'
+
+export { TASKS, type Task }
 
 // The output contract: what the model may return, and the only thing the app will act on. Defined once, here, so the
 // JSON schema sent to the model and the checks the app runs cannot drift apart.
@@ -7,13 +11,12 @@ import { z } from 'zod'
 // ones a person has on the interface, nothing more, and they are applied through the same reducer. The model chooses
 // and fills the interface. It never draws it, and it never saves: only the founder's Save commits to memory.
 
-export const TASKS = ['ideation', 'brand', 'logo', 'invoice', 'correspondence', 'chat'] as const
-export type Task = (typeof TASKS)[number]
-
 export const COLOUR_ROLES = ['primary', 'accent', 'background', 'text'] as const
 export const HARMONIES = ['analogous', 'complementary', 'triad', 'monochrome'] as const
 // Components the model can name. The canvas is the palette itself, so it can be moved and resized but not hidden.
 export const ALL_COMPONENTS = ['picker', 'role', 'generate', 'canvas', 'preview'] as const
+// The tools: compact in the toolbar, or a bigger window when they have been dragged out.
+export const TOOL_COMPONENTS = ['picker', 'role', 'generate'] as const
 export const HIDEABLE_COMPONENTS = ['picker', 'role', 'generate', 'preview'] as const
 
 const sentence = (max: number) => z.string().trim().min(1).max(max)
@@ -77,8 +80,16 @@ export const actionSchema = z.discriminatedUnion('type', [
     type: z.enum(['resize_component']),
     component: z.enum(ALL_COMPONENTS),
     size: z
-      .enum(['compact', 'large', 'third', 'half', 'two_thirds', 'full'])
-      .describe('Toolbars (picker, role, generate) are compact or large. Panels (canvas, preview) are third, half, two_thirds or full.'),
+      .enum(['third', 'half', 'two_thirds', 'full'])
+      .describe('The width of a window: canvas, preview, or a tool that has been made a window. A tool in the toolbar has one size.'),
+  }),
+  z.object({
+    type: z.enum(['expand_tool']),
+    component: z.enum(TOOL_COMPONENTS).describe('A tool to take out of the toolbar and make a bigger window.'),
+  }),
+  z.object({
+    type: z.enum(['collapse_tool']),
+    component: z.enum(TOOL_COMPONENTS).describe('A tool that is a window, to put back in the toolbar.'),
   }),
   z.object({ type: z.enum(['reset_layout']) }),
   z.object({ type: z.enum(['export_brand_sheet']) }),
@@ -99,6 +110,9 @@ export const turnSchema = z.object({
 })
 
 export type Turn = z.infer<typeof turnSchema>
+export type { InvoiceTurn }
+// A reply for either workspace.
+export type AnyTurn = Turn | InvoiceTurn
 
 const placementSchema = z.object({
   id: z.string().max(20),
@@ -124,9 +138,12 @@ export const workspaceSnapshotSchema = z.object({
   selectedId: z.number().int(),
   harmony: z.enum(HARMONIES),
   hidden: z.array(z.string().max(20)).max(10),
-  sizes: z.record(z.string().max(20), z.number().int().min(0).max(3)),
-  // Where each visible component is drawn now.
+  // Tools that are windows on the grid, not in the toolbar.
+  expanded: z.array(z.string().max(20)).max(10),
+  // Where each visible window is drawn now.
   layout: z.array(placementSchema).max(10),
+  // The tools in the toolbar, left to right, as far as they are visible.
+  tools: z.array(z.string().max(20)).max(10),
   canUndo: z.boolean(),
   canRedo: z.boolean(),
   saved: z.enum(['none', 'saved', 'unsaved']),
@@ -151,8 +168,12 @@ export const composeRequestSchema = z.object({
     .array(z.object({ role: z.enum(['founder', 'droplet']), text: z.string().trim().min(1).max(800) }))
     .max(MAX_HISTORY_MESSAGES)
     .optional(),
-  // Absent when no workspace is open yet.
+  // Which workspace is on screen. The composer works on that one: the palette (brand) or the invoice. Absent when none is open.
+  view: z.enum(['brand', 'invoice']).optional(),
+  // The palette workspace, when it is the one on screen.
   workspace: workspaceSnapshotSchema.optional(),
+  // The invoice workspace, when it is the one on screen.
+  invoice: invoiceSnapshotSchema.optional(),
   memory: paletteSnapshotSchema.optional(),
 })
 export type ComposeRequest = z.infer<typeof composeRequestSchema>
@@ -162,7 +183,8 @@ export type Outcome = (typeof OUTCOMES)[number]
 
 export const composeResponseSchema = z.object({
   outcome: z.enum(OUTCOMES),
-  turn: turnSchema,
+  // A reply for the palette workspace or for the invoice. A reply with no actions fits both.
+  turn: z.union([turnSchema, invoiceTurnSchema]),
   // Set when a simpler view was used, so the interface can say so.
   note: z.string().max(200).optional(),
 })
@@ -186,6 +208,21 @@ function simplify(node: unknown): unknown {
 }
 
 // The JSON schema for the model's reply, generated from the Zod contract above.
-export function turnJsonSchema(): Record<string, unknown> {
-  return simplify(z.toJSONSchema(turnSchema)) as Record<string, unknown>
+// The palette workspace's schema by default. The invoice has its own, with its own actions, so each stays small enough for the model
+// to take. Which one is used depends on which workspace is on screen.
+export function turnJsonSchema(view?: 'brand' | 'invoice'): Record<string, unknown> {
+  return simplify(z.toJSONSchema(view === 'invoice' ? invoiceTurnSchema : turnSchema)) as Record<string, unknown>
+}
+
+// Which actions in a reply are for which workspace. An action type belongs to one workspace, except undo and redo, which fit both.
+const INVOICE_ONLY = ['set_client', 'use_saved_client', 'set_terms', 'set_date', 'set_note', 'set_vat_registered', 'add_line', 'update_line', 'remove_line']
+export const isInvoiceAction = (action: { type: string }) => INVOICE_ONLY.includes(action.type)
+
+// Where a reply asks to be taken. The composer names the task (that is what it is for), and when that task belongs to the other
+// workspace and there is nothing to do yet, the app opens that workspace and asks again with it in front of the composer.
+export function routedTo(turn: AnyTurn, view?: 'brand' | 'invoice'): 'brand' | 'invoice' | null {
+  if (turn.actions.length > 0) return null
+  if (turn.task === 'invoice' && view !== 'invoice') return 'invoice'
+  if (turn.task === 'brand' && view === 'invoice') return 'brand'
+  return null
 }

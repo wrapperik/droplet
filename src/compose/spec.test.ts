@@ -33,6 +33,10 @@ describe('turnSchema', () => {
     expect(turn({ type: 'move_component', component: 'preview', relativeTo: 'canvas', placement: 'diagonally' })).toBe(false)
     expect(turn({ type: 'hide_component', component: 'canvas' })).toBe(false)
     expect(turn({ type: 'resize_component', component: 'canvas', size: 'half' })).toBe(true)
+    expect(turn({ type: 'resize_component', component: 'picker', size: 'large' })).toBe(false)
+    expect(turn({ type: 'expand_tool', component: 'picker' })).toBe(true)
+    expect(turn({ type: 'collapse_tool', component: 'role' })).toBe(true)
+    expect(turn({ type: 'expand_tool', component: 'canvas' })).toBe(false)
     expect(turn({ type: 'set_palette', colours: [{ hex: '#000000', name: 'a', rationale: 'b' }], reason: 'x' })).toBe(false)
   })
 

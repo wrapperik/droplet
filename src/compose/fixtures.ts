@@ -1,4 +1,9 @@
+import { emptyClient, newContent } from '../lib/invoice.ts'
+import { openInvoiceWorkspace } from '../lib/invoiceState.ts'
+import { emptyMemory, withClient } from '../lib/projectMemory.ts'
 import { openWorkspace } from '../lib/workspaceState.ts'
+import { snapshotOfInvoice } from './invoiceSnapshot.ts'
+import type { InvoiceSnapshot } from './invoiceSpec.ts'
 import { snapshotOfState } from './snapshot.ts'
 import type { Turn, WorkspaceSnapshot } from './spec.ts'
 
@@ -40,10 +45,13 @@ export const openSnapshot = (): WorkspaceSnapshot => {
     { id: 4, hex: '#0E1A2B' },
   ])
   return snapshotOfState(state, [
-    { id: 'picker', col: 0, row: 0, w: 7 },
-    { id: 'role', col: 7, row: 0, w: 8 },
-    { id: 'generate', col: 15, row: 0, w: 8 },
-    { id: 'canvas', col: 0, row: 10, w: 24 },
-    { id: 'preview', col: 0, row: 30, w: 12 },
+    { id: 'canvas', col: 0, row: 0, w: 24 },
+    { id: 'preview', col: 0, row: 20, w: 12 },
   ], 'none')
+}
+
+// A new invoice open in the workspace, dated 4 October 2026, in a project that remembers one client.
+export const openInvoiceSnapshot = (): InvoiceSnapshot => {
+  const memory = withClient(emptyMemory(), { ...emptyClient(), name: 'Pretoria Print Works', address: '5 Church Square' }, '2026-10-01T10:00', 'c1')
+  return snapshotOfInvoice(openInvoiceWorkspace(newContent('2026-10-04', 'INV-0007'), null, 'i1'), memory, '2026-10-04')
 }

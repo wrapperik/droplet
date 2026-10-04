@@ -1,7 +1,7 @@
 import { contrastRatio, hexToRgb } from '../lib/colour.ts'
 import { widthLabel } from '../lib/gridLayout.ts'
 import { resolveRoles, summarisePairs } from '../lib/palette.ts'
-import { COMPONENTS, TOOLBAR_VERSIONS, kindOf } from '../lib/workspaceState.ts'
+import { COMPONENTS, kindOf } from '../lib/workspaceState.ts'
 import { COLOUR_ROLES, type WorkspaceSnapshot } from './spec.ts'
 
 // What the model is shown about the workspace: the founder's own view of it, in words and numbers the model can
@@ -18,7 +18,7 @@ export function describeWorkspace(snapshot: WorkspaceSnapshot): Record<string, u
   const key = ratio(roles.text.hex, roles.background.hex)
   const { total, passing } = summarisePairs(blocks)
 
-  const shown = new Set(snapshot.layout.map((p) => p.id))
+  const shown = new Set([...snapshot.layout.map((p) => p.id), ...snapshot.tools])
   const rows = new Map<number, typeof snapshot.layout>()
   for (const placement of snapshot.layout) rows.set(placement.row, [...(rows.get(placement.row) ?? []), placement])
 
@@ -41,18 +41,21 @@ export function describeWorkspace(snapshot: WorkspaceSnapshot): Record<string, u
     harmony: snapshot.harmony,
     components: COMPONENTS.map((c) => {
       const placement = snapshot.layout.find((p) => p.id === c.id)
+      const isTool = snapshot.tools.includes(c.id)
       return {
         id: c.id,
         name: c.label,
         onScreen: shown.has(c.id),
-        ...(shown.has(c.id)
-          ? { size: c.kind === 'panel' && placement ? widthLabel(placement.w) : TOOLBAR_VERSIONS[snapshot.sizes[c.id] ?? 0].toLowerCase() }
-          : {}),
+        // Where it is: in the toolbar, or a window on the grid.
+        ...(shown.has(c.id) ? { form: isTool ? 'tool in the toolbar' : 'window', ...(placement ? { size: widthLabel(placement.w) } : {}) } : {}),
         kind: kindOf(c.id),
       }
     }),
-    // Top to bottom, and left to right within a row.
-    arrangement: [...rows.entries()].sort(([a], [b]) => a - b).map(([, items]) => [...items].sort((a, b) => a.col - b.col).map((p) => p.id)),
+    // The tools in the toolbar, left to right, and the windows on the grid: top to bottom, and left to right within a row.
+    arrangement: {
+      toolbar: snapshot.tools,
+      windows: [...rows.entries()].sort(([a], [b]) => a - b).map(([, items]) => [...items].sort((a, b) => a.col - b.col).map((p) => p.id)),
+    },
     canUndo: snapshot.canUndo,
     canRedo: snapshot.canRedo,
     saved: snapshot.saved,

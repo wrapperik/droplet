@@ -38,6 +38,7 @@ async function run(test: TestRequest): Promise<Row> {
     if (test.expect.firstAction && !test.expect.firstAction.includes(turn.actions[0]?.type ?? 'none')) {
       problems.push(`first action was "${turn.actions[0]?.type ?? 'none'}", expected one of ${test.expect.firstAction.join(', ')}`)
     }
+    if (test.expect.noPrice && JSON.stringify(turn.actions).includes('unitPrice')) problems.push('an action set a price, but the founder gave none')
     if (test.expect.messageMustNotInclude && turn.message.toLowerCase().includes(test.expect.messageMustNotInclude)) {
       problems.push(`the message includes "${test.expect.messageMustNotInclude}"`)
     }
