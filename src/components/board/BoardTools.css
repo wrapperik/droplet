@@ -1,0 +1,239 @@
+.boardtool__toggle {
+  height: 2.25rem;
+  padding: 0 0.875rem;
+  border: 1px solid var(--overlay-10);
+  border-radius: var(--radius-pill);
+  background: var(--overlay-06);
+  font-size: 0.875rem;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.boardtool__toggle:hover {
+  background: var(--accent-tint-soft);
+}
+
+/* The tool in hand. It is a button that is pressed, so it is told by its weight and its fill as well as its colour. */
+.boardtool__toggle[aria-pressed='true'] {
+  border-color: transparent;
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+.boardtool__colours {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.boardtool__colour {
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  border: 1px solid var(--overlay-10);
+  border-radius: 50%;
+  background: var(--note-yellow);
+}
+
+.boardtool__colour[data-colour='mint'] {
+  background: var(--note-mint);
+}
+.boardtool__colour[data-colour='sky'] {
+  background: var(--note-sky);
+}
+.boardtool__colour[data-colour='lilac'] {
+  background: var(--note-lilac);
+}
+.boardtool__colour[data-colour='peach'] {
+  background: var(--note-peach);
+}
+.boardtool__colour[data-colour='grey'] {
+  background: var(--note-grey);
+}
+
+.boardtool__colour[aria-checked='true'] {
+  box-shadow:
+    0 0 0 2px var(--canvas),
+    0 0 0 4px var(--focus);
+}
+
+.boardtool__add {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.boardtool__add:hover,
+.boardtool__add:focus-visible {
+  background: var(--overlay-06);
+  color: var(--text);
+}
+
+/* The kinds of shape, drawn in CSS from the shape they are. */
+.boardtool__kinds {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.boardtool__kind {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.boardtool__kind:hover {
+  background: var(--overlay-06);
+}
+
+.boardtool__kind[aria-checked='true'] {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+.boardtool__kind span {
+  display: block;
+  width: 1rem;
+  height: 0.75rem;
+  border: 2px solid currentcolor;
+}
+
+.boardtool__kind[data-shape='rectangle'] span {
+  border-radius: 1px;
+}
+.boardtool__kind[data-shape='rounded'] span {
+  border-radius: 5px;
+}
+.boardtool__kind[data-shape='ellipse'] span {
+  border-radius: 50%;
+}
+.boardtool__kind[data-shape='diamond'] span {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 1px;
+  transform: rotate(45deg) scale(0.85);
+}
+
+.boardtool__styles {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.boardtool__style {
+  height: 1.75rem;
+  padding: 0 0.625rem;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.boardtool__style:hover {
+  background: var(--overlay-06);
+}
+
+.boardtool__style[aria-checked='true'] {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+/* ---- Templates ---- */
+
+.templates {
+  position: relative;
+}
+
+.templates__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.templates__menu {
+  position: absolute;
+  top: calc(100% + 0.625rem);
+  left: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  width: min(25rem, calc(100vw - 2rem));
+  max-height: min(34rem, 70dvh);
+  padding: 0.375rem;
+  overflow-y: auto;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.templates__item {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  text-align: left;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.templates__item:hover,
+.templates__item:focus-visible {
+  background: var(--accent-tint-soft);
+}
+
+/* A small drawing of the layout: its frames, where they will be. */
+.templates__preview {
+  position: relative;
+  flex: none;
+  width: 4.75rem;
+  max-height: 3.25rem;
+  border-radius: 6px;
+  background: var(--overlay-06);
+  overflow: hidden;
+}
+
+.templates__preview i {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1.5px solid color-mix(in srgb, var(--text-muted) 70%, transparent);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.templates__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.templates__name {
+  font-weight: 600;
+}
+
+.templates__summary {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.35;
+}
+
+.templates__note {
+  margin: 0.25rem 0.625rem 0.375rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}

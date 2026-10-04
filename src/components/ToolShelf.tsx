@@ -15,6 +15,8 @@ export type ShelfTool = {
   node?: ReactNode
   // In steps mode: whether the part of the work this tool stands for is complete. Left out when it has nothing to complete.
   done?: boolean
+  // A tool with no bigger form to be dragged out into (such as the tool in hand on a board). It can still be moved along the bar.
+  fixed?: boolean
 }
 
 // What the workspace can ask of the toolbar while a window is carried towards it.
@@ -237,16 +239,17 @@ export default function ToolShelf({ tools, onMove, onOutside, onExpand, controlR
       // would land. Carried back up, it goes back in.
       const bar = shelfRef.current?.getBoundingClientRect()
       const below = !!bar && y > bar.bottom + PULL_OUT_PX
-      // In steps mode a tool that is already a window cannot be pulled out again, and carrying it below the bar changes nothing.
-      const pinned = latest.current.steps && latest.current.open.includes(run.id)
+      // In steps mode a tool that is already a window cannot be pulled out again, and neither can a fixed tool. Carrying one below the bar
+      // changes nothing.
+      const pinned = (latest.current.steps && latest.current.open.includes(run.id)) || !!byId.get(run.id)?.fixed
       const outside = below && !pinned
       if (outside !== run.outside) {
         run.outside = outside
         if (!outside) latest.current.onOutside(null)
       }
       if (below) {
-        // The tool leaves the bar (the others close the gap), except in steps mode, where it stays in its place.
-        const kept = latest.current.steps ? [...latest.current.committed] : latest.current.committed.filter((other) => other !== run.id)
+        // The tool leaves the bar (the others close the gap), except in steps mode and for a tool that cannot leave, where it stays in its place.
+        const kept = latest.current.steps || pinned ? [...latest.current.committed] : latest.current.committed.filter((other) => other !== run.id)
         if (run.draft.join() !== kept.join()) {
           run.draft = kept
           setDraft(kept)

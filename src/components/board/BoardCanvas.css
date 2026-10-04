@@ -1,0 +1,818 @@
+/* The board: a fixed area with a clear edge, seen through a view that scrolls. Sizes inside the world are in board units (pixels at 100
+   percent), and the world is scaled to the zoom, so a note is the same shape at every zoom. */
+.board {
+  position: relative;
+  height: clamp(28rem, 66dvh, 50rem);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.board--busy {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* The view. What is outside the board is a quiet grey, so the board stands out from it. */
+.board__viewport {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  border-radius: inherit;
+  background: var(--overlay-06);
+  overscroll-behavior: contain;
+}
+
+.board__viewport:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.board__sizer {
+  position: relative;
+}
+
+/* The board itself: paper with a grid of dots, and an edge that cannot be missed, since nothing goes past it. */
+.board__surface {
+  position: absolute;
+  border-radius: 4px;
+  background-color: var(--canvas);
+  background-image: radial-gradient(circle at center, color-mix(in srgb, var(--text-muted) 42%, transparent) 1.2px, transparent 1.7px);
+  background-size: var(--cell) var(--cell);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--text-muted) 55%, transparent),
+    var(--shadow-md);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.board--sticky .board__surface {
+  cursor: crosshair;
+}
+
+.board--pan-ready .board__surface,
+.board--pan-ready .note {
+  cursor: grab;
+}
+
+.board__world {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+
+.note {
+  position: absolute;
+  box-sizing: border-box;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: var(--note-yellow);
+  box-shadow:
+    0 1px 1px rgb(14 26 43 / 0.08),
+    0 8px 18px rgb(14 26 43 / 0.14);
+  color: var(--note-ink);
+  font-size: 18px;
+  line-height: 1.35;
+  cursor: grab;
+  overflow: hidden;
+}
+
+.note[data-colour='mint'] {
+  background: var(--note-mint);
+}
+.note[data-colour='sky'] {
+  background: var(--note-sky);
+}
+.note[data-colour='lilac'] {
+  background: var(--note-lilac);
+}
+.note[data-colour='peach'] {
+  background: var(--note-peach);
+}
+.note[data-colour='grey'] {
+  background: var(--note-grey);
+}
+.note[data-colour='pink'] {
+  background: var(--note-pink);
+}
+
+/* The outline is drawn inside the note, since the note clips what is outside it. */
+.note[data-selected],
+.note:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: -3px;
+}
+
+.note:focus-visible:not([data-selected]) {
+  outline-style: dashed;
+}
+
+.note[data-dragging],
+.shape[data-dragging],
+.textitem[data-dragging] {
+  z-index: 5;
+  cursor: grabbing;
+}
+
+.note[data-dragging] {
+  box-shadow: var(--shadow-lg);
+}
+
+.item-text {
+  height: 100%;
+  white-space: pre-wrap;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+/* The field the words are written in: it is the words, in the same place and the same type, so writing does not change how it looks. */
+.item-text__field {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  text-align: inherit;
+  resize: none;
+  cursor: text;
+}
+
+.item-text__field:focus-visible {
+  outline: none;
+}
+
+.item-text__placeholder {
+  font-style: italic;
+  opacity: 0.55;
+}
+
+/* Droplet's notes say so in words as well as in pink. */
+.note__author {
+  position: absolute;
+  right: 14px;
+  bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  opacity: 0.7;
+}
+
+.resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 26px;
+  height: 26px;
+  background: linear-gradient(135deg, transparent 50%, color-mix(in srgb, var(--note-ink) 45%, transparent) 50%, color-mix(in srgb, var(--note-ink) 45%, transparent) 58%, transparent 58%, transparent 70%, color-mix(in srgb, var(--note-ink) 45%, transparent) 70%, color-mix(in srgb, var(--note-ink) 45%, transparent) 78%, transparent 78%);
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.board__marquee {
+  position: absolute;
+  border: 1px solid var(--focus);
+  background: color-mix(in srgb, var(--focus) 12%, transparent);
+  pointer-events: none;
+}
+
+/* The bar over the selection, at the size of the screen and not of the zoom. */
+.board__bar {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.625rem;
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-md);
+}
+
+.board__colours {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.board__colour {
+  width: 1.375rem;
+  height: 1.375rem;
+  padding: 0;
+  border: 1px solid var(--overlay-10);
+  border-radius: 50%;
+  background: var(--note-yellow);
+}
+
+.board__colour[data-colour='mint'] {
+  background: var(--note-mint);
+}
+.board__colour[data-colour='sky'] {
+  background: var(--note-sky);
+}
+.board__colour[data-colour='lilac'] {
+  background: var(--note-lilac);
+}
+.board__colour[data-colour='peach'] {
+  background: var(--note-peach);
+}
+.board__colour[data-colour='grey'] {
+  background: var(--note-grey);
+}
+
+.board__colour[aria-pressed='true'] {
+  box-shadow:
+    0 0 0 2px var(--canvas),
+    0 0 0 4px var(--focus);
+}
+
+.board__delete {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.board__delete:hover,
+.board__delete:focus-visible {
+  background: var(--overlay-06);
+  color: var(--text);
+}
+
+.board__zoom {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+  padding: 0.25rem;
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-md);
+}
+
+.board__zoom button {
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0 0.5rem;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.board__zoom button:hover,
+.board__zoom button:focus-visible {
+  background: var(--accent-tint-soft);
+}
+
+.board__zoom-value {
+  min-width: 3.25rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.board__zoom-fit {
+  color: var(--accent);
+}
+
+/* ---- Shapes ---- */
+
+.shape,
+.textitem,
+.frame {
+  position: absolute;
+  box-sizing: border-box;
+  cursor: grab;
+}
+
+.shape {
+  color: var(--note-ink);
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.shape {
+  /* The one fill of a shape, which its body and a diamond's polygon both use. */
+  --shape-fill: var(--note-white);
+}
+.shape[data-colour='yellow'] {
+  --shape-fill: var(--note-yellow);
+}
+.shape[data-colour='mint'] {
+  --shape-fill: var(--note-mint);
+}
+.shape[data-colour='sky'] {
+  --shape-fill: var(--note-sky);
+}
+.shape[data-colour='lilac'] {
+  --shape-fill: var(--note-lilac);
+}
+.shape[data-colour='peach'] {
+  --shape-fill: var(--note-peach);
+}
+.shape[data-colour='grey'] {
+  --shape-fill: var(--note-grey);
+}
+
+.shape__body {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  border: 2px solid color-mix(in srgb, var(--note-ink) 60%, transparent);
+  background: var(--shape-fill);
+  box-shadow: 0 6px 14px rgb(14 26 43 / 0.1);
+}
+
+.shape__body[data-shape='rectangle'] {
+  border-radius: 3px;
+}
+.shape__body[data-shape='rounded'] {
+  border-radius: 28px;
+}
+.shape__body[data-shape='ellipse'] {
+  border-radius: 50%;
+}
+
+/* A diamond cannot be drawn with a border and a radius, so it is a polygon that fills its box. The box itself is left clear: only the polygon is
+   filled, or a coloured diamond would sit on a coloured rectangle. */
+.shape__body--diamond {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  overflow: visible;
+  filter: drop-shadow(0 6px 8px rgb(14 26 43 / 0.1));
+}
+
+.shape__body--diamond polygon {
+  fill: var(--shape-fill);
+  stroke: color-mix(in srgb, var(--note-ink) 60%, transparent);
+  stroke-width: 2px;
+}
+
+/* The words sit in the middle, kept inside the outline: an ellipse and a diamond are narrower at the top and bottom. */
+.shape__text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+  overflow: hidden;
+  text-align: center;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.shape__text[data-shape='ellipse'] {
+  padding: 14% 16%;
+}
+.shape__text[data-shape='diamond'] {
+  padding: 22% 24%;
+}
+.shape__text[data-shape='rounded'] {
+  padding: 12px 20px;
+}
+
+.item-text__field--centred {
+  text-align: center;
+  height: auto;
+  max-height: 100%;
+  field-sizing: content;
+}
+
+.shape[data-selected] .shape__body {
+  border-color: var(--focus);
+}
+
+.shape[data-selected] .shape__body--diamond polygon {
+  stroke: var(--focus);
+}
+
+.shape:focus-visible,
+.textitem:focus-visible,
+.frame:focus-visible {
+  outline: 3px dashed var(--focus);
+  outline-offset: 3px;
+}
+
+/* ---- Text ---- */
+
+.textitem {
+  color: var(--text);
+  border: 2px dashed transparent;
+  border-radius: 6px;
+}
+
+.textitem[data-selected] {
+  border-color: var(--focus);
+}
+
+.textitem__text {
+  height: 100%;
+  padding: 4px 6px;
+  overflow: hidden;
+  font-size: 22px;
+  line-height: 1.3;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.textitem__text[data-size='title'] {
+  font-size: 44px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+
+.textitem__text .item-text__field {
+  font-weight: inherit;
+}
+
+/* ---- Frames ---- */
+
+/* The inside of a frame is not something to press: a press there is a press on the board. Only the title and the border are the frame's. */
+.frame {
+  pointer-events: none;
+  border-radius: 10px;
+  background: var(--overlay-06);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--text-muted) 40%, transparent);
+}
+
+.frame[data-colour='yellow'] {
+  background: color-mix(in srgb, var(--note-yellow) 38%, transparent);
+}
+.frame[data-colour='mint'] {
+  background: color-mix(in srgb, var(--note-mint) 38%, transparent);
+}
+.frame[data-colour='sky'] {
+  background: color-mix(in srgb, var(--note-sky) 38%, transparent);
+}
+.frame[data-colour='lilac'] {
+  background: color-mix(in srgb, var(--note-lilac) 38%, transparent);
+}
+.frame[data-colour='peach'] {
+  background: color-mix(in srgb, var(--note-peach) 38%, transparent);
+}
+.frame[data-colour='grey'] {
+  background: color-mix(in srgb, var(--note-grey) 38%, transparent);
+}
+
+.frame[data-selected] {
+  box-shadow: inset 0 0 0 3px var(--focus);
+}
+
+.frame__edge {
+  position: absolute;
+  pointer-events: auto;
+}
+
+.frame__edge--top,
+.frame__edge--bottom {
+  left: 0;
+  right: 0;
+  height: 16px;
+}
+.frame__edge--top {
+  top: 0;
+}
+.frame__edge--bottom {
+  bottom: 0;
+}
+.frame__edge--left,
+.frame__edge--right {
+  top: 0;
+  bottom: 0;
+  width: 16px;
+}
+.frame__edge--left {
+  left: 0;
+}
+.frame__edge--right {
+  right: 0;
+}
+
+.frame__title {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  max-width: 100%;
+  padding: 2px 6px;
+  overflow: hidden;
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: auto;
+}
+
+.frame__title--editing {
+  width: min(100%, 480px);
+  border: 2px solid var(--focus);
+  background: var(--canvas);
+  font: inherit;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.frame__title--editing:focus-visible {
+  outline: none;
+}
+
+.frame .resize-handle {
+  pointer-events: auto;
+}
+
+/* ---- Arrows ---- */
+
+.connectors {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.connector {
+  outline: none;
+}
+
+.connector__line {
+  fill: none;
+  stroke: color-mix(in srgb, var(--text) 72%, transparent);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+/* The line that is pressed is wider than the line that is drawn, so an arrow is easy to hit. */
+.connector__hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 28;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.connector[data-selected] .connector__line,
+.connector:focus-visible .connector__line {
+  stroke: var(--focus);
+  stroke-width: 4;
+}
+
+.connector:focus-visible:not([data-selected]) .connector__line {
+  stroke-dasharray: 10 6;
+}
+
+.connector__line--draft {
+  stroke: var(--focus);
+  stroke-dasharray: 10 8;
+}
+
+.connectors__head {
+  fill: color-mix(in srgb, var(--text) 72%, transparent);
+}
+
+.connectors__head--on {
+  fill: var(--focus);
+}
+
+.connector__handle {
+  fill: var(--canvas);
+  stroke: var(--focus);
+  stroke-width: 3;
+  pointer-events: all;
+  cursor: move;
+}
+
+.connector__label {
+  position: absolute;
+  z-index: 1;
+  max-width: 240px;
+  padding: 3px 10px;
+  border: 1px solid var(--overlay-10);
+  border-radius: 999px;
+  background: var(--canvas);
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.3;
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+}
+
+.connector__label[data-selected] {
+  border-color: var(--focus);
+}
+
+.connector__label-field {
+  width: 160px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: center;
+}
+
+.connector__label-field:focus-visible {
+  outline: none;
+}
+
+/* The outline round what the end of an arrow would land on. */
+.connect-target {
+  position: absolute;
+  box-sizing: border-box;
+  border: 3px solid var(--focus);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--focus) 10%, transparent);
+  pointer-events: none;
+}
+
+/* The dots on the sides of the selected thing, which an arrow is pulled from. */
+.dot {
+  position: absolute;
+  z-index: 4;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  border: 3px solid var(--focus);
+  border-radius: 50%;
+  background: var(--canvas);
+  cursor: crosshair;
+}
+
+.dot:hover {
+  background: var(--focus);
+}
+
+.board--create .board__surface,
+.board--arrow .board__surface {
+  cursor: crosshair;
+}
+
+.board--arrow .note,
+.board--arrow .shape,
+.board--arrow .textitem,
+.board--create .note,
+.board--create .shape,
+.board--create .textitem {
+  cursor: crosshair;
+}
+
+.board__marquee--draw {
+  border-style: dashed;
+  border-width: 2px;
+}
+
+/* The bar over the selection: more of it for more kinds of thing. */
+.board__choices {
+  display: flex;
+  gap: 0.125rem;
+}
+
+.board__choice,
+.board__icon {
+  display: grid;
+  place-items: center;
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0 0.5rem;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.board__icon {
+  width: 2rem;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.board__choice:hover,
+.board__icon:hover,
+.board__choice:focus-visible,
+.board__icon:focus-visible {
+  background: var(--overlay-06);
+  color: var(--text);
+}
+
+.board__choice[aria-pressed='true'] {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+.board__choice--shape span {
+  display: block;
+  width: 1rem;
+  height: 0.75rem;
+  border: 2px solid currentcolor;
+}
+.board__choice--shape[data-shape='rectangle'] span {
+  border-radius: 1px;
+}
+.board__choice--shape[data-shape='rounded'] span {
+  border-radius: 5px;
+}
+.board__choice--shape[data-shape='ellipse'] span {
+  border-radius: 50%;
+}
+.board__choice--shape[data-shape='diamond'] span {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 1px;
+  transform: rotate(45deg) scale(0.85);
+}
+
+.board__colour[data-colour='white'] {
+  background: var(--note-white);
+}
+
+.board__small {
+  height: 2rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--overlay-10);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.board__small:hover,
+.board__small:focus-visible {
+  background: var(--accent-tint-soft);
+}
+
+.board__small:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.board__small--danger {
+  border-color: transparent;
+  background: var(--button);
+  color: var(--on-button);
+}
+
+.board__ask {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ---- Prompts from a template ----
+   A note or shape with a hint and nothing written in it is a guide: dashed and a little faded, so it reads as a place to write and not as
+   something already said. Writing in it makes it an ordinary one. */
+.note[data-guide]:not([data-selected]) {
+  outline: 2px dashed color-mix(in srgb, var(--note-ink) 38%, transparent);
+  outline-offset: -4px;
+  box-shadow: none;
+}
+
+.note[data-guide] .item-text__placeholder,
+.shape[data-guide] .item-text__placeholder,
+.textitem[data-guide] .item-text__placeholder {
+  font-style: normal;
+  opacity: 0.62;
+}
+
+.note[data-guide]:not([data-selected]) .item-text {
+  opacity: 0.9;
+}
+
+.shape[data-guide] .shape__body {
+  border-style: dashed;
+}
+
+.shape[data-guide] .shape__body--diamond polygon {
+  stroke-dasharray: 10 6;
+}
+
+.textitem[data-guide]:not([data-selected]) {
+  border-color: color-mix(in srgb, var(--text) 28%, transparent);
+}
+
+.item-text__field::placeholder {
+  color: inherit;
+  opacity: 0.55;
+}
