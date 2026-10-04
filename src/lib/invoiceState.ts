@@ -40,8 +40,8 @@ export const INVOICE_COMPONENTS: ArrangementSpec['components'] = [
 ]
 
 export const INVOICE_WINDOW_SIZES: ArrangementSpec['windowSizes'] = {
-  document: { w: 12, heightPx: 620 },
-  lines: { w: 12, heightPx: 340 },
+  document: { w: 14, heightPx: 900 },
+  lines: { w: 10, heightPx: 340 },
   invoices: { w: 8, heightPx: 420 },
   business: { w: 8, heightPx: 560 },
   client: { w: 8, heightPx: 460 },
@@ -54,7 +54,7 @@ export const INVOICE_WINDOW_SIZES: ArrangementSpec['windowSizes'] = {
 // The invoice document beside the line items. The tools also have a place on the grid, kept for when they are dragged out.
 export const INVOICE_LAYOUT: Placement[] = [
   { id: 'document', col: 0, row: 0, w: INVOICE_WINDOW_SIZES.document.w },
-  { id: 'lines', col: 12, row: 0, w: INVOICE_WINDOW_SIZES.lines.w },
+  { id: 'lines', col: 14, row: 0, w: INVOICE_WINDOW_SIZES.lines.w },
   { id: 'invoices', col: 16, row: 120, w: INVOICE_WINDOW_SIZES.invoices.w },
   { id: 'business', col: 0, row: 60, w: INVOICE_WINDOW_SIZES.business.w },
   { id: 'client', col: 8, row: 60, w: INVOICE_WINDOW_SIZES.client.w },

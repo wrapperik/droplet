@@ -15,7 +15,7 @@ type Props = {
 
 const Part = ({ text }: { text: Text }) => (text.placeholder ? <span className="paper__placeholder">{text.text}</span> : <>{text.text}</>)
 
-// The invoice as a page, in the founder's brand, the way the client will read it. It is made from the same words as the PDF
+// The invoice as a page, in the founder's brand, laid out as it will print (A4, the PDF's own proportions: see the CSS). It is made from the same words as the PDF
 // (`invoiceView`). A part that is not filled in yet shows a faded placeholder, so the page looks like an invoice from the first
 // moment and says what is still to come. The colours are set as custom properties and used only inside the page.
 export default function InvoiceDocument({ content, roles, reason }: Props) {
@@ -146,6 +146,7 @@ export default function InvoiceDocument({ content, roles, reason }: Props) {
           {view.notes && <p className="paper__notes">{view.notes}</p>}
         </div>
       </article>
+      <p className="paper-note">Shown as it will print on A4.</p>
     </ToolWindow>
   )
 }
