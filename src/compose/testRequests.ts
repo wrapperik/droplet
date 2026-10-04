@@ -16,6 +16,10 @@ export type Expectation = {
   messageMustNotInclude?: string
   // No action may set a price: the founder gave none.
   noPrice?: boolean
+  // The reply asks a follow-up question (true) or does not (false). Left out where either is fine.
+  asks?: boolean
+  // The message is laid out as a list.
+  list?: boolean
 }
 
 export type TestRequest = { id: string; why: string; request: ComposeRequest; expect: Expectation }
@@ -47,19 +51,31 @@ export const TEST_REQUESTS: TestRequest[] = [
     id: 'palette-vague',
     why: 'A vague request: it should act sensibly and say what it assumed',
     request: { intent: 'colour palette' },
-    expect: { task: 'brand', acts: true, firstAction: ['set_palette'] },
+    expect: { task: 'brand', acts: true, firstAction: ['set_palette'], asks: true },
   },
   {
     id: 'chat-pricing',
     why: 'Ordinary conversation: it should answer and leave the screen alone',
     request: { intent: 'How should I think about pricing my gift boxes?' },
-    expect: { task: 'ideation', acts: false },
+    expect: { task: 'ideation', acts: false, asks: true },
   },
   {
     id: 'chat-greeting',
     why: 'A greeting with no workspace open',
     request: { intent: 'Hi, what can you help me with?' },
-    expect: { task: 'chat', acts: false },
+    expect: { task: 'chat', acts: false, asks: true },
+  },
+  {
+    id: 'chat-names',
+    why: 'Several options asked for: the message should be a list, and it should ask which way to go',
+    request: { intent: 'Give me three name ideas for a corporate gift box business' },
+    expect: { task: 'ideation', acts: false, asks: true, list: true },
+  },
+  {
+    id: 'chat-thanks',
+    why: 'The founder is finished: it should say so briefly and not ask a question to keep things going',
+    request: { intent: 'Thanks, that is all I need for now', history: [{ role: 'founder', text: 'Is my text readable?' }, { role: 'droplet', text: 'Yes, it reaches 12.7:1.' }] },
+    expect: { task: 'chat', acts: false, asks: false },
   },
   {
     id: 'advice-readable',
@@ -148,13 +164,19 @@ export const TEST_REQUESTS: TestRequest[] = [
     id: 'invoice-no-price',
     why: 'No price was given: the line must be added without one, and the message must say it needs one',
     request: { intent: 'Add 12 printed card inserts to the invoice', view: 'invoice', invoice },
-    expect: { task: 'invoice', acts: true, firstAction: ['add_line'], noPrice: true },
+    expect: { task: 'invoice', acts: true, firstAction: ['add_line'], noPrice: true, asks: true },
+  },
+  {
+    id: 'invoice-bare',
+    why: 'Nothing to go on: it should change nothing and ask who the invoice is for and what for, not guess',
+    request: { intent: 'I need to invoice someone', view: 'invoice', invoice },
+    expect: { task: 'invoice', acts: false, asks: true },
   },
   {
     id: 'invoice-advice-needs',
     why: 'Advice about the invoice: say what is still needed, from the app\'s own list, and change nothing',
     request: { intent: 'What does this invoice still need before I can send it?', view: 'invoice', invoice },
-    expect: { task: 'invoice', acts: false },
+    expect: { task: 'invoice', acts: false, asks: true },
   },
   {
     id: 'invoice-undo',

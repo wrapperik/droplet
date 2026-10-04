@@ -1,7 +1,7 @@
 import { openWorkspace } from '../lib/workspaceState.ts'
 import { applyTurnActions } from './applyActions.ts'
 import { stateOfSnapshot } from './snapshot.ts'
-import { applyInvoiceTurnActions } from './invoiceActions.ts'
+import { amountsIn, applyInvoiceTurnActions, priceWasGiven } from './invoiceActions.ts'
 import type { InvoiceSnapshot } from './invoiceSpec.ts'
 import { stateOfInvoiceSnapshot } from './invoiceSnapshot.ts'
 import { isInvoiceAction, type AnyTurn, type ComposeRequest, type InvoiceTurn, type Turn, type WorkspaceSnapshot } from './spec.ts'
@@ -50,10 +50,32 @@ export function checkInvoiceTurn(turn: InvoiceTurn, invoice: InvoiceSnapshot | u
   return result.skipped.map((skipped) => `Action ${skipped.position + 1} (${skipped.action.type}): ${skipped.reason}`)
 }
 
+// A rand amount written in a suggested reply, such as "R450" or "250 rand".
+const RAND_AMOUNT = /\bR\s?\d|\d\s?(?:rand|zar)\b/i
+
+// The conversation part of a reply: a question is a question, replies belong to it, and on the invoice a reply never puts a price in the
+// founder's mouth. A tapped reply is sent as the founder's own words, so a suggested figure would pass the check that prices come from them.
+export function checkConversation(turn: AnyTurn, request: Pick<ComposeRequest, 'intent' | 'history' | 'view'>): string[] {
+  const errors: string[] = []
+  const { question, replies } = turn
+  if (question && !question.endsWith('?')) errors.push('question: it must be a question and end with a question mark. Put statements in the message.')
+  if (replies && replies.length > 0) {
+    if (!question) errors.push('replies: give replies only with a question. Add the question or leave the replies out.')
+    if (new Set(replies.map((reply) => reply.toLowerCase())).size < replies.length) errors.push('replies: each reply must be different.')
+    if (request.view === 'invoice') {
+      const founderText = founderTextOf(request)
+      const suggested = replies.some((reply) => RAND_AMOUNT.test(reply) && [...amountsIn(reply)].some((cents) => !priceWasGiven(cents, founderText)))
+      if (suggested) errors.push('replies: never suggest a price. Prices come only from the founder. Leave out any reply with an amount.')
+    }
+  }
+  return errors
+}
+
 // A reply checked for whichever workspace the request was about: the invoice, or the palette.
 export function checkTurnFor(turn: AnyTurn, request: ComposeRequest): string[] {
-  if (request.view === 'invoice') return checkInvoiceTurn(turn as InvoiceTurn, request.invoice, founderTextOf(request))
+  const talk = checkConversation(turn, request)
+  if (request.view === 'invoice') return [...talk, ...checkInvoiceTurn(turn as InvoiceTurn, request.invoice, founderTextOf(request))]
   // An action for the invoice has no place on the palette workspace, or when no workspace is open.
-  if (turn.actions.some(isInvoiceAction)) return ['Those actions are for the invoice, which is not the workspace on screen. Leave them out.']
-  return checkTurn(turn as Turn, request.workspace)
+  if (turn.actions.some(isInvoiceAction)) return [...talk, 'Those actions are for the invoice, which is not the workspace on screen. Leave them out.']
+  return [...talk, ...checkTurn(turn as Turn, request.workspace)]
 }

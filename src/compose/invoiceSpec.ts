@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { messageField, questionField, repliesField } from './conversationFields.ts'
 import { TASKS } from './taskNames.ts'
 
 // What the composer may do on the invoice workspace, and what it is told about it. The same rules as for the palette: the actions
@@ -72,7 +73,9 @@ export const MAX_INVOICE_ACTIONS = 20
 
 export const invoiceTurnSchema = z.object({
   task: z.enum(TASKS).describe('The task the request belongs to, or chat for ordinary conversation.'),
-  message: sentence(700).describe('What you say to the founder: an answer, advice, or what you did and why. First person, plain.'),
+  message: messageField,
+  question: questionField,
+  replies: repliesField,
   actions: z.array(invoiceActionSchema).max(MAX_INVOICE_ACTIONS).describe('What to do on the invoice. Empty when the founder only wants an answer.'),
   memoryUsed: z.array(z.string().max(60)).max(6).describe('Which saved decisions you used, by key, such as client.name.'),
 })

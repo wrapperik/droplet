@@ -1,6 +1,35 @@
 import { chatTurn, openSnapshot, validOpenTurn } from './fixtures.ts'
 import { composeRequestSchema, turnJsonSchema, turnSchema, workspaceSnapshotSchema } from './spec.ts'
 
+describe('a turn that asks a question', () => {
+  const ask = { ...chatTurn, question: 'Do you know what one box costs you?', replies: ['Yes', 'Not sure yet'] }
+
+  it('takes a question and replies, and neither is needed', () => {
+    expect(turnSchema.safeParse(ask).success).toBe(true)
+    expect(turnSchema.safeParse(chatTurn).success).toBe(true)
+  })
+
+  it('holds the question to a sentence and the replies to four short answers', () => {
+    expect(turnSchema.safeParse({ ...ask, question: 'x'.repeat(201) }).success).toBe(false)
+    expect(turnSchema.safeParse({ ...ask, replies: ['a', 'b', 'c', 'd', 'e'] }).success).toBe(false)
+    expect(turnSchema.safeParse({ ...ask, replies: ['x'.repeat(41)] }).success).toBe(false)
+    expect(turnSchema.safeParse({ ...ask, replies: [''] }).success).toBe(false)
+  })
+
+  it('lets the model write a longer message for a list, but not an essay', () => {
+    expect(turnSchema.safeParse({ ...chatTurn, message: 'x'.repeat(1200) }).success).toBe(true)
+    expect(turnSchema.safeParse({ ...chatTurn, message: 'x'.repeat(1201) }).success).toBe(false)
+  })
+
+  it('is in the schema sent to the model, for the palette and for the invoice', () => {
+    for (const view of [undefined, 'invoice'] as const) {
+      const properties = (turnJsonSchema(view) as { properties: Record<string, unknown> }).properties
+      expect(Object.keys(properties)).toEqual(expect.arrayContaining(['message', 'question', 'replies']))
+      expect((turnJsonSchema(view) as { required: string[] }).required).not.toContain('question')
+    }
+  })
+})
+
 describe('turnSchema', () => {
   it('accepts an opening turn and a plain conversation turn', () => {
     expect(turnSchema.safeParse(validOpenTurn).success).toBe(true)

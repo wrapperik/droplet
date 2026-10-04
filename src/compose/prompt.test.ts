@@ -1,5 +1,7 @@
 import { openSnapshot } from './fixtures.ts'
-import { buildUserContent, SYSTEM_PROMPT } from './prompt.ts'
+import { invoiceTurnSchema } from './invoiceSpec.ts'
+import { buildUserContent, INVOICE_SYSTEM_PROMPT, SYSTEM_PROMPT } from './prompt.ts'
+import { turnSchema } from './spec.ts'
 
 describe('buildUserContent', () => {
   it('puts the request inside tags, and says when no workspace is open', () => {
@@ -61,5 +63,47 @@ describe('SYSTEM_PROMPT', () => {
     for (const word of ['set_palette', 'set_colour', 'add_colour', 'remove_colour', 'set_role', 'keep_colour', 'select_colour', 'generate', 'show_component', 'hide_component', 'move_component', 'resize_component', 'expand_tool', 'collapse_tool', 'reset_layout', 'export_brand_sheet', 'undo', 'redo', 'picker', 'preview', 'canvas']) {
       expect(SYSTEM_PROMPT).toContain(word)
     }
+  })
+})
+
+describe('how the model is told to talk', () => {
+  it('is told to ask one question and offer replies, and when not to', () => {
+    for (const prompt of [SYSTEM_PROMPT, INVOICE_SYSTEM_PROMPT]) {
+      expect(prompt).toMatch(/ask one question that moves their work forward/)
+      expect(prompt).toMatch(/"replies"/)
+      expect(prompt).toMatch(/never write a reply that puts a price/)
+      expect(prompt).toMatch(/Leave "question" and "replies" out/)
+    }
+  })
+
+  it('is told how to format a message, in the subset the interface can draw', () => {
+    for (const prompt of [SYSTEM_PROMPT, INVOICE_SYSTEM_PROMPT]) {
+      expect(prompt).toMatch(/each starting with "- "/)
+      expect(prompt).toMatch(/"1\. "/)
+      expect(prompt).toMatch(/\*\*bold\*\*/)
+      expect(prompt).toMatch(/No headings, tables, links or code/)
+    }
+  })
+
+  it('has no em dashes in either prompt', () => {
+    expect(INVOICE_SYSTEM_PROMPT).not.toContain('—')
+  })
+
+  it('shows examples that are themselves valid replies, so it is never taught a shape the app would refuse', () => {
+    const examples = (prompt: string, schema: typeof turnSchema | typeof invoiceTurnSchema) => {
+      const lines = prompt.split('\n').filter((line) => line.startsWith('{"task"'))
+      expect(lines.length).toBeGreaterThan(2)
+      for (const line of lines) expect(schema.safeParse(JSON.parse(line)).success, line).toBe(true)
+      return lines.map((line) => JSON.parse(line) as { question?: string; message: string })
+    }
+    const brand = examples(SYSTEM_PROMPT, turnSchema)
+    const invoice = examples(INVOICE_SYSTEM_PROMPT, invoiceTurnSchema)
+    // at least one example asks, one does not, and one lays its message out as a list
+    for (const set of [brand, invoice]) {
+      expect(set.some((turn) => turn.question)).toBe(true)
+      expect(set.some((turn) => !turn.question)).toBe(true)
+    }
+    expect(brand.some((turn) => turn.message.includes('\n- '))).toBe(true)
+    expect(invoice.some((turn) => turn.message.includes('\n- '))).toBe(true)
   })
 })

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { messageField, questionField, repliesField } from './conversationFields.ts'
 import { invoiceSnapshotSchema, invoiceTurnSchema, type InvoiceTurn } from './invoiceSpec.ts'
 import { TASKS, type Task } from './taskNames.ts'
 
@@ -104,7 +105,9 @@ export const MAX_ACTIONS = 12
 
 export const turnSchema = z.object({
   task: z.enum(TASKS).describe('The task the request belongs to, or chat for ordinary conversation.'),
-  message: sentence(700).describe('What you say to the founder: an answer, advice, or what you did and why. First person, plain.'),
+  message: messageField,
+  question: questionField,
+  replies: repliesField,
   actions: z.array(actionSchema).max(MAX_ACTIONS).describe('What to do on the workspace. Empty when the founder only wants an answer.'),
   memoryUsed: z.array(z.string().max(60)).max(6).describe('Which saved decisions you used, by key, such as brand.palette.'),
 })
@@ -165,7 +168,7 @@ export const composeRequestSchema = z.object({
   intent: z.string().trim().min(1).max(600),
   // The conversation so far, oldest first, so a follow-up such as "make it warmer" makes sense.
   history: z
-    .array(z.object({ role: z.enum(['founder', 'droplet']), text: z.string().trim().min(1).max(800) }))
+    .array(z.object({ role: z.enum(['founder', 'droplet']), text: z.string().trim().min(1).max(1500) }))
     .max(MAX_HISTORY_MESSAGES)
     .optional(),
   // Which workspace is on screen. The composer works on that one: the palette (brand) or the invoice. Absent when none is open.
