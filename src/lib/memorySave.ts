@@ -8,6 +8,15 @@ const id = z.string().min(1).max(60)
 export const memorySchema = z.object({
   // The founder's own business: entered once, and on every invoice.
   business: z.object({ details: businessSchema, confirmedAt: z.string() }).nullable(),
+  // What the founder decided on the business-idea board: the name they chose and the offer. Either can be missing. Absent in a memory from
+  // before the board, which is still read.
+  idea: z
+    .object({
+      name: z.string().max(80).nullable(),
+      offer: z.string().max(300).nullable(),
+      confirmedAt: z.string(),
+    })
+    .optional(),
   // Clients, so a repeat client is picked and not retyped.
   clients: z.array(z.object({ id, client: clientSchema, confirmedAt: z.string() })).max(200),
   // Invoices, each kept as the founder last confirmed it. The number belongs to the invoice, so a revision keeps it.

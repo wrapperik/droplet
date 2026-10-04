@@ -52,6 +52,43 @@ export function markExported(memory: ProjectMemory, id: string, now: string): Pr
   return { ...memory, invoices: memory.invoices.map((invoice) => (invoice.id === id ? { ...invoice, exportedAt: now } : invoice)) }
 }
 
+// ---- What was decided on the board ----
+
+export type IdeaKind = 'name' | 'offer'
+// The most each can hold: a name is what goes on an invoice, an offer is a sentence or two.
+export const IDEA_LIMITS: Record<IdeaKind, number> = { name: 80, offer: 300 }
+
+// The words as they would be remembered: all on one line, with the spaces tidied.
+export const ideaText = (text: string) => text.replace(/\s+/g, ' ').trim()
+
+// Whether words can be remembered as the name or the offer: there are some, and not more than that can hold.
+export const ideaFits = (kind: IdeaKind, text: string) => ideaText(text) !== '' && ideaText(text).length <= IDEA_LIMITS[kind]
+
+// What confirming would do with these words: remember them, replace what is remembered, or nothing since it is already so.
+export function ideaStatus(memory: ProjectMemory, kind: IdeaKind, text: string): MemoryStatus {
+  if (!ideaFits(kind, text)) return 'none'
+  const remembered = memory.idea?.[kind]
+  if (!remembered) return 'new'
+  return sameName(remembered, ideaText(text)) && remembered === ideaText(text) ? 'same' : 'updated'
+}
+
+// The name or the offer remembered. The name is also the business's name on invoices: it is put there, keeping the rest of the business as it is.
+export function withIdea(memory: ProjectMemory, kind: IdeaKind, text: string, now: string): ProjectMemory {
+  const words = ideaText(text)
+  if (!ideaFits(kind, words)) return memory
+  const idea = { name: memory.idea?.name ?? null, offer: memory.idea?.offer ?? null, confirmedAt: now, [kind]: words }
+  const next: ProjectMemory = { ...memory, idea }
+  if (kind !== 'name') return next
+  return withBusiness(next, { ...(memory.business?.details ?? emptyBusiness()), name: words }, now)
+}
+
+// Forgets the name or the offer that was decided. The business's name on invoices is the founder's to change there, so it stays.
+export function forgetIdea(memory: ProjectMemory, kind: IdeaKind): ProjectMemory {
+  if (!memory.idea) return memory
+  const idea = { ...memory.idea, [kind]: null }
+  return { ...memory, idea: idea.name === null && idea.offer === null ? undefined : idea }
+}
+
 export const forgetBusiness = (memory: ProjectMemory): ProjectMemory => ({ ...memory, business: null })
 export const forgetClient = (memory: ProjectMemory, id: string): ProjectMemory => ({ ...memory, clients: memory.clients.filter((saved) => saved.id !== id) })
 export const forgetInvoice = (memory: ProjectMemory, id: string): ProjectMemory => ({ ...memory, invoices: memory.invoices.filter((invoice) => invoice.id !== id) })
