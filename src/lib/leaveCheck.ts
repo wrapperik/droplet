@@ -1,9 +1,11 @@
+import type { BoardSave } from './boardSave.ts'
+import { docOf as boardDocOf, isBoardUnsaved, sameItems, sameSummary, type BoardState } from './boardState.ts'
 import { isInvoiceUnsaved, invoiceDocOf, type InvoiceState } from './invoiceState.ts'
 import type { InvoiceSave } from './invoiceSave.ts'
 import type { ProjectMemory } from './memorySave.ts'
 import { savedInvoice } from './projectMemory.ts'
 import type { PaletteSave } from './projectStore.ts'
-import { docOf, isUnsaved, type WorkspaceState } from './workspaceState.ts'
+import { docOf, isUnsaved, sameBlocks, type WorkspaceState } from './workspaceState.ts'
 
 // Whether a workspace holds work that closing it would lose. A workspace nobody has touched holds none, even though nothing has been
 // saved from it: the starter palette and a fresh invoice are not the founder's work.
@@ -14,7 +16,7 @@ import { docOf, isUnsaved, type WorkspaceState } from './workspaceState.ts'
 export function paletteHasChanges(state: WorkspaceState, saved: PaletteSave | null): boolean {
   if (saved) return isUnsaved(docOf(state), saved)
   const began = state.history.past[0] ?? state.history.present
-  return JSON.stringify(began.blocks) !== JSON.stringify(state.history.present.blocks)
+  return !sameBlocks(began.blocks, state.history.present.blocks)
 }
 
 export function invoiceHasChanges(state: InvoiceState, memory: ProjectMemory, arrangement: InvoiceSave | null): boolean {
@@ -23,4 +25,10 @@ export function invoiceHasChanges(state: InvoiceState, memory: ProjectMemory, ar
   if (saved) return isInvoiceUnsaved(doc, saved, arrangement)
   const began = state.history.past[0] ?? doc
   return JSON.stringify(began.content) !== JSON.stringify(doc.content)
+}
+
+export function boardHasChanges(state: BoardState, saved: BoardSave | null): boolean {
+  if (saved) return isBoardUnsaved(boardDocOf(state), saved)
+  const began = state.history.past[0] ?? state.history.present
+  return !sameItems(began.items, state.history.present.items) || !sameSummary(began.summary, state.history.present.summary)
 }

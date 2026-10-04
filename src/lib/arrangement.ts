@@ -22,6 +22,8 @@ export type ArrangementSpec = {
   // Where every window starts, including the windows that tools become. Rows are only a preference.
   layout: Placement[]
   windowSizes: Record<string, WindowSize>
+  // Components that are off the screen until the founder (or the AI) brings them, when nothing has been saved.
+  defaultHidden?: string[]
 }
 
 export type Arrangement = {
@@ -86,7 +88,7 @@ export function openArrangement(spec: ArrangementSpec, saved?: ArrangementSave |
     layout,
     tools: normaliseTools(spec, saved?.tools),
     expanded: normaliseExpanded(spec, saved?.expanded),
-    hidden: saved?.hidden ?? [],
+    hidden: saved?.hidden ?? spec.defaultHidden ?? [],
     reasons: {},
   }
 }

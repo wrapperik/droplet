@@ -300,3 +300,34 @@ describe('isUnsaved', () => {
     expect(isUnsaved(docOf(run(fresh(), { type: 'hide', component: 'role' })), saved({ hidden: ['role'] }))).toBe(false)
   })
 })
+
+describe('sameBlocks', () => {
+  it('is true for the same colours, whatever order their fields were written in', async () => {
+    const { sameBlocks } = await import('./workspaceState.ts')
+    const a = [{ id: 1, hex: '#1F8FE0', name: 'Blue', note: 'n', role: 'primary' }]
+    const b = [{ id: 1, hex: '#1F8FE0', role: 'primary', name: 'Blue', note: 'n' }]
+    expect(sameBlocks(a, b)).toBe(true)
+  })
+
+  it('is false when a colour, its role, its name or whether it is kept differs, or a colour is added', async () => {
+    const { sameBlocks } = await import('./workspaceState.ts')
+    const a = [{ id: 1, hex: '#1F8FE0' }]
+    expect(sameBlocks(a, [{ id: 1, hex: '#1F8FE1' }])).toBe(false)
+    expect(sameBlocks(a, [{ id: 1, hex: '#1F8FE0', role: 'accent' }])).toBe(false)
+    expect(sameBlocks(a, [{ id: 1, hex: '#1F8FE0', locked: true }])).toBe(false)
+    expect(sameBlocks(a, [{ id: 1, hex: '#1F8FE0', name: 'x' }])).toBe(false)
+    expect(sameBlocks(a, [...a, { id: 2, hex: '#000000' }])).toBe(false)
+  })
+
+  it('does not call a palette that was saved with roles, and read back, unsaved', async () => {
+    const { starterBlocks } = await import('../compose/fallback.ts')
+    const { loadPalette, savePalette } = await import('./projectStore.ts')
+    const { docOf, isUnsaved, openWorkspace, reduce } = await import('./workspaceState.ts')
+    window.localStorage.clear()
+    let state = openWorkspace(starterBlocks(), null)
+    state = reduce(state, { type: 'set_role', id: docOf(state).blocks[0].id, role: 'primary' })
+    const doc = docOf(state)
+    savePalette('p', { blocks: doc.blocks, layout: doc.layout, tools: doc.tools, expanded: doc.expanded, hidden: doc.hidden })
+    expect(isUnsaved(doc, loadPalette('p'))).toBe(false)
+  })
+})

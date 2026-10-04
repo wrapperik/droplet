@@ -131,8 +131,15 @@ export const canRedoState = (state: WorkspaceState) => canRedo(state.history)
 // Whether everything is where it starts: the same windows in the same places, and the tools in the toolbar in order.
 export const layoutIsDefault = (doc: Doc) => arrangementIsDefault(PALETTE_SPEC, doc)
 
+// Whether two palettes are the same, whatever order the fields of a colour were written in. What is read back from storage has its fields in
+// the order of the schema, not of the code that made them, so comparing them as text would call a palette that was saved changed.
+export function sameBlocks(a: { id: number; hex: string; role?: string; locked?: boolean; name?: string; note?: string }[], b: typeof a): boolean {
+  const key = (block: (typeof a)[number]) => [block.id, block.hex, block.role ?? '', block.locked ? 1 : 0, block.name ?? '', block.note ?? ''].join('\u0000')
+  return a.length === b.length && a.every((block, index) => key(block) === key(b[index]))
+}
+
 export function isUnsaved(doc: Doc, saved: PaletteSave | null): boolean {
-  return !saved || JSON.stringify(doc.blocks) !== JSON.stringify(saved.blocks) || arrangementUnsaved(PALETTE_SPEC, doc, saved)
+  return !saved || !sameBlocks(doc.blocks, saved.blocks) || arrangementUnsaved(PALETTE_SPEC, doc, saved)
 }
 
 type Working = { doc: Doc; selectedId: number; harmony: Harmony; variation: number }
