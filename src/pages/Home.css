@@ -3,6 +3,15 @@
   gap: 0.25rem;
   height: 100dvh;
   padding: 0.75rem;
+  /* Clear, so the page's own background shows. Before anything has been said it is plain (see below), and fades to the page. */
+  background-color: transparent;
+  transition: background-color 0.9s var(--ease-out);
+}
+
+/* The start: with the wave behind the conversation, the page and the sidebar on it are plain white (on a light screen), so the tint
+   of the page does not muddy the blue. Once the first message is sent the wave fades out and the page fades to its own colour. */
+.home[data-start] {
+  background-color: var(--bg-start);
 }
 
 /* The working screen is a slightly smaller rounded box sitting inside the page, beside the sidebar. */
@@ -274,6 +283,32 @@
     radial-gradient(34% 26% at 0% 44%, var(--wave-edge) 0%, transparent 72%),
     linear-gradient(164deg, transparent 0%, transparent 42%, var(--wave-edge) 53%, var(--wave-mid) 66%, var(--wave-deep) 100%);
   animation: home-wave 18s ease-in-out infinite alternate;
+}
+
+/* Grain over the wave, so the gradient has a fine paper-like texture and does not show steps. It is noise made by the browser from an SVG
+   filter (no image file), with its brightness turned into see-through speckles: dark on a light screen, light on a dark one. It lies
+   on the backdrop, not on the wave that drifts, so it holds still while the colour moves beneath it, and fades out with it. */
+.home__backdrop {
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1.6 0 0 0 -0.35'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --grain-strength: 0.1;
+}
+
+:root[data-theme='dark'] .home__backdrop {
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 1.6 0 0 0 -0.35'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --grain-strength: 0.09;
+}
+
+.home__backdrop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--grain);
+  background-size: 240px 240px;
+  opacity: var(--grain-strength);
+  /* Only where the colour is: none in the white at the top, building up through the edge of the wave, as strong as it gets in the deep
+     blue. Speckle over white only dulls it. The angle and the stops are those of the wave's own edge. */
+  -webkit-mask-image: linear-gradient(164deg, transparent 44%, rgb(0 0 0 / 0.55) 58%, #000 78%);
+  mask-image: linear-gradient(164deg, transparent 44%, rgb(0 0 0 / 0.55) 58%, #000 78%);
 }
 
 [data-gone] .home__wave {

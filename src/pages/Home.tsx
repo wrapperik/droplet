@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { HamburgerMenuIcon } from '@solar-icons/react/linear'
 import ChatBar, { type ChatEntry } from '../components/ChatBar.tsx'
+import type { BoardHandle } from '../components/board/BoardCanvas.tsx'
+import BoardWorkspace from '../components/board/BoardWorkspace.tsx'
 import ChatThread, { type ThreadAction, type ThreadMessage } from '../components/ChatThread.tsx'
 import IntentBar from '../components/IntentBar.tsx'
 import InvoiceWorkspace from '../components/invoice/InvoiceWorkspace.tsx'
@@ -11,21 +13,27 @@ import Sidebar from '../components/Sidebar.tsx'
 import Wordmark from '../components/Wordmark.tsx'
 import { applyTurnActions } from '../compose/applyActions.ts'
 import { starterBlocks } from '../compose/fallback.ts'
+import { applyBoardTurnActions } from '../compose/boardActions.ts'
+import { snapshotOfBoard } from '../compose/boardSnapshot.ts'
+import type { BoardTurnAction } from '../compose/boardSpec.ts'
 import { applyInvoiceTurnActions } from '../compose/invoiceActions.ts'
 import { snapshotOfInvoice } from '../compose/invoiceSnapshot.ts'
 import type { InvoiceTurnAction } from '../compose/invoiceSpec.ts'
 import { founderTextOf } from '../compose/rules.ts'
 import { paletteSnapshotOf, snapshotOfState } from '../compose/snapshot.ts'
-import { MAX_HISTORY_MESSAGES, isInvoiceAction, routedTo, type TurnAction } from '../compose/spec.ts'
+import { MAX_HISTORY_MESSAGES, isBoardAction, isInvoiceAction, routedTo, type TurnAction, type View } from '../compose/spec.ts'
 import { useRipple } from '../hooks/useRipple.ts'
 import { requestComposition } from '../lib/composeClient.ts'
-import { chatTitle, hasFounderMessage, loadChats, removeChat, saveChats, storableMessages, upsertChat, type StoredChat } from '../lib/chatStore.ts'
+import { chatTitle, cleanTitle, hasFounderMessage, loadChats, removeChat, saveChats, storableMessages, upsertChat, type StoredChat } from '../lib/chatStore.ts'
+import { loadBoard, openBoardForProject, saveBoard } from '../lib/boardStore.ts'
+import { docOf as boardDocOf, isBoardUnsaved, reduceBoard, type BoardAction, type BoardState } from '../lib/boardState.ts'
 import { exportBrandSheet } from '../lib/exportSheet.ts'
 import type { Heights, Placement } from '../lib/gridLayout.ts'
 import { mockProjects, mockUser } from '../lib/mockProjects.ts'
 import { newId } from '../lib/ids.ts'
-import { invoiceHasChanges, paletteHasChanges } from '../lib/leaveCheck.ts'
+import { boardHasChanges, invoiceHasChanges, paletteHasChanges } from '../lib/leaveCheck.ts'
 import { loadPalette, savePalette } from '../lib/projectStore.ts'
+import { shownWorkspace, type WorkspaceView } from '../lib/shownWorkspace.ts'
 import type { TaskId } from '../lib/tasks.ts'
 import { todayIso } from '../lib/invoice.ts'
 import { loadInvoice, openInvoiceForProject } from '../lib/invoiceStore.ts'
@@ -57,8 +65,10 @@ export default function Home() {
   const [workspace, setWorkspace] = useState<WorkspaceState | null>(null)
   // The invoice workspace, once it has been opened. For now it is filled in by hand; the AI does not touch it yet.
   const [invoice, setInvoice] = useState<InvoiceState | null>(null)
-  // Which workspace is on screen. Each keeps its own state while the other is shown.
-  const [view, setView] = useState<'brand' | 'invoice'>('brand')
+  // The board for shaping the business idea, once it has been opened. For now the composer does not see it.
+  const [board, setBoard] = useState<BoardState | null>(null)
+  // Which workspace is on screen. Each keeps its own state while another is shown.
+  const [view, setView] = useState<WorkspaceView>('brand')
   const [composing, setComposing] = useState(false)
   // The two ends of the header, where the workspace puts its controls beside the logo.
   const [headerStart, setHeaderStart] = useState<HTMLElement | null>(null)
@@ -69,11 +79,19 @@ export default function Home() {
   // Which conversation this is, and the project's others that are kept (the open one is added to the list from the thread itself).
   const [chatId, setChatId] = useState(() => newId())
   const [chats, setChats] = useState<StoredChat[]>(() => loadChats(mockProjects[0].id))
+  // The name the composer gave this conversation, or empty while it has none (the list then shows how the conversation began). Held in
+  // a ref as well, so a request made straight after one that named the chat tells the composer its name.
+  const [chatName, setChatName] = useState('')
+  const chatNameRef = useRef('')
+  const nameChat = useCallback((name: string) => {
+    chatNameRef.current = name
+    setChatName(name)
+  }, [])
   const nextMessageId = useRef(1)
   // Asks the invoice workspace to open its note of what would be remembered, for the "save before you go" question in the chat.
   const [invoiceSaveSignal, setInvoiceSaveSignal] = useState(0)
   // The question about unsaved work that is open in the thread, if there is one: which message, and what is still unsaved.
-  const leaveRef = useRef<{ id: number; brand: boolean; invoice: boolean } | null>(null)
+  const leaveRef = useRef<{ id: number; brand: boolean; invoice: boolean; board: boolean } | null>(null)
   const busyRef = useRef(false)
   // Which workspace the founder is in, from the task menu or because the composer took them there. And which one the last message
   // was sent in (undefined until one is sent), so a divider marks a move only once a message follows it, never for a move that was
@@ -86,13 +104,17 @@ export default function Home() {
   // The latest values, readable inside an async request without going stale.
   const workspaceRef = useRef<WorkspaceState | null>(null)
   const invoiceRef = useRef<InvoiceState | null>(null)
-  const viewRef = useRef<'brand' | 'invoice'>('brand')
+  const boardRef = useRef<BoardState | null>(null)
+  // What the board can be asked of, such as where the founder is looking, so the composer's notes go there.
+  const boardHandleRef = useRef<BoardHandle | null>(null)
+  const viewRef = useRef<WorkspaceView>('brand')
   const threadRef = useRef<ThreadMessage[]>([])
   // Where each component is drawn and how tall, reported by the grid, for moves relative to another component.
   const drawnRef = useRef<{ layout: Placement[]; heights: Heights }>({ layout: [], heights: {} })
   useEffect(() => {
     workspaceRef.current = workspace
     invoiceRef.current = invoice
+    boardRef.current = board
     viewRef.current = view
     threadRef.current = thread
   })
@@ -106,13 +128,14 @@ export default function Home() {
     if (!hasFounderMessage(messages)) return
     const kept = loadChats(currentProjectId)
     const there = kept.find((chat) => chat.id === chatId)
-    if (there && JSON.stringify(there.messages) === JSON.stringify(messages)) return
-    saveChats(currentProjectId, upsertChat(kept, { id: chatId, title: chatTitle(messages), updatedAt: new Date().toISOString(), messages }))
-  }, [thread, chatId, currentProjectId])
+    const title = chatName || chatTitle(messages)
+    if (there && there.title === title && JSON.stringify(there.messages) === JSON.stringify(messages)) return
+    saveChats(currentProjectId, upsertChat(kept, { id: chatId, title, ...(chatName ? { named: true } : {}), updatedAt: new Date().toISOString(), messages }))
+  }, [thread, chatId, chatName, currentProjectId])
 
   // Once a workspace exists the conversation moves to a side panel, beside it.
-  const docked = workspace !== null || invoice !== null
-  const showInvoice = invoice !== null && (view === 'invoice' || workspace === null)
+  const docked = workspace !== null || invoice !== null || board !== null
+  const shown = shownWorkspace({ brand: workspace !== null, invoice: invoice !== null, board: board !== null }, view)
 
   useEffect(() => {
     if (!mobileOpen) return
@@ -129,22 +152,32 @@ export default function Home() {
   )
 
   const dispatch = useCallback((action: WorkspaceAction) => setWorkspace((current) => (current ? reduce(current, action) : current)), [])
+  const dispatchBoard = useCallback((action: BoardAction) => setBoard((current) => (current ? reduceBoard(current, action) : current)), [])
   const dispatchInvoice = useCallback((action: InvoiceAction) => setInvoice((current) => (current ? reduceInvoice(current, action) : current)), [])
+
+  // Whether the board has been saved, for what the composer is told.
+  const boardSaveStatus = (state: BoardState) => {
+    const saved = loadBoard(currentProjectId)
+    return saved ? (isBoardUnsaved(boardDocOf(state), saved) ? ('unsaved' as const) : ('saved' as const)) : ('none' as const)
+  }
 
   // The side panel takes width, so the sidebar steps back to icons the first time. It can be opened again.
   const workspaceOpened = useCallback(() => setCollapsed(true), [])
 
-  // The workspace the composer works on is the one on screen: the invoice if that is what is shown, otherwise the palette.
-  const onScreen = (): 'brand' | 'invoice' | undefined => {
-    if (invoiceRef.current && (viewRef.current === 'invoice' || !workspaceRef.current)) return 'invoice'
-    return workspaceRef.current ? 'brand' : undefined
-  }
+  // The workspace the composer works on is the one on screen: the palette, the invoice or the board.
+  const onScreen = (): View | undefined => shownWorkspace({ brand: workspaceRef.current !== null, invoice: invoiceRef.current !== null, board: boardRef.current !== null }, viewRef.current) ?? undefined
 
   // Opens a workspace and puts it on screen, for a reply that asks to be taken there. The refs are set at once, since the next
   // request is made before the screen has had a chance to catch up.
   const openWorkspaceFor = useCallback(
-    (target: 'brand' | 'invoice') => {
-      if (target === 'invoice') {
+    (target: View) => {
+      if (target === 'board') {
+        if (!boardRef.current) {
+          const opened = openBoardForProject(currentProjectId)
+          boardRef.current = opened
+          setBoard(opened)
+        }
+      } else if (target === 'invoice') {
         if (!invoiceRef.current) {
           const opened = openInvoiceForProject(currentProjectId)
           invoiceRef.current = opened
@@ -157,7 +190,7 @@ export default function Home() {
         setWorkspace(opened)
       }
       viewRef.current = target
-      spaceRef.current = target
+      spaceRef.current = target === 'board' ? 'ideation' : target
       setView(target)
       workspaceOpened()
     },
@@ -172,14 +205,19 @@ export default function Home() {
       const saved = loadPalette(currentProjectId)
       const open = workspaceRef.current
       const invoiceOpen = invoiceRef.current
+      const boardOpen = boardRef.current
       const memory = loadMemory(currentProjectId)
       const result = await requestComposition({
         intent: text,
         ...(history.length > 0 ? { history } : {}),
         ...(view ? { view } : {}),
+        ...(chatNameRef.current ? { chatTitle: chatNameRef.current } : {}),
         ...(view === 'invoice' && invoiceOpen ? { invoice: snapshotOfInvoice(invoiceOpen, memory, todayIso()) } : {}),
-        ...(view !== 'invoice' && open
+        ...(view === 'brand' && open
           ? { workspace: snapshotOfState(open, drawnRef.current.layout.length > 0 ? drawnRef.current.layout : null, saved ? (isUnsaved(docOf(open), saved) ? 'unsaved' : 'saved') : 'none') }
+          : {}),
+        ...(view === 'board' && boardOpen
+          ? { board: snapshotOfBoard(boardOpen, boardHandleRef.current?.viewMiddle() ?? { x: 2400, y: 1600 }, boardSaveStatus(boardOpen)) }
           : {}),
         ...(saved ? { memory: paletteSnapshotOf(saved.blocks) } : {}),
       })
@@ -201,6 +239,10 @@ export default function Home() {
         )
 
       if (!result.ok) return finish(result.message)
+
+      // The composer names the conversation once it has a subject, and may rename it if the subject changes.
+      const named = result.turn.title ? cleanTitle(result.turn.title) : ''
+      if (named) nameChat(named)
 
       const target = routedTo(result.turn, view)
       if (target && !routed) {
@@ -229,12 +271,26 @@ export default function Home() {
           setInvoice(applied.state)
         }
         if (applied.skipped.length > 0) notes.push(`I could not do everything: ${applied.skipped.map((skipped) => skipped.reason).join(' ')}`)
+      } else if (view === 'board' && boardOpen) {
+        // Applied to the board as it is now, which may have changed while the composer was thinking. The places are found here, in code, from the
+        // board as it is, and never from the model.
+        const base = boardRef.current ?? boardOpen
+        const actions = result.turn.actions.filter((action): action is BoardTurnAction => isBoardAction(action) || action.type === 'undo' || action.type === 'redo')
+        const applied = applyBoardTurnActions({ base, actions, view: boardHandleRef.current?.viewMiddle() ?? { x: 2400, y: 1600 } })
+        if (applied.state !== base) {
+          boardRef.current = applied.state
+          setBoard(applied.state)
+          // The first time the composer puts notes on the board, the founder is told what to do with them.
+          const mine = (state: BoardState) => boardDocOf(state).items.filter((item) => item.kind === 'note' && item.author === 'ai').length
+          if (mine(applied.state) > mine(base) && mine(base) === 0) notes.push('My notes are pink. Select one to keep it as yours, or delete it.')
+        }
+        if (applied.skipped.length > 0) notes.push(`I could not do everything: ${applied.skipped.map((skipped) => skipped.reason).join(' ')}`)
       } else {
         // Applied to the workspace as it is now, which may have changed while the model was thinking.
         const applied = applyTurnActions({
           base: workspaceRef.current,
           open: (blocks) => openWorkspace(blocks, saved),
-          actions: result.turn.actions.filter((action): action is TurnAction => !isInvoiceAction(action)),
+          actions: result.turn.actions.filter((action): action is TurnAction => !isInvoiceAction(action) && !isBoardAction(action)),
           env: drawnRef.current,
         })
         if (applied.state && applied.state !== workspaceRef.current) {
@@ -256,7 +312,7 @@ export default function Home() {
     },
     // onScreen only reads refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentProjectId, message, openWorkspaceFor, workspaceOpened],
+    [currentProjectId, message, nameChat, openWorkspaceFor, workspaceOpened],
   )
 
   const submitIntent = useCallback(
@@ -305,6 +361,11 @@ export default function Home() {
         if (invoiceRef.current) return
         setInvoice(openInvoiceForProject(currentProjectId))
         workspaceOpened()
+      } else if (id === 'ideation') {
+        setView('board')
+        if (boardRef.current) return
+        setBoard(openBoardForProject(currentProjectId))
+        workspaceOpened()
       }
     },
     [currentProjectId, workspaceOpened],
@@ -313,19 +374,20 @@ export default function Home() {
   // The conversations listed in the history: the open one first (once something has been said in it), then the project's others.
   const chatList: ChatEntry[] = (() => {
     const messages = storableMessages(thread)
-    const open = hasFounderMessage(messages) ? [{ id: chatId, title: chatTitle(messages), current: true }] : []
+    const open = hasFounderMessage(messages) ? [{ id: chatId, title: chatName || chatTitle(messages), current: true }] : []
     return [...open, ...chats.filter((chat) => chat.id !== chatId).map((chat) => ({ id: chat.id, title: chat.title, updatedAt: chat.updatedAt, current: false }))]
   })()
 
   // A conversation begins with nothing said, in no workspace's name, and no question left open.
-  const beginChat = useCallback((id: string, messages: ThreadMessage[], projectId: string) => {
+  const beginChat = useCallback((id: string, messages: ThreadMessage[], projectId: string, name = '') => {
+    nameChat(name)
     leaveRef.current = null
     sentInRef.current = undefined
     nextMessageId.current = messages.reduce((highest, item) => Math.max(highest, item.id), 0) + 1
     setChats(loadChats(projectId))
     setChatId(id)
     setThread(messages)
-  }, [])
+  }, [nameChat])
 
   const newChat = useCallback(() => {
     if (!busyRef.current) beginChat(newId(), [], currentProjectId)
@@ -335,7 +397,7 @@ export default function Home() {
     (id: string) => {
       if (busyRef.current) return
       const chat = loadChats(currentProjectId).find((entry) => entry.id === id)
-      if (chat) beginChat(chat.id, chat.messages.map((item) => ({ ...item })), currentProjectId)
+      if (chat) beginChat(chat.id, chat.messages.map((item) => ({ ...item })), currentProjectId, chat.named ? chat.title : '')
     },
     [beginChat, currentProjectId],
   )
@@ -354,11 +416,13 @@ export default function Home() {
   const closeWorkspaces = useCallback(() => {
     workspaceRef.current = null
     invoiceRef.current = null
+    boardRef.current = null
     viewRef.current = 'brand'
     spaceRef.current = null
     drawnRef.current = { layout: [], heights: {} }
     setWorkspace(null)
     setInvoice(null)
+    setBoard(null)
     setView('brand')
     setCollapsed(false)
   }, [])
@@ -370,8 +434,9 @@ export default function Home() {
   }, [])
 
   // The buttons that are still worth pressing, from what is still unsaved.
-  const leaveActions = (left: { brand: boolean; invoice: boolean }): ThreadAction[] => [
+  const leaveActions = (left: { brand: boolean; invoice: boolean; board: boolean }): ThreadAction[] => [
     ...(left.brand ? [{ id: 'save-brand', label: 'Save the palette', primary: true }] : []),
+    ...(left.board ? [{ id: 'save-board', label: 'Save the board', primary: true }] : []),
     ...(left.invoice ? [{ id: 'save-invoice', label: 'Review and save the invoice', primary: true }] : []),
     { id: 'leave', label: 'Leave without saving' },
     { id: 'stay', label: 'Keep working' },
@@ -382,12 +447,13 @@ export default function Home() {
     (what: string) => {
       const prompt = leaveRef.current
       if (!prompt) return
-      if (!prompt.brand && !prompt.invoice) {
+      if (!prompt.brand && !prompt.invoice && !prompt.board) {
         settleLeave(prompt.id, `${what} Everything is saved, so I closed the workspace.`)
         closeWorkspaces()
         return
       }
-      settleLeave(prompt.id, `${what} ${prompt.brand ? 'The palette' : 'The invoice'} still has unsaved changes. Save it as well, or leave without saving?`, leaveActions(prompt))
+      const left = prompt.brand ? 'The palette' : prompt.board ? 'The board' : 'The invoice'
+      settleLeave(prompt.id, `${what} ${left} still has unsaved changes. Save it as well, or leave without saving?`, leaveActions(prompt))
     },
     [closeWorkspaces, settleLeave],
   )
@@ -399,12 +465,13 @@ export default function Home() {
     if (busyRef.current || leaveRef.current) return
     const brand = workspaceRef.current ? paletteHasChanges(workspaceRef.current, loadPalette(currentProjectId)) : false
     const invoiceChanged = invoiceRef.current ? invoiceHasChanges(invoiceRef.current, loadMemory(currentProjectId), loadInvoice(currentProjectId)) : false
-    if (!brand && !invoiceChanged) {
+    const boardChanged = boardRef.current ? boardHasChanges(boardRef.current, loadBoard(currentProjectId)) : false
+    if (!brand && !invoiceChanged && !boardChanged) {
       closeWorkspaces()
       return
     }
-    const left = { brand, invoice: invoiceChanged }
-    const where = [brand ? 'the brand palette' : null, invoiceChanged ? 'the invoice' : null].filter(Boolean).join(' and ')
+    const left = { brand, invoice: invoiceChanged, board: boardChanged }
+    const where = [brand ? 'the brand palette' : null, boardChanged ? 'the board' : null, invoiceChanged ? 'the invoice' : null].filter(Boolean).join(' and ')
     const prompt: ThreadMessage = { ...message('droplet', `You have unsaved changes in ${where}. If I close the workspace now they are lost. Save first?`), local: true, actions: leaveActions(left) }
     leaveRef.current = { id: prompt.id, ...left }
     setThread((current) => [...current, prompt])
@@ -425,6 +492,14 @@ export default function Home() {
         else {
           prompt.brand = false
           savedForLeave('I saved the palette.')
+        }
+      } else if (actionId === 'save-board' && boardRef.current) {
+        const doc = boardDocOf(boardRef.current)
+        const result = saveBoard(currentProjectId, { items: doc.items, summary: doc.summary, layout: doc.layout, tools: doc.tools, expanded: doc.expanded, hidden: doc.hidden })
+        if (result === null) settleLeave(messageId, 'I could not save the board, because the browser would not store it.', leaveActions(prompt))
+        else {
+          prompt.board = false
+          savedForLeave('I saved the board.')
         }
       } else if (actionId === 'save-invoice') {
         // The invoice has a note of its own, of exactly what would be remembered. It opens, and the founder confirms.
@@ -451,6 +526,7 @@ export default function Home() {
     if (id !== currentProjectId) beginChat(newId(), [], id)
     setCurrentProjectId(id)
     setInvoice((current) => (current ? openInvoiceForProject(id) : current))
+    setBoard((current) => (current ? openBoardForProject(id) : current))
     setWorkspace((current) => {
       if (!current) return current
       const saved = loadPalette(id)
@@ -474,7 +550,7 @@ export default function Home() {
   )
 
   return (
-    <div className={docked ? 'home home--docked' : 'home'}>
+    <div className={docked ? 'home home--docked' : 'home'} data-start={(!docked && !hasFounderMessage(thread)) || undefined}>
       <Sidebar
         projects={mockProjects}
         currentProjectId={currentProjectId}
@@ -531,7 +607,7 @@ export default function Home() {
           )}
           {/* One workspace at a time: the one on screen leaves before the other arrives, so their toolbars and header controls never overlap. */}
           <AnimatePresence mode="wait">
-            {workspace && !showInvoice && (
+            {workspace && shown === 'brand' && (
               <motion.div
                 key="palette"
                 className={composing ? 'home__component home__component--busy' : 'home__component'}
@@ -550,7 +626,7 @@ export default function Home() {
                 />
               </motion.div>
             )}
-            {invoice && showInvoice && (
+            {invoice && shown === 'invoice' && (
               <motion.div
                 key="invoice"
                 className={composing ? 'home__component home__component--busy' : 'home__component'}
@@ -569,12 +645,26 @@ export default function Home() {
                 />
               </motion.div>
             )}
+            {board && shown === 'board' && (
+              <motion.div key="board" className="home__component" exit={{ opacity: 0, transition: { duration: 0.2 } }}>
+                <BoardWorkspace
+                  key={currentProjectId}
+                  projectId={currentProjectId}
+                  projectName={projectName(currentProjectId)}
+                  state={board}
+                  dispatch={dispatchBoard}
+                  handleRef={boardHandleRef}
+                  onAsk={submitIntent}
+                  headerSlots={{ start: headerStart, end: headerEnd, shelf: shelfSlot }}
+                />
+              </motion.div>
+            )}
           </AnimatePresence>
         </main>
 
         {!docked && <footer className="home__footer">{bar(false)}</footer>}
         {/* The blue light that travels out from the middle of the canvas while Droplet works, with the ripple of the windows. */}
-        <RippleGlow active={composing} />
+        <RippleGlow active={composing && docked} />
       </div>
 
       {docked && (

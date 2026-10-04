@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { loadBoard } from '../lib/boardStore.ts'
 import { loadChats } from '../lib/chatStore.ts'
 import { loadPalette } from '../lib/projectStore.ts'
 import Home from './Home.tsx'
@@ -490,13 +491,13 @@ describe('the chat history', () => {
 })
 
 describe('a question and suggested replies', () => {
-  const asking = (message: string, question: string, replies: string[]) => ({ outcome: 'valid', turn: { task: 'ideation', message, question, replies, actions: [], memoryUsed: [] } })
+  const asking = (message: string, question: string, replies: string[]) => ({ outcome: 'valid', turn: { task: 'chat', message, question, replies, actions: [], memoryUsed: [] } })
 
   it('shows the question after the answer, and sends a tapped reply as the founder\'s own message with the question in the history', async () => {
     const user = userEvent.setup()
     answers = [
       asking('Three ways to price:\n\n- **Cost plus**\n- **Value based**', 'Do you know your costs?', ['Yes, I know them', 'Not sure yet']),
-      { outcome: 'valid', turn: { task: 'ideation', message: 'Then start with cost plus.', actions: [], memoryUsed: [] } },
+      { outcome: 'valid', turn: { task: 'chat', message: 'Then start with cost plus.', actions: [], memoryUsed: [] } },
     ]
     renderHome()
     await say(user, 'How should I price my boxes?')
@@ -562,5 +563,472 @@ describe('the wave behind the conversation', () => {
     const { container } = renderHome()
     await user.click(screen.getByRole('button', { name: /Build the brand/ }))
     expect(backdrop(container)).toBeNull()
+  })
+})
+
+describe('the composer naming a chat', () => {
+  const named = (message: string, title?: string) => ({ outcome: 'valid', turn: { task: 'chat', message, actions: [], memoryUsed: [], ...(title ? { title } : {}) } })
+  const openHistory = (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole('button', { name: 'History' }))
+  const titles = () => within(screen.getByRole('dialog', { name: 'Chat history' })).getAllByRole('listitem').map((item) => item.querySelector('.chatbar__title')?.textContent)
+
+  it('lists the chat by the name the composer gave it, tidied, instead of the founder\'s first words', async () => {
+    const user = userEvent.setup()
+    answers = [named('Start from your costs.', '"Pricing gift boxes."')]
+    renderHome()
+    await say(user, 'hi, how should I price my boxes?')
+    await waitFor(() => expect(screen.getByText('Start from your costs.')).toBeInTheDocument())
+    await openHistory(user)
+    expect(titles()).toEqual(['Pricing gift boxes'])
+  })
+
+  it('is called by how it began until the composer names it, and sends the name back once there is one', async () => {
+    const user = userEvent.setup()
+    answers = [named('Hello.'), named('Start from your costs.', 'Pricing gift boxes'), named('Then a margin.')]
+    renderHome()
+    await say(user, 'hi')
+    await waitFor(() => expect(screen.getByText('Hello.')).toBeInTheDocument())
+    await openHistory(user)
+    expect(titles()).toEqual(['hi'])
+    await user.keyboard('{Escape}')
+    await say(user, 'how should I price my boxes?')
+    await waitFor(() => expect(screen.getByText('Start from your costs.')).toBeInTheDocument())
+    await say(user, 'and the margin?')
+    await waitFor(() => expect(screen.getByText('Then a margin.')).toBeInTheDocument())
+    expect((asked[0] as { chatTitle?: string }).chatTitle).toBeUndefined()
+    expect((asked[1] as { chatTitle?: string }).chatTitle).toBeUndefined()
+    expect((asked[2] as { chatTitle?: string }).chatTitle).toBe('Pricing gift boxes')
+    await openHistory(user)
+    expect(titles()).toEqual(['Pricing gift boxes'])
+  })
+
+  it('lets the composer rename the chat when the subject moves on', async () => {
+    const user = userEvent.setup()
+    answers = [named('One.', 'Pricing gift boxes'), named('Two.', 'Naming the business')]
+    renderHome()
+    await say(user, 'prices?')
+    await waitFor(() => expect(screen.getByText('One.')).toBeInTheDocument())
+    await say(user, 'actually, names')
+    await waitFor(() => expect(screen.getByText('Two.')).toBeInTheDocument())
+    await openHistory(user)
+    expect(titles()).toEqual(['Naming the business'])
+  })
+
+  it('keeps the name when the chat is opened again, and a chat that was never named is still called by how it began', async () => {
+    const user = userEvent.setup()
+    answers = [named('Start from your costs.', 'Pricing gift boxes')]
+    renderHome()
+    await say(user, 'prices?')
+    await waitFor(() => expect(screen.getByText('Start from your costs.')).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'New chat' }))
+    answers = [named('Hello.')]
+    await say(user, 'hi there')
+    await waitFor(() => expect(screen.getByText('Hello.')).toBeInTheDocument())
+    await openHistory(user)
+    expect(titles()).toEqual(['hi there', 'Pricing gift boxes'])
+    await user.click(within(screen.getByRole('dialog', { name: 'Chat history' })).getByRole('button', { name: /^Pricing gift boxes/ }))
+    answers = [named('A margin of your choice.')]
+    await say(user, 'and the margin?')
+    await waitFor(() => expect(screen.getByText('A margin of your choice.')).toBeInTheDocument())
+    expect((asked.at(-1) as { chatTitle?: string }).chatTitle).toBe('Pricing gift boxes')
+  })
+})
+
+describe('the start of the page', () => {
+  const home = (container: HTMLElement) => container.querySelector('.home')!
+
+  it('is plain before anything has been said, and goes back to the page once it has', async () => {
+    const user = userEvent.setup()
+    const { container } = renderHome()
+    expect(home(container)).toHaveAttribute('data-start')
+    answers = [reply('chat', 'Hello.')]
+    await say(user, 'Hi')
+    expect(home(container)).not.toHaveAttribute('data-start')
+    await waitFor(() => expect(screen.getByText('Hello.')).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'New chat' }))
+    expect(home(container)).toHaveAttribute('data-start')
+  })
+
+  it('is not plain behind a workspace', async () => {
+    const user = userEvent.setup()
+    const { container } = renderHome()
+    await user.click(screen.getByRole('button', { name: /Build the brand/ }))
+    expect(home(container)).not.toHaveAttribute('data-start')
+  })
+})
+
+describe('the light while Droplet works', () => {
+  it('is not shown over the conversation when there is no workspace', async () => {
+    const user = userEvent.setup()
+    let release: () => void = () => {}
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => { release = () => resolve(new Response(JSON.stringify(reply('chat', 'Done.')), { status: 200, headers: { 'content-type': 'application/json' } })) })))
+    const { container } = renderHome()
+    await say(user, 'Hello')
+    expect(container.querySelector('.glow')).toBeNull()
+    release()
+    await waitFor(() => expect(screen.getByText('Done.')).toBeInTheDocument())
+  })
+
+  it('is shown over a workspace while the composer works on it', async () => {
+    const user = userEvent.setup()
+    let release: () => void = () => {}
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => { release = () => resolve(new Response(JSON.stringify(reply('brand', 'Done.')), { status: 200, headers: { 'content-type': 'application/json' } })) })))
+    const { container } = renderHome()
+    await user.click(screen.getByRole('button', { name: /Build the brand/ }))
+    await say(user, 'Warmer please')
+    expect(container.querySelector('.glow')).not.toBeNull()
+    release()
+    await waitFor(() => expect(screen.getByText('Done.')).toBeInTheDocument())
+  })
+})
+
+describe('the board for shaping the business idea', () => {
+  const shape = () => screen.getByRole('button', { name: /Shape the business idea/ })
+  const toolbar = () => screen.queryByRole('toolbar', { name: 'Tools' })
+  const addNote = async (user: ReturnType<typeof userEvent.setup>) => user.click(await screen.findByRole('button', { name: 'Add a note to the middle of the view' }))
+
+  it('opens from the task menu without asking the model, and says nothing in the thread', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await user.click(shape())
+    expect(screen.getByRole('region', { name: 'Board' })).toBeInTheDocument()
+    expect(asked).toHaveLength(0)
+    expect(within(screen.getByRole('log', { name: 'Conversation' })).queryAllByRole('listitem')).toHaveLength(0)
+  })
+
+  it('has the board tools in the toolbar, which cannot be taken away', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await user.click(shape())
+    const bar = within(toolbar()!)
+    for (const name of ['Select', 'Sticky note', 'Shape', 'Text', 'Frame', 'Arrow', 'Templates']) expect(bar.getByRole('group', { name })).toBeInTheDocument()
+    expect(bar.getByRole('radiogroup', { name: 'Colour of the next note' })).toBeInTheDocument()
+    expect(bar.getByRole('radiogroup', { name: 'Kind of the next shape' })).toBeInTheDocument()
+    expect(bar.getByRole('radiogroup', { name: 'Line of the next arrow' })).toBeInTheDocument()
+    // none of them can be taken away
+    await user.click(bar.getByRole('button', { name: 'Add or remove a tool' }))
+    for (const item of within(screen.getByRole('menu', { name: 'Tools in the toolbar' })).getAllByRole('menuitemcheckbox')) expect(item).toBeDisabled()
+  })
+
+  it('keeps the board while another workspace is shown, and brings it back as it was', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await user.click(shape())
+    await addNote(user)
+    await user.keyboard('Gift boxes{Escape}')
+    await user.click(screen.getByRole('button', { name: /Build the brand/ }))
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Board' })).not.toBeInTheDocument())
+    await user.click(shape())
+    expect(await screen.findByRole('region', { name: 'Board' })).toBeInTheDocument()
+    expect(screen.getByText('Gift boxes')).toBeInTheDocument()
+  })
+
+  it('puts a template on the board from the toolbar, which is saved with it and comes back as it was', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await user.click(shape())
+    await user.click(await screen.findByRole('button', { name: 'Templates' }))
+    await user.click(screen.getByRole('menuitem', { name: /^Brain dump/ }))
+    expect(screen.getByText('Brain dump: every idea, however rough', { selector: '.frame__title' })).toBeInTheDocument()
+    expect(document.querySelectorAll('[data-guide]').length).toBeGreaterThan(0)
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    const saved = loadBoard('duckstack')!
+    expect(saved.items.some((item) => item.kind === 'frame' && item.group?.startsWith('brain_dump:'))).toBe(true)
+    expect(saved.items.some((item) => item.kind === 'note' && item.hint === 'An idea, however rough')).toBe(true)
+    await user.click(screen.getByRole('button', { name: 'Back to the full chat' }))
+    await waitFor(() => expect(toolbar()).not.toBeInTheDocument())
+    await user.click(shape())
+    expect(await screen.findByText('Brain dump: every idea, however rough', { selector: '.frame__title' })).toBeInTheDocument()
+    expect(document.querySelectorAll('[data-guide]').length).toBeGreaterThan(0)
+  })
+
+  it('saves from the header only when Save is pressed', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await user.click(shape())
+    await addNote(user)
+    await user.keyboard('A name idea{Escape}')
+    expect(loadBoard('duckstack')).toBeNull()
+    expect(screen.getByText('Not saved yet')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(loadBoard('duckstack')?.items.map((item) => ('text' in item ? item.text : null))).toEqual(['A name idea'])
+    expect(screen.getByText('All changes saved')).toBeInTheDocument()
+  })
+
+  it('opens with what was saved', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await user.click(shape())
+    await addNote(user)
+    await user.keyboard('Remembered{Escape}')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Back to the full chat' }))
+    await waitFor(() => expect(toolbar()).not.toBeInTheDocument())
+    await user.click(shape())
+    expect(await screen.findByText('Remembered')).toBeInTheDocument()
+  })
+
+  it('closes at once with Back to the full chat when nothing has been put on it', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await user.click(shape())
+    await user.click(screen.getByRole('button', { name: 'Back to the full chat' }))
+    await waitFor(() => expect(toolbar()).not.toBeInTheDocument())
+    expect(screen.queryByText(/unsaved changes/)).not.toBeInTheDocument()
+  })
+
+  it('asks first, in the thread, when there are notes that are not saved, and saves the board from the button there', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await user.click(shape())
+    await addNote(user)
+    await user.keyboard('Not saved yet{Escape}')
+    await user.click(screen.getByRole('button', { name: 'Back to the full chat' }))
+    expect(screen.getByText(/You have unsaved changes in the board/)).toBeInTheDocument()
+    expect(toolbar()).toBeInTheDocument()
+    expect(loadBoard('duckstack')).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Save the board' }))
+    expect(loadBoard('duckstack')?.items).toHaveLength(1)
+    await waitFor(() => expect(toolbar()).not.toBeInTheDocument())
+    expect(screen.getByText(/I saved the board\. Everything is saved/)).toBeInTheDocument()
+  })
+
+  it('closes without saving when asked to', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await user.click(shape())
+    await addNote(user)
+    await user.keyboard('Throw away{Escape}')
+    await user.click(screen.getByRole('button', { name: 'Back to the full chat' }))
+    await user.click(screen.getByRole('button', { name: 'Leave without saving' }))
+    await waitFor(() => expect(toolbar()).not.toBeInTheDocument())
+    expect(loadBoard('duckstack')).toBeNull()
+  })
+
+  it('asks about the board and the palette together when both have changes', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await user.click(screen.getByRole('button', { name: /Build the brand/ }))
+    await user.click(screen.getByRole('button', { name: /^Remove colour 1,/ }))
+    await user.click(shape())
+    await addNote(user)
+    await user.keyboard('Both{Escape}')
+    await user.click(screen.getByRole('button', { name: 'Back to the full chat' }))
+    expect(screen.getByText(/the brand palette and the board/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save the board' }))
+    expect(screen.getByText(/The palette still has unsaved changes/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save the board' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save the palette' }))
+    await waitFor(() => expect(toolbar()).not.toBeInTheDocument())
+  })
+
+  it('does not call the model until the founder sends a message: nothing on the board asks it in the background', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await user.click(shape())
+    await addNote(user)
+    await user.keyboard('Something{Escape}')
+    await user.click(await screen.findByRole('button', { name: 'Templates' }))
+    await user.click(screen.getByRole('menuitem', { name: /^Brain dump/ }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    expect(asked).toHaveLength(0)
+  })
+
+  it('starts the next message with a divider when it is sent in the board after another workspace', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await user.click(screen.getByRole('button', { name: /Build the brand/ }))
+    answers = [reply('chat', 'Hi.')]
+    await say(user, 'Hello')
+    await waitFor(() => expect(screen.getByText('Hi.')).toBeInTheDocument())
+    await user.click(shape())
+    answers = [reply('chat', 'Here.')]
+    await say(user, 'Now?')
+    await waitFor(() => expect(screen.getByText('Here.')).toBeInTheDocument())
+    expect(screen.getByText('Switched workspace to Business idea')).toBeInTheDocument()
+  })
+})
+
+describe('the AI on the board', () => {
+  const shape = () => screen.getByRole('button', { name: /Shape the business idea/ })
+  const addNote = async (user: ReturnType<typeof userEvent.setup>) => user.click(await screen.findByRole('button', { name: 'Add a note to the middle of the view' }))
+  const withNote = async (user: ReturnType<typeof userEvent.setup>, text: string) => {
+    await addNote(user)
+    await user.keyboard(`${text}{Escape}`)
+  }
+  const pink = () => [...document.querySelectorAll<HTMLElement>('.note[data-colour="pink"]')]
+  const toolbar = () => screen.queryByRole('toolbar', { name: 'Tools' })
+
+  it('is shown the board, by reference, when it is on screen, and not the palette or the invoice', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await user.click(shape())
+    await withNote(user, 'Gift boxes for offices')
+    answers = [reply('chat', 'Noted.')]
+    await say(user, 'What do you think?')
+    await waitFor(() => expect(screen.getByText('Noted.')).toBeInTheDocument())
+    const sent = asked[0] as unknown as { view?: string; board?: { items: { ref: string; kind: string; text?: string }[]; selection: string[]; view: { x: number; y: number } }; workspace?: unknown; invoice?: unknown }
+    expect(sent.view).toBe('board')
+    expect(sent.board?.items.find((item) => item.ref === 'n1')).toMatchObject({ kind: 'note', text: 'Gift boxes for offices' })
+    expect(sent.board?.view).toBeDefined()
+    expect(sent.workspace).toBeUndefined()
+    expect(sent.invoice).toBeUndefined()
+  })
+
+  it('puts the notes it is asked for on the board, pink, with its name on them, and says what to do with them', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await user.click(shape())
+    await withNote(user, 'Gift boxes for offices')
+    answers = [reply('ideation', 'I added two ideas beside your note.', [{ type: 'add_note', text: 'Corporate hampers', near: 'n1', connect: true }, { type: 'add_note', text: 'Thank-you boxes', near: 'n1', connect: true }])]
+    await say(user, 'Give me some related ideas')
+    await waitFor(() => expect(screen.getByText(/I added two ideas beside your note/)).toBeInTheDocument())
+    expect(pink()).toHaveLength(2)
+    expect(pink().map((note) => note.textContent)).toEqual([expect.stringContaining('Corporate hampers'), expect.stringContaining('Thank-you boxes')])
+    for (const note of pink()) expect(within(note).getByText('Droplet')).toBeInTheDocument()
+    expect(document.querySelectorAll('[data-kind="connector"]')).toHaveLength(2)
+    expect(screen.getByText(/My notes are pink\. Select one to keep it as yours, or delete it\./)).toBeInTheDocument()
+  })
+
+  it('says what pink means only the first time', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await user.click(shape())
+    await withNote(user, 'A note')
+    answers = [reply('ideation', 'First batch.', [{ type: 'add_note', text: 'One' }])]
+    await say(user, 'ideas')
+    await waitFor(() => expect(screen.getByText(/First batch\./)).toBeInTheDocument())
+    answers = [reply('ideation', 'Second batch.', [{ type: 'add_note', text: 'Two' }])]
+    await say(user, 'more')
+    await waitFor(() => expect(screen.getByText(/Second batch\./)).toBeInTheDocument())
+    expect(screen.getAllByText(/My notes are pink/)).toHaveLength(1)
+    expect(pink()).toHaveLength(2)
+  })
+
+  it('is one step: one Undo takes back everything it did', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await user.click(shape())
+    await withNote(user, 'A note')
+    answers = [reply('ideation', 'Done.', [{ type: 'add_note', text: 'One', near: 'n1', connect: true }, { type: 'add_note', text: 'Two', near: 'n1', connect: true }, { type: 'add_note', text: 'Three' }])]
+    await say(user, 'ideas please')
+    await waitFor(() => expect(pink()).toHaveLength(3))
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(pink()).toHaveLength(0)
+    expect(document.querySelectorAll('[data-kind="connector"]')).toHaveLength(0)
+    expect(screen.getByText('A note')).toBeInTheDocument()
+  })
+
+  it('leaves the founder\'s own notes as they were', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await user.click(shape())
+    await withNote(user, 'Mine')
+    const mine = () => document.querySelector<HTMLElement>('.note:not([data-colour="pink"])')!
+    const before = { left: mine().style.left, top: mine().style.top, colour: mine().dataset.colour, text: mine().textContent }
+    answers = [reply('ideation', 'Done.', [{ type: 'add_note', text: 'Another', near: 'n1' }])]
+    await say(user, 'one more idea')
+    await waitFor(() => expect(pink()).toHaveLength(1))
+    expect({ left: mine().style.left, top: mine().style.top, colour: mine().dataset.colour, text: mine().textContent }).toEqual(before)
+  })
+
+  it('lets the founder keep a note as their own, and the note is then no longer pink or Droplet\'s', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await user.click(shape())
+    await withNote(user, 'A note')
+    answers = [reply('ideation', 'Done.', [{ type: 'add_note', text: 'An idea', near: 'n1' }])]
+    await say(user, 'an idea')
+    await waitFor(() => expect(pink()).toHaveLength(1))
+    await user.click(pink()[0])
+    await user.click(screen.getByRole('button', { name: 'Keep as mine' }))
+    expect(pink()).toHaveLength(0)
+    expect(screen.queryByText('Droplet', { selector: '.note__author' })).not.toBeInTheDocument()
+    expect(screen.getByText('An idea')).toBeInTheDocument()
+  })
+
+  it('lets the founder dismiss one with Delete, and the others stay', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await user.click(shape())
+    await withNote(user, 'A note')
+    answers = [reply('ideation', 'Done.', [{ type: 'add_note', text: 'One', near: 'n1' }, { type: 'add_note', text: 'Two', near: 'n1' }])]
+    await say(user, 'ideas')
+    await waitFor(() => expect(pink()).toHaveLength(2))
+    await user.click(pink()[0])
+    await user.keyboard('{Delete}')
+    expect(pink()).toHaveLength(1)
+  })
+
+  it('refuses an answer that names a thing that is not on the board, and changes nothing', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await user.click(shape())
+    await withNote(user, 'A note')
+    answers = [reply('ideation', 'Done.', [{ type: 'add_note', text: 'x', near: 'n99' }])]
+    await say(user, 'a note near n99')
+    await waitFor(() => expect(screen.getByText(/I got an answer I could not use/)).toBeInTheDocument())
+    expect(pink()).toHaveLength(0)
+  })
+
+  it('opens the board and asks again with it in front of the composer when the founder asks to brainstorm and a palette is open', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await user.click(screen.getByRole('button', { name: /Build the brand/ }))
+    answers = [reply('ideation', 'I am opening the board.'), reply('ideation', 'Here are some ideas.', [{ type: 'add_note', text: 'An idea' }])]
+    await say(user, 'I want to brainstorm on a board')
+    await waitFor(() => expect(screen.getByText(/Here are some ideas/)).toBeInTheDocument())
+    expect(asked).toHaveLength(2)
+    expect((asked[0] as unknown as { view?: string }).view).toBe('brand')
+    expect((asked[1] as unknown as { view?: string }).view).toBe('board')
+    expect(await screen.findByRole('region', { name: 'Board' })).toBeInTheDocument()
+    expect(pink()).toHaveLength(1)
+  })
+
+  it('does not open the board for advice about names, which carries a question', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    answers = [{ outcome: 'valid', turn: { task: 'ideation', message: 'Short names work best.', question: 'What do you sell?', actions: [], memoryUsed: [] } }]
+    await say(user, 'How should I think about naming my business?')
+    await waitFor(() => expect(screen.getByText('Short names work best.')).toBeInTheDocument())
+    expect(asked).toHaveLength(1)
+    expect(screen.queryByRole('region', { name: 'Board' })).not.toBeInTheDocument()
+  })
+
+  it('takes a founder who is on the board to the invoice when that is what they ask for', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await user.click(shape())
+    answers = [reply('invoice', 'Opening the invoice.'), reply('invoice', 'Added the line.', [{ type: 'add_line', description: 'Gift box', quantity: 12, unitPrice: '450' }])]
+    await say(user, 'Invoice them for 12 gift boxes at 450')
+    await waitFor(() => expect(screen.getByText(/Added the line/)).toBeInTheDocument())
+    expect((asked[0] as unknown as { view?: string }).view).toBe('board')
+    expect((asked[1] as unknown as { view?: string }).view).toBe('invoice')
+    expect(toolbar()).toBeInTheDocument()
+  })
+
+  it('fills the prompts of a template the founder put on the board, as notes by Droplet in the same places', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await user.click(shape())
+    await user.click(await screen.findByRole('button', { name: 'Templates' }))
+    await user.click(screen.getByRole('menuitem', { name: /^Customer and problem/ }))
+    expect(document.querySelectorAll('[data-guide]')).toHaveLength(6)
+    answers = [reply('ideation', 'I filled two of them.', [{ type: 'fill_prompt', note: 'n1', text: 'Busy office managers' }, { type: 'fill_prompt', note: 'n2', text: 'Through LinkedIn' }])]
+    await say(user, 'fill in what you can for corporate gifts')
+    await waitFor(() => expect(screen.getByText(/I filled two of them/)).toBeInTheDocument())
+    expect(pink()).toHaveLength(2)
+    expect(document.querySelectorAll('[data-guide]')).toHaveLength(4)
+  })
+
+  it('puts a template on the board when asked, with its prompts filled in', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await user.click(shape())
+    answers = [reply('ideation', 'Added it.', [{ type: 'add_template', template: 'name_ideas', fill: ['Kindred Boxes', 'Maker Crate'] }])]
+    await say(user, 'set me up to brainstorm names')
+    await waitFor(() => expect(screen.getByText(/Added it/)).toBeInTheDocument())
+    expect(screen.getByText('Name ideas', { selector: '.frame__title' })).toBeInTheDocument()
+    expect(pink().map((note) => note.textContent)).toEqual([expect.stringContaining('Kindred Boxes'), expect.stringContaining('Maker Crate')])
   })
 })
