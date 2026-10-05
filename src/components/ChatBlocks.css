@@ -1,0 +1,220 @@
+/* What Droplet puts in the chat besides words: a table, or a checklist the founder can tick. Calm surfaces, semantic tokens only. */
+.blocks {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+/* ---- Table ---- */
+.blocks__table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--overlay-10);
+  border-radius: var(--radius-md);
+  background: var(--overlay-06);
+}
+
+.blocks__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.blocks__table caption {
+  padding: 0.75rem 1rem 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-align: left;
+  caption-side: top;
+}
+
+.blocks__table th,
+.blocks__table td {
+  padding: 0.5rem 1rem;
+  vertical-align: top;
+}
+
+.blocks__table thead th {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.blocks__table tbody tr + tr > * {
+  border-top: 1px solid var(--overlay-10);
+}
+
+/* The first column names the thing compared. */
+.blocks__table tbody th {
+  min-width: 6rem;
+  font-weight: 700;
+}
+
+.blocks__table td {
+  min-width: 7rem;
+}
+
+/* ---- Checklist ---- */
+.blocks__checklist {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.blocks__title {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.blocks__list {
+  display: grid;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.blocks__item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.375rem 0.25rem 0.25rem;
+  border-radius: var(--radius-md);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+/* In a plan, the step to do next is tinted, so it is clear where to start. */
+.blocks__item[data-next] {
+  background: var(--accent-tint-soft);
+}
+
+.blocks__label {
+  display: flex;
+  flex: 1;
+  align-items: flex-start;
+  gap: 0.625rem;
+  min-width: 0;
+  padding: 0.25rem;
+  cursor: pointer;
+}
+
+.blocks__item[data-ticked] .blocks__label {
+  cursor: default;
+}
+
+/* The box is the marker. The real checkbox sits under it, visually hidden, so a keyboard and a screen reader get a checkbox. */
+.blocks__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.blocks__marker {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1.5px solid var(--text-muted);
+  border-radius: 50%;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+/* Done is the same blue circle with a tick the rest of the app uses, so a finished thing looks the same everywhere. */
+.blocks__input:checked + .blocks__marker {
+  border-color: var(--status-resolved);
+  background: var(--status-resolved);
+  color: var(--on-status);
+}
+
+.blocks__input:focus-visible + .blocks__marker {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.blocks__input:disabled + .blocks__marker {
+  opacity: 0.85;
+}
+
+.blocks__text {
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
+  padding-top: 0.0625rem;
+}
+
+.blocks__name {
+  font-weight: 600;
+}
+
+.blocks__item[data-ticked] .blocks__name {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.blocks__detail {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.blocks__open {
+  flex: none;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--accent);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.blocks__open:hover:not(:disabled),
+.blocks__open:focus-visible {
+  background: var(--accent-tint-soft);
+}
+
+.blocks__open:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.blocks__tag {
+  flex: none;
+  padding: 0.125rem 0.625rem;
+  border-radius: var(--radius-pill);
+  background: var(--overlay-06);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .blocks {
+    animation: blocks-in var(--duration-base) var(--ease-out) both;
+  }
+
+  @keyframes blocks-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+  }
+}

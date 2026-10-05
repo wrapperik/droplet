@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { HamburgerMenuIcon } from '@solar-icons/react/linear'
 import ChatBar from '../components/ChatBar.tsx'
@@ -13,6 +13,9 @@ import RippleGlow from '../components/RippleGlow.tsx'
 import Sidebar from '../components/Sidebar.tsx'
 import Wordmark from '../components/Wordmark.tsx'
 import { applyTurnActions } from '../compose/applyActions.ts'
+import { describeBlocks, type ChatBlock } from '../compose/blocks.ts'
+import { doneSteps, OPEN_PHRASE, STEP_WORKSPACE, type JourneyStep, type ProjectSnapshot } from '../compose/journey.ts'
+import { snapshotOfProject } from '../compose/project.ts'
 import { starterBlocks } from '../compose/fallback.ts'
 import { applyBoardTurnActions } from '../compose/boardActions.ts'
 import { snapshotOfBoard } from '../compose/boardSnapshot.ts'
@@ -86,6 +89,9 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   // Beneath the header, where the workspace puts its toolbar.
   const [shelfSlot, setShelfSlot] = useState<HTMLElement | null>(null)
   const [thread, setThread] = useState<ThreadMessage[]>([])
+  // Where the project is on the journey, from what it holds, so a plan in the chat can tick the steps that are done.
+  const [projectInfo, setProjectInfo] = useState<ProjectSnapshot | undefined>(undefined)
+  const doneSet = useMemo(() => doneSteps(projectInfo), [projectInfo])
   // Which conversation this is, and the project's others that are kept (the open one is added to the list from the thread itself).
   const [chatId, setChatId] = useState(() => newId())
   const [chats, setChats] = useState<StoredChat[]>([])
@@ -113,6 +119,25 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
     setChatName(name)
   }, [])
   const nextMessageId = useRef(1)
+  // What the project holds: the saved palette, what the project remembers and the saved board. Used for what the composer is told and for
+  // the ticks on a plan.
+  const readProject = useCallback(
+    async (projectId: string) => {
+      const [palette, memory, board] = await Promise.all([loadPalette(projectId), loadMemory(projectId), loadBoard(projectId)])
+      return snapshotOfProject({ projectName: projectName(projectId), memory, hasPalette: palette !== null, boardItems: board?.items.length ?? 0 })
+    },
+    [projectName],
+  )
+  const currentProjectRef = useRef(currentProjectId)
+  useEffect(() => {
+    currentProjectRef.current = currentProjectId
+  })
+  // Read again, so a palette saved or an invoice confirmed in a workspace shows as a tick in a plan. A project changed meanwhile is ignored.
+  const refreshProject = useCallback(async () => {
+    const id = currentProjectRef.current
+    const info = await readProject(id)
+    if (currentProjectRef.current === id) setProjectInfo((current) => (JSON.stringify(current) === JSON.stringify(info) ? current : info))
+  }, [readProject])
   // Asks the invoice workspace to open its note of what would be remembered, for the "save before you go" question in the chat.
   const [invoiceSaveSignal, setInvoiceSaveSignal] = useState(0)
   // The question about unsaved work that is open in the thread, if there is one: which message, and what is still unsaved.
@@ -179,6 +204,11 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   const docked = workspace !== null || invoice !== null || board !== null
   const shown = shownWorkspace({ brand: workspace !== null, invoice: invoice !== null, board: board !== null }, view)
 
+  // The project is read when Home opens, when another is chosen, and when the workspace on screen changes, so a plan is ticked from what is saved.
+  useEffect(() => {
+    void refreshProject()
+  }, [refreshProject, currentProjectId, shown, thread.length])
+
   useEffect(() => {
     if (!mobileOpen) return
     const onKeyDown = (event: KeyboardEvent) => {
@@ -244,7 +274,10 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   const converse = useCallback(
     async (text: string, history: { role: 'founder' | 'droplet'; text: string }[], pendingId: number, routed: boolean) => {
       const view = onScreen()
-      const [saved, memory] = await Promise.all([loadPalette(currentProjectId), loadMemory(currentProjectId)])
+      const [saved, memory, savedBoard] = await Promise.all([loadPalette(currentProjectId), loadMemory(currentProjectId), loadBoard(currentProjectId)])
+      // Where the founder is on the journey, so the composer can guide: only the business name, the offer and counts.
+      const project = snapshotOfProject({ projectName: projectName(currentProjectId), memory, hasPalette: saved !== null, boardItems: savedBoard?.items.length ?? 0 })
+      setProjectInfo(project)
       const open = workspaceRef.current
       const invoiceOpen = invoiceRef.current
       const boardOpen = boardRef.current
@@ -262,11 +295,12 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
           ? { board: snapshotOfBoard(boardOpen, boardHandleRef.current?.viewMiddle() ?? { x: 2400, y: 1600 }, boardStatus) }
           : {}),
         ...(saved ? { memory: paletteSnapshotOf(saved.blocks) } : {}),
+        project,
       })
 
       // The reply goes into the message that was pending. Droplet's question and the answers it suggests sit apart from the text, so
       // notes from the app land between the answer and the question, and the question stays last.
-      const finish = (reply: string, turn?: { question?: string; replies?: string[] }) =>
+      const finish = (reply: string, turn?: { question?: string; replies?: string[]; blocks?: ChatBlock[] }) =>
         setThread((current) =>
           current.map((item) =>
             item.id === pendingId
@@ -274,6 +308,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
                   ...item,
                   text: reply,
                   pending: false,
+                  ...(turn?.blocks && turn.blocks.length > 0 ? { blocks: turn.blocks } : {}),
                   ...(turn?.question ? { question: turn.question, ...(turn.replies && turn.replies.length > 0 ? { replies: turn.replies } : {}) } : {}),
                 }
               : item,
@@ -366,7 +401,11 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
       const history = threadRef.current
         .filter((item) => item.from !== 'divider' && !item.local && !item.pending && item.text)
         .slice(-MAX_HISTORY_MESSAGES)
-        .map((item) => ({ role: item.from === 'you' ? ('founder' as const) : ('droplet' as const), text: paragraphs(item.text, item.question).slice(0, 1500) }))
+        .map((item) => ({
+          role: item.from === 'you' ? ('founder' as const) : ('droplet' as const),
+          // What Droplet showed in a table or a plan goes with its words, so it can build on it. The question stays last, whatever is cut.
+          text: paragraphs(item.text.slice(0, 700), describeBlocks(item.blocks, item.checks, doneSet).slice(0, 500), item.question).slice(0, 1500),
+        }))
       // A move to another workspace is marked once, here, when something is said in it.
       const space = spaceRef.current
       const moved = space !== null && sentInRef.current !== undefined && sentInRef.current !== space
@@ -382,7 +421,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         busyRef.current = false
       }
     },
-    [converse, message],
+    [converse, doneSet, message],
   )
 
   // The familiar path: choosing a task opens its fixed layout without asking the model, the same layout the
@@ -421,6 +460,20 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
       }
     },
     [currentProjectId, workspaceOpened],
+  )
+
+  // A box on a plan or a checklist in the chat was ticked or cleared. It is kept with the message, and so with the saved chat.
+  const toggleCheck = useCallback((messageId: number, block: number, item: number, checked: boolean) => {
+    setThread((current) => current.map((entry) => (entry.id === messageId ? { ...entry, checks: { ...entry.checks, [`${block}:${item}`]: checked } } : entry)))
+  }, [])
+
+  // A plan step's Open button: the founder asking outright for that workspace, in the words the composer is told to expect.
+  const openStep = useCallback(
+    (step: JourneyStep) => {
+      const workspace = STEP_WORKSPACE[step]
+      if (workspace) void submitIntent(OPEN_PHRASE[workspace])
+    },
+    [submitIntent],
   )
 
   // The conversations listed in the history: the open one first (once something has been said in it), then the project's others.
@@ -692,7 +745,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
           {!docked && (
             <div className="home__conversation">
               {chatBar(false)}
-              <ChatThread messages={thread} onAction={onThreadAction} onReply={submitIntent} />
+              <ChatThread messages={thread} onAction={onThreadAction} onReply={submitIntent} done={doneSet} busy={composing} onToggle={toggleCheck} onOpenStep={openStep} />
             </div>
           )}
           {/* One workspace at a time: the one on screen leaves before the other arrives, so their toolbars and header controls never overlap. */}
@@ -764,9 +817,12 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
           initial={{ opacity: 0, x: 24 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+          // A palette saved or an invoice confirmed beside the chat shows as a tick in a plan the moment the founder looks back at it.
+          onPointerEnter={() => void refreshProject()}
+          onFocusCapture={() => void refreshProject()}
         >
           {chatBar(true)}
-          <ChatThread messages={thread} onAction={onThreadAction} onReply={submitIntent} />
+          <ChatThread messages={thread} onAction={onThreadAction} onReply={submitIntent} done={doneSet} busy={composing} onToggle={toggleCheck} onOpenStep={openStep} />
           {bar(true)}
         </motion.aside>
       )}

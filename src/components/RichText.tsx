@@ -1,9 +1,14 @@
 import { Fragment, useMemo } from 'react'
-import { parseRichText, type Inline } from '../lib/richText.ts'
+import { parseInline, parseRichText, type Inline } from '../lib/richText.ts'
 import './RichText.css'
 
 const renderInline = (content: Inline[]) =>
   content.map((part, index) => (part.bold ? <strong key={index}>{part.text}</strong> : <Fragment key={index}>{part.text}</Fragment>))
+
+// One line of Droplet's words, with its **bold** runs, for the places that are not paragraphs: a table cell, the label of a step.
+export function InlineText({ text }: { text: string }) {
+  return <>{renderInline(parseInline(text))}</>
+}
 
 // Droplet's words laid out: paragraphs, lists and bold, read from the small subset of Markdown the composer writes (see richText.ts).
 // It builds elements itself and never sets HTML, so nothing in a message can add markup.

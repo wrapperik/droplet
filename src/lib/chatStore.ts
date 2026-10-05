@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { blockSchema, MAX_BLOCKS, type ChatBlock } from '../compose/blocks.ts'
 import { documentStorage } from './storage.ts'
 
 // The conversations of a project, kept in this browser so the founder can come back to one. Per project, newest first. Only what was
@@ -14,6 +15,9 @@ const messageSchema = z.object({
   text: z.string().max(4000),
   // The question Droplet asked at the end of a reply. The answers it suggested are not kept: like buttons, they mean nothing later.
   question: z.string().max(400).optional(),
+  // A table or a checklist shown under the words, with the ticks the founder made on it (by `block:item`).
+  blocks: z.array(blockSchema).max(MAX_BLOCKS).optional(),
+  checks: z.record(z.string().max(12), z.boolean()).optional(),
   // A note from the app, not an answer from the model, so it is never sent to the model as part of the conversation.
   local: z.boolean().optional(),
 })
@@ -31,10 +35,18 @@ export type StoredMessage = z.infer<typeof messageSchema>
 export type StoredChat = z.infer<typeof chatSchema>
 
 // What of a thread is worth keeping: the words, not the replies still being worked on, nor the buttons.
-export function storableMessages(thread: { id: number; from: StoredMessage['from']; text: string; question?: string; pending?: boolean; local?: boolean }[]): StoredMessage[] {
+export function storableMessages(thread: { id: number; from: StoredMessage['from']; text: string; question?: string; blocks?: ChatBlock[]; checks?: Record<string, boolean>; pending?: boolean; local?: boolean }[]): StoredMessage[] {
   return thread
     .filter((item) => !item.pending && item.text.trim() !== '')
-    .map((item) => ({ id: item.id, from: item.from, text: item.text.slice(0, 4000), ...(item.question ? { question: item.question.slice(0, 400) } : {}), ...(item.local ? { local: true } : {}) }))
+    .map((item) => ({
+      id: item.id,
+      from: item.from,
+      text: item.text.slice(0, 4000),
+      ...(item.question ? { question: item.question.slice(0, 400) } : {}),
+      ...(item.blocks && item.blocks.length > 0 ? { blocks: item.blocks } : {}),
+      ...(item.checks && Object.keys(item.checks).length > 0 ? { checks: item.checks } : {}),
+      ...(item.local ? { local: true } : {}),
+    }))
     .slice(-MAX_STORED_MESSAGES)
 }
 

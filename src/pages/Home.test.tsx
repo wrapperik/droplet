@@ -4,6 +4,8 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { loadBoard } from '../lib/boardStore.ts'
 import { loadChats, saveChats } from '../lib/chatStore.ts'
+import { emptyMemory, withIdea } from '../lib/projectMemory.ts'
+import { saveMemory } from '../lib/memoryStore.ts'
 import { loadPalette } from '../lib/projectStore.ts'
 import { setDocumentStorage, type DocumentStorage } from '../lib/storage.ts'
 import { slowMemoryStorage } from '../test/slowStorage.ts'
@@ -15,6 +17,8 @@ let asked: Asked[] = []
 let answers: unknown[] = []
 
 const reply = (task: string, message: string, actions: unknown[] = []) => ({ outcome: 'valid', turn: { task, message, actions, memoryUsed: [] } })
+// A reply that opens a workspace the founder asked for, quoting their own words as the composer must.
+const opening = (task: string, message: string, quote: string) => ({ outcome: 'valid', turn: { task, message, actions: [], opens: { because: 'asked', quote }, memoryUsed: [] } })
 
 beforeEach(() => {
   window.localStorage.clear()
@@ -103,7 +107,7 @@ describe('asking Droplet to fill in the invoice', () => {
   it('opens the invoice and asks again when the request belongs there and no invoice is open, then fills it in', async () => {
     const user = userEvent.setup()
     answers = [
-      reply('invoice', 'I am opening the invoice workspace.'),
+      opening('invoice', 'I am opening the invoice workspace.', 'Invoice them for 12 gift boxes'),
       reply('invoice', 'I added the line.', [{ type: 'add_line', description: 'Gift box', quantity: 12, unitPrice: '450' }]),
     ]
     renderHome()
@@ -119,7 +123,7 @@ describe('asking Droplet to fill in the invoice', () => {
 
   it('asks again only once, however the second answer comes back', async () => {
     const user = userEvent.setup()
-    answers = [reply('invoice', 'Opening the invoice.'), reply('brand', 'That is about colours.')]
+    answers = [opening('invoice', 'Opening the invoice.', 'invoice colours'), opening('brand', 'That is about colours.', 'invoice colours')]
     renderHome()
     await say(user, 'invoice colours')
     await waitFor(() => expect(screen.getByText('That is about colours.')).toBeInTheDocument())
@@ -128,7 +132,7 @@ describe('asking Droplet to fill in the invoice', () => {
 
   it('opens the palette and asks again when the invoice is on screen and the request is about colours', async () => {
     const user = userEvent.setup()
-    answers = [reply('brand', 'Opening the brand workspace.'), reply('brand', 'Colour 1 reads best.')]
+    answers = [opening('brand', 'Opening the brand workspace.', 'brand colour'), reply('brand', 'Colour 1 reads best.')]
     renderHome()
     await pickTask(user, /Make an invoice/)
     await say(user, 'Which brand colour has the best contrast?')
@@ -1047,7 +1051,7 @@ describe('the AI on the board', () => {
     const user = userEvent.setup()
     renderHome()
     await pickTask(user, /Build the brand/)
-    answers = [reply('ideation', 'I am opening the board.'), reply('ideation', 'Here are some ideas.', [{ type: 'add_note', text: 'An idea' }])]
+    answers = [opening('ideation', 'I am opening the board.', 'brainstorm on a board'), reply('ideation', 'Here are some ideas.', [{ type: 'add_note', text: 'An idea' }])]
     await say(user, 'I want to brainstorm on a board')
     await waitFor(() => expect(screen.getByText(/Here are some ideas/)).toBeInTheDocument())
     expect(asked).toHaveLength(2)
@@ -1071,7 +1075,7 @@ describe('the AI on the board', () => {
     const user = userEvent.setup()
     renderHome()
     await pickTask(user, /Shape the business idea/)
-    answers = [reply('invoice', 'Opening the invoice.'), reply('invoice', 'Added the line.', [{ type: 'add_line', description: 'Gift box', quantity: 12, unitPrice: '450' }])]
+    answers = [opening('invoice', 'Opening the invoice.', 'Invoice them for 12 gift boxes'), reply('invoice', 'Added the line.', [{ type: 'add_line', description: 'Gift box', quantity: 12, unitPrice: '450' }])]
     await say(user, 'Invoice them for 12 gift boxes at 450')
     await waitFor(() => expect(screen.getByText(/Added the line/)).toBeInTheDocument())
     expect((asked[0] as unknown as { view?: string }).view).toBe('board')
@@ -1156,5 +1160,120 @@ describe('with storage that takes its time', () => {
     await user.click(await screen.findByRole('button', { name: /Save/ }))
     await waitFor(() => expect(slow.documents.has('duckstack/palette')).toBe(true))
     expect(window.localStorage.getItem('droplet-project-duckstack-palette')).toBeNull()
+  })
+})
+
+// Droplet guides first: nothing opens until the founder asks for it or agrees, and a plan or a table can be shown in the chat.
+describe('guiding the founder', () => {
+  const plan = {
+    type: 'checklist',
+    title: 'Your plan',
+    numbered: true,
+    items: [
+      { label: 'Settle the name', detail: 'DuckStack is yours.', step: 'name' },
+      { label: 'Brand values and offer', step: 'values' },
+      { label: 'Get a logo', step: 'logo' },
+    ],
+  }
+  const planReply = { outcome: 'valid', turn: { task: 'chat', message: 'Here is the order I would go in.', question: 'Shall we start with the name?', blocks: [plan], actions: [], memoryUsed: [] } }
+
+  it('opens nothing for a founder who only says what they want to build: the reply is a conversation and a question', async () => {
+    const user = userEvent.setup()
+    answers = [{ outcome: 'valid', turn: { task: 'chat', message: 'DuckStack! Lovely name.', question: 'How far along are you?', replies: ['Just an idea'], actions: [], memoryUsed: [] } }]
+    renderHome()
+    await say(user, 'I want to create a dev studio called DuckStack')
+    await waitFor(() => expect(screen.getByText('How far along are you?')).toBeInTheDocument())
+    expect(asked).toHaveLength(1)
+    expect(screen.queryByRole('toolbar', { name: 'Tools' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Board' })).not.toBeInTheDocument()
+  })
+
+  it('refuses a reply that opens a palette without a quote from the founder, so no workspace opens and nothing odd reaches the thread', async () => {
+    const user = userEvent.setup()
+    const palette = { type: 'set_palette', colours: [{ hex: '#111111', name: 'A', rationale: 'x' }, { hex: '#EEEEEE', name: 'B', rationale: 'x' }, { hex: '#336699', name: 'C', rationale: 'x' }], reason: 'Colours.' }
+    answers = [{ outcome: 'valid', turn: { task: 'brand', message: 'Here are colours.', actions: [palette], memoryUsed: [] } }]
+    renderHome()
+    await say(user, 'I want to create a dev studio called DuckStack')
+    await waitFor(() => expect(screen.getByText(/I got an answer I could not use/)).toBeInTheDocument())
+    expect(screen.queryByRole('toolbar', { name: 'Tools' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Here are colours.')).not.toBeInTheDocument()
+  })
+
+  it('tells the composer where the project is on the journey with every request, and nothing private', async () => {
+    const user = userEvent.setup()
+    await saveMemory('duckstack', withIdea(emptyMemory(), 'name', 'DuckStack', '2026-10-06T10:00'))
+    answers = [reply('chat', 'Hello.')]
+    renderHome()
+    await say(user, 'Hi')
+    await waitFor(() => expect(asked).toHaveLength(1))
+    expect((asked[0] as unknown as { project: unknown }).project).toMatchObject({ businessName: 'DuckStack', hasPalette: false, invoices: 0, clients: 0 })
+  })
+
+  it('shows a plan as a checklist under the words, with the question after it', async () => {
+    const user = userEvent.setup()
+    answers = [planReply]
+    renderHome()
+    await say(user, 'Not much yet, just the name')
+    const list = await screen.findByRole('region', { name: 'Your plan' })
+    expect(within(list).getAllByRole('checkbox')).toHaveLength(3)
+    expect(within(list).getByText('DuckStack is yours.')).toBeInTheDocument()
+    expect(screen.getByText('Shall we start with the name?')).toBeInTheDocument()
+    // a step with a workspace has an Open button, and the logo, which Droplet cannot make, says so instead
+    expect(within(list).getByRole('button', { name: 'Open Settle the name' })).toBeInTheDocument()
+    expect(within(list).queryByRole('button', { name: 'Open Get a logo' })).not.toBeInTheDocument()
+    expect(within(list).getByText('Made outside Droplet')).toBeInTheDocument()
+  })
+
+  it('ticks the steps the project holds, leaves them locked, and lets the founder tick the rest, kept with the saved chat', async () => {
+    const user = userEvent.setup()
+    await saveMemory('duckstack', withIdea(emptyMemory(), 'name', 'DuckStack', '2026-10-06T10:00'))
+    answers = [planReply]
+    renderHome()
+    await say(user, 'Not much yet')
+    const list = await screen.findByRole('region', { name: 'Your plan' })
+    const boxes = within(list).getAllByRole('checkbox')
+    await waitFor(() => expect(boxes[0]).toBeChecked())
+    expect(boxes[0]).toBeDisabled()
+    expect(boxes[1]).not.toBeChecked()
+    await user.click(boxes[2])
+    expect(boxes[2]).toBeChecked()
+    await waitFor(async () => expect((await loadChatsFor())[0].messages.find((item) => item.blocks)?.checks).toEqual({ '0:2': true }))
+  })
+
+  it('tells the composer what a plan said and what was ticked, so it can build on it', async () => {
+    const user = userEvent.setup()
+    answers = [planReply, reply('chat', 'Great.')]
+    renderHome()
+    await say(user, 'Not much yet')
+    const list = await screen.findByRole('region', { name: 'Your plan' })
+    await user.click(within(list).getAllByRole('checkbox')[2])
+    await say(user, 'Ok')
+    await waitFor(() => expect(asked).toHaveLength(2))
+    const history = (asked[1] as unknown as { history: { role: string; text: string }[] }).history
+    const said = history.find((item) => item.role === 'droplet')!.text
+    expect(said).toContain('[Plan "Your plan": 1. Settle the name; 2. Brand values and offer; 3. Get a logo (done)]')
+    expect(said.trim().endsWith('Shall we start with the name?')).toBe(true)
+  })
+
+  it('opens a workspace when the founder presses Open on a plan step: that is asking outright, in the words the composer expects', async () => {
+    const user = userEvent.setup()
+    answers = [planReply, opening('ideation', 'Opening the board.', 'Open the business idea board'), reply('ideation', 'Here it is. What does DuckStack do?')]
+    renderHome()
+    await say(user, 'Not much yet')
+    await user.click(await screen.findByRole('button', { name: 'Open Settle the name' }))
+    expect(await screen.findByRole('region', { name: 'Board' })).toBeInTheDocument()
+    expect(asked[1].intent).toBe('Open the business idea board')
+    expect(asked[2]).toMatchObject({ view: 'board', intent: 'Open the business idea board' })
+  })
+
+  it('shows a table, with the first column naming the row', async () => {
+    const user = userEvent.setup()
+    answers = [{ outcome: 'valid', turn: { task: 'chat', message: 'Side by side:', blocks: [{ type: 'table', title: 'Name ideas', columns: ['Name', 'Feel'], rows: [['DuckStack', 'Playful'], ['Pond', 'Calm']] }], actions: [], memoryUsed: [] } }]
+    renderHome()
+    await say(user, 'Compare some names')
+    const table = await screen.findByRole('table', { name: 'Name ideas' })
+    expect(within(table).getByRole('rowheader', { name: 'DuckStack' })).toBeInTheDocument()
+    expect(within(table).getByRole('cell', { name: 'Calm' })).toBeInTheDocument()
+    expect(within(table).getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual(['Name', 'Feel'])
   })
 })

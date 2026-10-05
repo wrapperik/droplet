@@ -1,4 +1,7 @@
 import { Fragment, useEffect, useRef } from 'react'
+import type { ChatBlock } from '../compose/blocks.ts'
+import type { JourneyStep } from '../compose/journey.ts'
+import ChatBlocks from './ChatBlocks.tsx'
 import DropletLoader from './DropletLoader.tsx'
 import RichText from './RichText.tsx'
 import './ChatThread.css'
@@ -14,6 +17,10 @@ export type ThreadMessage = {
   text: string
   // Droplet is still working on this reply.
   pending?: boolean
+  // A table or a checklist shown under the words, drawn by the interface from data.
+  blocks?: ChatBlock[]
+  // The ticks the founder made on a checklist, by `block:item`, kept with the message.
+  checks?: Record<string, boolean>
   // The one question Droplet asks next, set apart from the answer above it.
   question?: string
   // Answers to that question the founder can tap instead of typing. Offered only while the message is the last in the thread.
@@ -30,10 +37,20 @@ type Props = {
   onAction?: (messageId: number, actionId: string) => void
   // A suggested reply was tapped. It is sent as the founder's own message.
   onReply?: (text: string) => void
+  // The steps the project shows are done, so a plan can tick them.
+  done?: ReadonlySet<JourneyStep>
+  // Droplet is working, so a button that would ask it something waits.
+  busy?: boolean
+  // A box on a checklist was ticked or cleared.
+  onToggle?: (messageId: number, block: number, item: number, checked: boolean) => void
+  // A plan step's Open button was pressed.
+  onOpenStep?: (step: JourneyStep) => void
 }
 
+const NO_STEPS: ReadonlySet<JourneyStep> = new Set()
+
 // The running conversation. It scrolls on its own, and follows the newest message.
-export default function ChatThread({ messages, onAction, onReply }: Props) {
+export default function ChatThread({ messages, onAction, onReply, done = NO_STEPS, busy, onToggle, onOpenStep }: Props) {
   const listRef = useRef<HTMLOListElement>(null)
 
   // Follow the newest message, including when a reply that was pending arrives in place and is taller than "Thinking".
@@ -71,6 +88,9 @@ export default function ChatThread({ messages, onAction, onReply }: Props) {
                 <RichText source={message.text} />
               ) : (
                 message.text
+              )}
+              {!message.pending && message.blocks && message.blocks.length > 0 && (
+                <ChatBlocks blocks={message.blocks} checks={message.checks} done={done} busy={busy} onToggle={(block, item, checked) => onToggle?.(message.id, block, item, checked)} onOpen={onOpenStep} />
               )}
               {!message.pending && message.question && <p className="thread__question">{message.question}</p>}
               {message.actions && message.actions.length > 0 && (

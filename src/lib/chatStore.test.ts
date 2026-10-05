@@ -33,6 +33,32 @@ describe('a question Droplet asked', () => {
   })
 })
 
+describe('a table or a checklist Droplet showed', () => {
+  const blocks = [
+    { type: 'checklist' as const, title: 'Your plan', numbered: true, items: [{ label: 'Settle the name', step: 'name' as const }, { label: 'Get a logo', step: 'logo' as const }] },
+    { type: 'table' as const, columns: ['Name', 'Feel'], rows: [['DuckStack', 'Playful']] },
+  ]
+
+  it('is kept with the message, with the ticks the founder made, and nothing is added when there are none', () => {
+    const kept = storableMessages([
+      { id: 1, from: 'droplet', text: 'Your plan.', blocks, checks: { '0:1': true } },
+      { id: 2, from: 'droplet', text: 'Plain.', blocks: [], checks: {} },
+    ])
+    expect(kept).toEqual([{ id: 1, from: 'droplet', text: 'Your plan.', blocks, checks: { '0:1': true } }, { id: 2, from: 'droplet', text: 'Plain.' }])
+  })
+
+  it('comes back from storage whole', async () => {
+    await saveChats('p', [{ id: 'c', title: 'x', updatedAt: '2026-10-04T10:00:00.000Z', messages: [{ id: 1, from: 'droplet', text: 'Your plan.', blocks, checks: { '0:1': true } }] }])
+    expect((await loadChats('p'))[0].messages[0]).toEqual({ id: 1, from: 'droplet', text: 'Your plan.', blocks, checks: { '0:1': true } })
+  })
+
+  it('leaves out a chat whose blocks cannot be read, and keeps the rest', async () => {
+    const bad = { id: 'bad', title: 'x', updatedAt: '2026-10-04T10:00:00.000Z', messages: [{ id: 1, from: 'droplet', text: 'x', blocks: [{ type: 'html', html: '<b>x</b>' }] }] }
+    await saveChats('p', [bad as never, chat('good', '2026-10-04T11:00:00.000Z')])
+    expect((await loadChats('p')).map((entry) => entry.id)).toEqual(['good'])
+  })
+})
+
 describe('cleanTitle', () => {
   it('tidies a title from the composer to one plain line', () => {
     expect(cleanTitle('  "Pricing gift boxes."  ')).toBe('Pricing gift boxes')
