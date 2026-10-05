@@ -43,6 +43,12 @@ function Harness({ items = [], decide }: { items?: BoardItem[]; decide?: Decide 
   )
 }
 
+// The options of a tool (its colours, its kinds, its plus) are there only while it is in hand, so the tool is put in hand first, if it is not.
+const inHand = async (user: ReturnType<typeof userEvent.setup>, tool: 'Note' | 'Shape' | 'Text' | 'Frame' | 'Arrow') => {
+  const button = screen.getByRole('button', { name: tool })
+  if (button.getAttribute('aria-pressed') !== 'true') await user.click(button)
+}
+
 const noteEl = (id: string) => document.querySelector<HTMLElement>(`[data-item-id="${id}"]`)!
 const position = (id: string) => ({ left: parseFloat(noteEl(id).style.left), top: parseFloat(noteEl(id).style.top) })
 const surface = () => document.querySelector<HTMLElement>('.board__surface')!
@@ -284,8 +290,8 @@ describe('adding notes', () => {
   it('places a note where the board is pressed once the sticky tool is in hand, in the colour chosen, and goes back to select', async () => {
     const user = userEvent.setup()
     render(<Harness />)
+    await inHand(user, 'Note')
     await user.click(screen.getByRole('radio', { name: 'Mint' }))
-    await user.click(screen.getByRole('button', { name: 'Note' }))
     expect(screen.getByRole('button', { name: 'Note' })).toHaveAttribute('aria-pressed', 'true')
     await user.pointer({ keys: '[MouseLeft>]', target: surface(), coords: { clientX: 500, clientY: 400 } })
     await user.pointer({ keys: '[/MouseLeft]' })
@@ -310,8 +316,10 @@ describe('adding notes', () => {
   it('adds a note to the middle of the view from the plus, with no pointer, in a place that is clear, ready to write in', async () => {
     const user = userEvent.setup()
     render(<Harness />)
+    await inHand(user, 'Note')
     await user.click(screen.getByRole('button', { name: 'Add a note to the middle of the view' }))
-    await user.keyboard('x')
+    await user.keyboard('x{Escape}')
+    await inHand(user, 'Note')
     await user.click(screen.getByRole('button', { name: 'Add a note to the middle of the view' }))
     expect(items()).toHaveLength(2)
     const [first, second] = items()
@@ -478,8 +486,8 @@ describe('shapes', () => {
   it('places a shape of the kind in hand when the board is pressed with the shape tool, and writes in it at once', async () => {
     const user = userEvent.setup()
     render(<Harness />)
+    await inHand(user, 'Shape')
     await user.click(screen.getByRole('radio', { name: 'Ellipse' }))
-    await user.click(screen.getByRole('button', { name: 'Shape' }))
     await user.pointer([{ keys: '[MouseLeft>]', target: surface(), coords: { clientX: 500, clientY: 400 } }, { keys: '[/MouseLeft]' }])
     expect(everything()).toHaveLength(1)
     expect(everything()[0]).toMatchObject({ kind: 'shape', shape: 'ellipse', w: 200, h: 140 })
@@ -529,6 +537,7 @@ describe('shapes', () => {
   it('has a plus that adds a shape to the middle of the view, in a clear place', async () => {
     const user = userEvent.setup()
     render(<Harness />)
+    await inHand(user, 'Shape')
     await user.click(screen.getByRole('button', { name: 'Add a shape to the middle of the view' }))
     await user.keyboard('x')
     expect(everything()[0]).toMatchObject({ kind: 'shape', text: 'x' })
@@ -756,8 +765,8 @@ describe('arrows', () => {
   it('draws the arrow in the style in hand', async () => {
     const user = userEvent.setup()
     render(two())
+    await inHand(user, 'Arrow')
     await user.click(screen.getByRole('radio', { name: 'Elbow' }))
-    await user.click(screen.getByRole('button', { name: 'Arrow' }))
     await pull(user, itemEl('a'), [250, 250], [800, 250])
     expect(everything().find((item) => item.kind === 'connector')).toMatchObject({ style: 'elbow' })
   })
@@ -1231,5 +1240,41 @@ describe('deciding a name or an offer from a thing on the board', () => {
     await user.click(itemEl('a'))
     expect(screen.getByRole('button', { name: 'Use as business name' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Use as offer' })).toBeEnabled()
+  })
+})
+
+describe('the options of a tool', () => {
+  it('are there only while the tool is in hand, so the bar stays one short row', async () => {
+    const user = userEvent.setup()
+    render(<Harness />)
+    for (const name of ['Colour of the next note', 'Kind of the next shape', 'Line of the next arrow']) expect(screen.queryByRole('radiogroup', { name })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /to the middle of the view/ })).not.toBeInTheDocument()
+    await inHand(user, 'Note')
+    expect(screen.getByRole('radiogroup', { name: 'Colour of the next note' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add a note to the middle of the view' })).toBeInTheDocument()
+    expect(screen.queryByRole('radiogroup', { name: 'Kind of the next shape' })).not.toBeInTheDocument()
+    await inHand(user, 'Shape')
+    expect(screen.getByRole('radiogroup', { name: 'Kind of the next shape' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('radiogroup', { name: 'Colour of the next note' })).not.toBeInTheDocument())
+  })
+
+  it('go when the tool is put down by pressing it again, and the choice is kept for next time', async () => {
+    const user = userEvent.setup()
+    render(<Harness />)
+    await inHand(user, 'Note')
+    await user.click(screen.getByRole('radio', { name: 'Lilac' }))
+    await user.click(screen.getByRole('button', { name: 'Note' }))
+    await waitFor(() => expect(screen.queryByRole('radiogroup', { name: 'Colour of the next note' })).not.toBeInTheDocument())
+    await inHand(user, 'Note')
+    expect(screen.getByRole('radio', { name: 'Lilac' })).toBeChecked()
+  })
+
+  it('are given to Text and Frame too: a plus, and nothing else', async () => {
+    const user = userEvent.setup()
+    render(<Harness />)
+    await inHand(user, 'Text')
+    expect(screen.getByRole('button', { name: 'Add text to the middle of the view' })).toBeInTheDocument()
+    await inHand(user, 'Frame')
+    expect(screen.getByRole('button', { name: 'Add a frame to the middle of the view' })).toBeInTheDocument()
   })
 })

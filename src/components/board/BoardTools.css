@@ -21,6 +21,16 @@
   color: var(--accent);
 }
 
+.boardtool__options {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  /* Clipped while it slides open, with room left so the ring of the chosen colour is not cut off. */
+  padding: 0.25rem;
+  margin: -0.25rem;
+  overflow: hidden;
+}
+
 .boardtool__colours {
   display: flex;
   gap: 0.375rem;
