@@ -19,7 +19,7 @@
   overflow-wrap: anywhere;
 }
 
-/* The founder's own words sit in a mid blue bubble on the right, lit from above; Droplet's replies in a light grey bubble on the left. */
+/* The founder's own words sit in a mid blue bubble on the right, lit from above; Droplet's replies in plain text on the left. */
 .thread__message--you {
   align-self: flex-end;
   padding: 0.625rem 1rem;
@@ -33,15 +33,15 @@
 
 .thread__message--droplet {
   align-self: flex-start;
-  padding: 0.625rem 1rem;
-  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-lg) var(--radius-sm);
-  background: var(--overlay-06);
+  /* Droplet's replies have no bubble: plain text on the page, as in most assistants. The founder's words are the ones in a bubble. */
+  max-width: min(100%, 36rem);
+  padding: 0.25rem 0;
   color: var(--text);
 }
 
 /* Droplet is thinking: the mark hopping, with a word beside it. */
 .thread__message--pending {
-  padding: 0.125rem 1rem 0.125rem 0.5rem;
+  padding: 0.125rem 0;
 }
 
 .thread__pending {
