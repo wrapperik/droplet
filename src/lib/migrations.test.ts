@@ -18,8 +18,8 @@ describe('the database migrations', () => {
     expect(files).toEqual([...files].sort())
   })
 
-  it('make the three tables the app uses', () => {
-    expect(tables.sort()).toEqual(['profiles', 'project_documents', 'projects'])
+  it('make the tables the app uses', () => {
+    expect([...tables].sort()).toEqual(['compositions', 'profiles', 'project_documents', 'projects'])
   })
 
   it('turn row-level security on for every table, so a table with no policy is closed to everyone', () => {
@@ -39,7 +39,7 @@ describe('the database migrations', () => {
   })
 
   it('close every table to the signed-out role, and open only what the signed-in need', () => {
-    expect(code).toMatch(/revoke all on public\.profiles, public\.projects, public\.project_documents from anon/)
+    for (const table of tables) expect(code, table).toMatch(new RegExp(`revoke all on [^;]*public\\.${table}\\b[^;]* from anon`))
     expect(code).not.toMatch(/grant [^;]* to anon/)
     // a founder cannot make or remove a profile: that is done by the trigger and by deleting the account
     expect(code).toMatch(/grant select, update on public\.profiles to authenticated/)
@@ -66,5 +66,21 @@ describe('the database migrations', () => {
   it('only allow the kinds of document the app saves, and hold a document to a size', () => {
     expect(code).toMatch(/kind in \('palette', 'board', 'invoice', 'memory', 'chats'\)/)
     expect(code).toMatch(/octet_length\(value::text\) <= 2000000/)
+  })
+
+  it('keep the record of the composer free of what the founder wrote, and writable only by the function', () => {
+    const compositions = /create table public\.compositions \(([\s\S]*?)\n\);/.exec(code)?.[1] ?? ''
+    // the names of the columns (the first word of each line that makes one), not their types
+    const columns = compositions.split('\n').map((line) => /^\s{2}(\w+) /.exec(line)?.[1]).filter(Boolean)
+    expect(columns).toEqual(['id', 'user_id', 'outcome', 'task', 'model', 'error', 'actions', 'bad_replies', 'ms', 'created_at'])
+    expect(columns.filter((name) => /intent|spec|message|prompt|text|body|content|reply/.test(name ?? ''))).toEqual([])
+    // the founder may read their own rows, and nothing more: the function writes with its own key
+    expect(code).toMatch(/grant select on public\.compositions to authenticated/)
+    expect(code).not.toMatch(/grant [^;]*\b(insert|update|delete)\b[^;]* on public\.compositions/)
+    expect(code).not.toMatch(/create policy "[^"]+" on public\.compositions\s+for (insert|update|delete)/)
+  })
+
+  it('count a founder\'s recent requests from an index made for it', () => {
+    expect(code).toMatch(/create index compositions_user_recent_idx on public\.compositions \(user_id, created_at desc\)/)
   })
 })
