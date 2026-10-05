@@ -13,6 +13,8 @@ export type Expectation = {
   acts?: boolean
   // The reply opens a workspace (it has `opens`, with the founder's own words quoted), or it does not. Left out where either is fine.
   opens?: boolean
+  // The reply searched the web, or did not. Checked only when the eval is run with search allowed (EVAL_SEARCH=1).
+  searches?: boolean
   // The reply shows a table or a checklist, or does not. Left out where either is fine.
   blocks?: 'table' | 'checklist' | 'none'
   // The first action must be one of these types.
@@ -59,7 +61,7 @@ export const TEST_REQUESTS: TestRequest[] = [
     id: 'palette-gift',
     why: 'A clear palette request with a mood and a business',
     request: { intent: 'I need a colour palette for my gift box business. Warm and premium, please.' },
-    expect: { task: 'brand', acts: true, opens: true, firstAction: ['set_palette'] },
+    expect: { task: 'brand', acts: true, opens: true, firstAction: ['set_palette'], searches: false },
   },
   {
     id: 'palette-pets',
@@ -401,5 +403,29 @@ export const TEST_REQUESTS: TestRequest[] = [
     why: 'A workspace that is not built: it must say so, offer to talk it through, and not pretend',
     request: { intent: 'Can you open the client email workspace?', project: brandedProject },
     expect: { task: ['correspondence', 'chat'], acts: false, opens: false },
+  },
+  {
+    id: 'search-cipc',
+    why: 'A fee that changes: it should look it up, give the figure plainly, say to confirm it on the official site, and open nothing',
+    request: { intent: 'How much does it cost to register a company with CIPC?', project: namedProject },
+    expect: { task: 'chat', acts: false, opens: false, searches: true },
+  },
+  {
+    id: 'search-vat',
+    why: 'A South African rule: it should look up when VAT registration becomes compulsory, and not put anything of the founder\'s in the search',
+    request: { intent: 'When do I have to register for VAT?', project: namedProject },
+    expect: { task: ['chat', 'invoice'], acts: false, opens: false, searches: true },
+  },
+  {
+    id: 'search-not-names',
+    why: 'Something it can do itself: name ideas need no search, and should be specific to the business',
+    request: { intent: 'Give me a few more name ideas like DuckStack', project: namedProject },
+    expect: { task: ['chat', 'ideation'], acts: false, opens: false, searches: false },
+  },
+  {
+    id: 'short-pricing',
+    why: 'A one-word message: it should read it generously and start helping with pricing for this business, not ask what they mean',
+    request: { intent: 'Pricing', project: { ...namedProject, offer: 'Web apps for small businesses' }, ...withHistory(firstExchange) },
+    expect: { task: 'chat', acts: false, opens: false, asks: true },
   },
 ]

@@ -20,16 +20,18 @@ const model = process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL
 const call = createGeminiCaller({ apiKey, model, thinkingLevel: process.env.GEMINI_THINKING_LEVEL?.trim() || undefined })
 
 const filter = process.argv[2]
+// EVAL_SEARCH=1 lets the model search the web, as the dev server does. Each search counts against the key's free monthly searches.
+const search = process.env.EVAL_SEARCH === '1'
 const requests = filter ? TEST_REQUESTS.filter((test) => test.id.includes(filter)) : TEST_REQUESTS
 const PAUSE_MS = Number(process.env.EVAL_PAUSE_MS) || 4000
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-type Row = { id: string; outcome: string; task: string; actions: string; pass: boolean; problems: string[]; seconds: number; message: string; question?: string; replies?: string[]; title?: string; opens?: string; blocks?: string; retried?: string[] }
+type Row = { id: string; outcome: string; task: string; actions: string; pass: boolean; problems: string[]; seconds: number; message: string; question?: string; replies?: string[]; title?: string; opens?: string; blocks?: string; retried?: string[]; searched?: string }
 
 async function run(test: TestRequest): Promise<Row> {
   const started = Date.now()
   try {
-    const result = await composeWorkspace(test.request, call)
+    const result = await composeWorkspace(test.request, call, { search })
     const { turn } = result
     const problems: string[] = []
     if (result.outcome === 'fallback') problems.push('fell back after two unusable replies')
@@ -37,6 +39,7 @@ async function run(test: TestRequest): Promise<Row> {
     if (!wantedTasks.includes(turn.task)) problems.push(`task was "${turn.task}", expected "${wantedTasks.join('" or "')}"`)
     if (test.expect.acts !== undefined && test.expect.acts !== turn.actions.length > 0) problems.push(test.expect.acts ? 'expected actions, got none' : 'expected no actions, got some')
     if (test.expect.opens !== undefined && test.expect.opens !== Boolean(turn.opens)) problems.push(test.expect.opens ? 'expected it to open a workspace, with the founder\'s words quoted, and it did not' : `it opened a workspace the founder did not ask for (${turn.opens?.because}: "${turn.opens?.quote}")`)
+    if (search && test.expect.searches !== undefined && test.expect.searches !== Boolean(result.grounding)) problems.push(test.expect.searches ? 'expected it to search the web, and it did not' : `it searched the web when it did not need to (${result.grounding?.queries.join('; ')})`)
     const shown = (turn.blocks ?? []).map((block) => block.type)
     if (test.expect.blocks === 'none' && shown.length > 0) problems.push(`expected no table or checklist, got ${shown.join(', ')}`)
     if (test.expect.blocks && test.expect.blocks !== 'none' && !shown.includes(test.expect.blocks)) problems.push(`expected a ${test.expect.blocks}, got ${shown.join(', ') || 'none'}`)
@@ -68,6 +71,7 @@ async function run(test: TestRequest): Promise<Row> {
       title: turn.title,
       ...(turn.opens ? { opens: `${turn.opens.because}: "${turn.opens.quote}"` } : {}),
       ...(shown.length > 0 ? { blocks: shown.join(', ') } : {}),
+      ...(result.grounding ? { searched: `${result.grounding.queries.join('; ')} (${result.grounding.sources.length} sources)` } : {}),
       // Why the first reply was refused, when it was, so a prompt can be fixed from the evidence.
       ...(result.attempts.some((attempt) => attempt.errors.length > 0) ? { retried: result.attempts.flatMap((attempt) => attempt.errors).slice(0, 4) } : {}),
     }
@@ -77,7 +81,7 @@ async function run(test: TestRequest): Promise<Row> {
   }
 }
 
-console.log(`Model: ${model}   Requests: ${requests.length}\n`)
+console.log(`Model: ${model}   Requests: ${requests.length}   Web search: ${search ? 'allowed' : 'off'}\n`)
 const rows: Row[] = []
 for (const [index, test] of requests.entries()) {
   const row = await run(test)
@@ -87,6 +91,7 @@ for (const [index, test] of requests.entries()) {
   if (row.message) console.log(`        "${row.message.replace(/\n+/g, ' / ').slice(0, 220)}${row.message.length > 220 ? '...' : ''}"`)
   if (row.title) console.log(`        title: ${row.title}`)
   for (const reason of row.retried ?? []) console.log(`        refused: ${reason.slice(0, 200)}`)
+  if (row.searched) console.log(`        searched: ${row.searched}`)
   if (row.opens) console.log(`        opens (${row.opens})`)
   if (row.blocks) console.log(`        shows: ${row.blocks}`)
   if (row.question) console.log(`        ? ${row.question}${row.replies?.length ? `  [${row.replies.join(' | ')}]` : ''}`)
