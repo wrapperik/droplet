@@ -32,7 +32,7 @@ describe('cleanProjectName', () => {
 
 describe('with Supabase', () => {
   // A stand-in for the client's query builder, for what projectsStore asks of it.
-  function mockClient(answers: { list?: { data: unknown; error: unknown }; insert?: { data: unknown; error: unknown } }) {
+  function mockClient(answers: { list?: { data: unknown; error: unknown }; insert?: { data: unknown; error: unknown }; update?: { data: unknown; error: unknown } }) {
     const asked: string[] = []
     const client = {
       from: (table: string) => ({
@@ -42,6 +42,15 @@ describe('with Supabase', () => {
             order: async (column: string, options: { ascending: boolean }) => {
               asked.push(`order ${column} ${options.ascending ? 'asc' : 'desc'}`)
               return answers.list ?? { data: [], error: null }
+            },
+          }
+        },
+        update: (row: unknown) => {
+          asked.push(`update ${JSON.stringify(row)}`)
+          return {
+            eq: (column: string, value: string) => {
+              asked.push(`eq ${column} ${value}`)
+              return { select: () => ({ single: async () => answers.update ?? { data: null, error: null } }) }
             },
           }
         },
@@ -88,6 +97,26 @@ describe('with Supabase', () => {
     const { createProject } = await import('./projectsStore.ts')
     expect(await createProject('Pet sitting')).toBeNull()
     expect(logged).toHaveBeenCalledWith('Droplet: could not make the project. denied')
+    logged.mockRestore()
+  })
+
+  it('renames one project, by its id, with a tidied name, and gives back what it now is', async () => {
+    const { client, asked } = mockClient({ update: { data: { id: 'u2', name: 'Pet sitting' }, error: null } })
+    vi.doMock('./supabase.ts', () => ({ getSupabase: () => client }))
+    const { renameProject } = await import('./projectsStore.ts')
+    expect(await renameProject('u2', '  Pet   sitting ')).toEqual({ id: 'u2', name: 'Pet sitting' })
+    expect(asked).toEqual(['update {"name":"Pet sitting"}', 'eq id u2'])
+  })
+
+  it('does not rename to nothing, and says null when the database refused', async () => {
+    const { client, asked } = mockClient({ update: { data: null, error: { message: 'denied' } } })
+    vi.doMock('./supabase.ts', () => ({ getSupabase: () => client }))
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { renameProject } = await import('./projectsStore.ts')
+    expect(await renameProject('u2', '   ')).toBeNull()
+    expect(asked).toEqual([])
+    expect(await renameProject('u2', 'Pet sitting')).toBeNull()
+    expect(logged).toHaveBeenCalledWith('Droplet: could not rename the project. denied')
     logged.mockRestore()
   })
 })
