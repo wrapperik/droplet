@@ -1,36 +1,20 @@
 import { paletteSaveSchema, type PaletteSave } from './paletteSave.ts'
+import { documentStorage } from './storage.ts'
 
-// Stand-in for the project's saved memory until Supabase exists. Saved per project, in this browser.
+// The project's saved palette, through the document storage (this browser for now, a database later). Every call is asynchronous.
 export { paletteSaveSchema, type PaletteSave } from './paletteSave.ts'
 
-const keyFor = (projectId: string) => `droplet-project-${projectId}-palette`
-
-export function loadPalette(projectId: string): PaletteSave | null {
-  try {
-    const raw = window.localStorage.getItem(keyFor(projectId))
-    if (!raw) return null
-    const parsed = paletteSaveSchema.safeParse(JSON.parse(raw))
-    return parsed.success ? parsed.data : null
-  } catch {
-    return null
-  }
+export async function loadPalette(projectId: string): Promise<PaletteSave | null> {
+  const parsed = paletteSaveSchema.safeParse(await documentStorage().read(projectId, 'palette'))
+  return parsed.success ? parsed.data : null
 }
 
-// Returns false when the browser refused to store it, so the interface can say so honestly.
-export function savePalette(projectId: string, data: Omit<PaletteSave, 'savedAt'>): PaletteSave | null {
+// Null when it could not be stored, so the interface can say so honestly.
+export async function savePalette(projectId: string, data: Omit<PaletteSave, 'savedAt'>): Promise<PaletteSave | null> {
   const save: PaletteSave = { ...data, savedAt: new Date().toISOString() }
-  try {
-    window.localStorage.setItem(keyFor(projectId), JSON.stringify(save))
-    return save
-  } catch {
-    return null
-  }
+  return (await documentStorage().write(projectId, 'palette', save)) ? save : null
 }
 
-export function clearPalette(projectId: string) {
-  try {
-    window.localStorage.removeItem(keyFor(projectId))
-  } catch {
-    // Nothing to clear.
-  }
+export function clearPalette(projectId: string): Promise<void> {
+  return documentStorage().remove(projectId, 'palette')
 }

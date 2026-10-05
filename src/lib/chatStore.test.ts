@@ -27,9 +27,9 @@ describe('a question Droplet asked', () => {
     expect(kept).toEqual([{ id: 1, from: 'droplet', text: 'Three ways to price.', question: 'Do you know your costs?' }])
   })
 
-  it('comes back from storage', () => {
-    saveChats('p', [{ id: 'c', title: 'x', updatedAt: '2026-10-04T10:00:00.000Z', messages: [{ id: 1, from: 'droplet', text: 'Hi', question: 'Ready?' }] }])
-    expect(loadChats('p')[0].messages[0].question).toBe('Ready?')
+  it('comes back from storage', async () => {
+    await saveChats('p', [{ id: 'c', title: 'x', updatedAt: '2026-10-04T10:00:00.000Z', messages: [{ id: 1, from: 'droplet', text: 'Hi', question: 'Ready?' }] }])
+    expect((await loadChats('p'))[0].messages[0].question).toBe('Ready?')
   })
 })
 
@@ -51,9 +51,9 @@ describe('cleanTitle', () => {
 })
 
 describe('a chat the composer named', () => {
-  it('comes back from storage marked as named, and a chat without the mark still reads', () => {
-    saveChats('p', [{ ...chat('a', '2026-10-04T10:00:00.000Z'), title: 'Pricing gift boxes', named: true }, chat('b', '2026-10-03T10:00:00.000Z')])
-    const loaded = loadChats('p')
+  it('comes back from storage marked as named, and a chat without the mark still reads', async () => {
+    await saveChats('p', [{ ...chat('a', '2026-10-04T10:00:00.000Z'), title: 'Pricing gift boxes', named: true }, chat('b', '2026-10-03T10:00:00.000Z')])
+    const loaded = await loadChats('p')
     expect(loaded[0]).toMatchObject({ title: 'Pricing gift boxes', named: true })
     expect(loaded[1].named).toBeUndefined()
   })
@@ -104,19 +104,19 @@ describe('upsertChat and removeChat', () => {
 })
 
 describe('loadChats and saveChats', () => {
-  it('keeps chats for the project they belong to, and no others', () => {
-    expect(saveChats('duckstack', [chat('a', '2026-10-01T10:00:00')])).toBe(true)
-    expect(loadChats('duckstack').map((item) => item.id)).toEqual(['a'])
-    expect(loadChats('other')).toEqual([])
+  it('keeps chats for the project they belong to, and no others', async () => {
+    expect(await saveChats('duckstack', [chat('a', '2026-10-01T10:00:00')])).toBe(true)
+    expect((await loadChats('duckstack')).map((item) => item.id)).toEqual(['a'])
+    expect(await loadChats('other')).toEqual([])
   })
 
-  it('reads nothing from storage that is not chats, and leaves out one chat that cannot be read', () => {
+  it('reads nothing from storage that is not chats, and leaves out one chat that cannot be read', async () => {
     window.localStorage.setItem('droplet-project-duckstack-chats', '{not json')
-    expect(loadChats('duckstack')).toEqual([])
+    expect(await loadChats('duckstack')).toEqual([])
     window.localStorage.setItem('droplet-project-duckstack-chats', JSON.stringify({ not: 'a list' }))
-    expect(loadChats('duckstack')).toEqual([])
+    expect(await loadChats('duckstack')).toEqual([])
     window.localStorage.setItem('droplet-project-duckstack-chats', JSON.stringify([chat('a', 'x'), { id: 'broken', messages: 'no' }, chat('b', 'y')]))
-    expect(loadChats('duckstack').map((item) => item.id)).toEqual(['a', 'b'])
+    expect((await loadChats('duckstack')).map((item) => item.id)).toEqual(['a', 'b'])
   })
 })
 

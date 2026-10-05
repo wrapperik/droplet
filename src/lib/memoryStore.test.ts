@@ -12,31 +12,31 @@ const remembered = () => {
 }
 
 describe('memoryStore', () => {
-  it('remembers nothing for a project that has never confirmed anything', () => {
-    expect(loadMemory('duckstack')).toEqual(emptyMemory())
+  it('remembers nothing for a project that has never confirmed anything', async () => {
+    expect(await loadMemory('duckstack')).toEqual(emptyMemory())
   })
 
-  it('saves and loads what a project remembers, per project', () => {
-    expect(saveMemory('duckstack', remembered())).toBe(true)
-    expect(loadMemory('duckstack')).toEqual(remembered())
-    expect(loadMemory('typography')).toEqual(emptyMemory())
+  it('saves and loads what a project remembers, per project', async () => {
+    expect(await saveMemory('duckstack', remembered())).toBe(true)
+    expect(await loadMemory('duckstack')).toEqual(remembered())
+    expect(await loadMemory('typography')).toEqual(emptyMemory())
   })
 
-  it('clears it', () => {
-    saveMemory('duckstack', remembered())
-    clearMemory('duckstack')
-    expect(loadMemory('duckstack')).toEqual(emptyMemory())
+  it('clears it', async () => {
+    await saveMemory('duckstack', remembered())
+    await clearMemory('duckstack')
+    expect(await loadMemory('duckstack')).toEqual(emptyMemory())
   })
 
-  it('remembers nothing, rather than something wrong, when what is stored is not a memory', () => {
+  it('remembers nothing, rather than something wrong, when what is stored is not a memory', async () => {
     const put = (value: unknown) => window.localStorage.setItem('droplet-project-duckstack-memory', typeof value === 'string' ? value : JSON.stringify(value))
     put('not json')
-    expect(loadMemory('duckstack')).toEqual(emptyMemory())
+    expect(await loadMemory('duckstack')).toEqual(emptyMemory())
     put({ business: null, clients: [{ id: '', client: emptyClient(), confirmedAt: 'x' }], invoices: [] })
-    expect(loadMemory('duckstack')).toEqual(emptyMemory())
+    expect(await loadMemory('duckstack')).toEqual(emptyMemory())
     put({ business: null, clients: [], invoices: [{ id: 'i1', content: { ...newContent('2026-10-04'), lines: [] }, revision: 1, updatedAt: 'x' }] })
-    expect(loadMemory('duckstack')).toEqual(emptyMemory())
+    expect(await loadMemory('duckstack')).toEqual(emptyMemory())
     put({ business: null, clients: [], invoices: [{ id: 'i1', content: newContent('2026-10-04'), revision: 0, updatedAt: 'x' }] })
-    expect(loadMemory('duckstack')).toEqual(emptyMemory())
+    expect(await loadMemory('duckstack')).toEqual(emptyMemory())
   })
 })

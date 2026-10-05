@@ -1,44 +1,28 @@
 import { boardSaveSchema, type BoardSave } from './boardSave.ts'
 import { openBoard, type BoardState } from './boardState.ts'
+import { documentStorage } from './storage.ts'
 
-// Stand-in for the project's saved memory until Supabase exists. The board is saved per project, in this browser, when the founder
-// presses Save, and not before.
+// The project's saved board, through the document storage (this browser for now, a database later). Saved when the founder presses Save,
+// and not before. Every call is asynchronous.
 export { boardSaveSchema, type BoardSave } from './boardSave.ts'
 
-const keyFor = (projectId: string) => `droplet-project-${projectId}-board`
-
-export function loadBoard(projectId: string): BoardSave | null {
-  try {
-    const raw = window.localStorage.getItem(keyFor(projectId))
-    if (!raw) return null
-    const parsed = boardSaveSchema.safeParse(JSON.parse(raw))
-    return parsed.success ? parsed.data : null
-  } catch {
-    return null
-  }
+export async function loadBoard(projectId: string): Promise<BoardSave | null> {
+  const parsed = boardSaveSchema.safeParse(await documentStorage().read(projectId, 'board'))
+  return parsed.success ? parsed.data : null
 }
 
-// Returns null when the browser refused to store it, so the interface can say so honestly.
-export function saveBoard(projectId: string, data: Omit<BoardSave, 'savedAt'>): BoardSave | null {
+// Null when it could not be stored, so the interface can say so honestly.
+export async function saveBoard(projectId: string, data: Omit<BoardSave, 'savedAt'>): Promise<BoardSave | null> {
   const save: BoardSave = { ...data, savedAt: new Date().toISOString() }
-  try {
-    window.localStorage.setItem(keyFor(projectId), JSON.stringify(save))
-    return save
-  } catch {
-    return null
-  }
+  return (await documentStorage().write(projectId, 'board', save)) ? save : null
 }
 
-export function clearBoard(projectId: string) {
-  try {
-    window.localStorage.removeItem(keyFor(projectId))
-  } catch {
-    // Nothing to clear.
-  }
+export function clearBoard(projectId: string): Promise<void> {
+  return documentStorage().remove(projectId, 'board')
 }
 
 // The board workspace for a project: the saved board and arrangement if there is one, otherwise an empty board.
-export function openBoardForProject(projectId: string): BoardState {
-  const saved = loadBoard(projectId)
+export async function openBoardForProject(projectId: string): Promise<BoardState> {
+  const saved = await loadBoard(projectId)
   return openBoard(saved?.items ?? [], saved)
 }

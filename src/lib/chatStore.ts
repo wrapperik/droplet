@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { documentStorage } from './storage.ts'
 
 // The conversations of a project, kept in this browser so the founder can come back to one. Per project, newest first. Only what was
 // said is kept: a reply still being worked on, and the buttons a message carried, are not, since neither means anything later.
@@ -28,8 +29,6 @@ export const chatSchema = z.object({
 
 export type StoredMessage = z.infer<typeof messageSchema>
 export type StoredChat = z.infer<typeof chatSchema>
-
-const keyFor = (projectId: string) => `droplet-project-${projectId}-chats`
 
 // What of a thread is worth keeping: the words, not the replies still being worked on, nor the buttons.
 export function storableMessages(thread: { id: number; from: StoredMessage['from']; text: string; question?: string; pending?: boolean; local?: boolean }[]): StoredMessage[] {
@@ -68,38 +67,23 @@ export function upsertChat(chats: StoredChat[], chat: StoredChat): StoredChat[] 
 
 export const removeChat = (chats: StoredChat[], id: string): StoredChat[] => chats.filter((chat) => chat.id !== id)
 
-export function loadChats(projectId: string): StoredChat[] {
-  try {
-    const raw = window.localStorage.getItem(keyFor(projectId))
-    if (!raw) return []
-    const parsed: unknown = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
-    // One chat that cannot be read is left out, and the rest are kept.
-    return parsed.flatMap((entry) => {
-      const chat = chatSchema.safeParse(entry)
-      return chat.success ? [chat.data] : []
-    })
-  } catch {
-    return []
-  }
+export async function loadChats(projectId: string): Promise<StoredChat[]> {
+  const raw = await documentStorage().read(projectId, 'chats')
+  if (!Array.isArray(raw)) return []
+  // One chat that cannot be read is left out, and the rest are kept.
+  return raw.flatMap((entry) => {
+    const chat = chatSchema.safeParse(entry)
+    return chat.success ? [chat.data] : []
+  })
 }
 
-// Returns false when the browser refused to store it.
-export function saveChats(projectId: string, chats: StoredChat[]): boolean {
-  try {
-    window.localStorage.setItem(keyFor(projectId), JSON.stringify(chats.slice(0, MAX_CHATS)))
-    return true
-  } catch {
-    return false
-  }
+// False when it could not be stored.
+export function saveChats(projectId: string, chats: StoredChat[]): Promise<boolean> {
+  return documentStorage().write(projectId, 'chats', chats.slice(0, MAX_CHATS))
 }
 
-export function clearChats(projectId: string) {
-  try {
-    window.localStorage.removeItem(keyFor(projectId))
-  } catch {
-    // Nothing to clear.
-  }
+export function clearChats(projectId: string): Promise<void> {
+  return documentStorage().remove(projectId, 'chats')
 }
 
 // "Today, 14:05", "Yesterday, 09:30", or the day.
