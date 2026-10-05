@@ -4,7 +4,8 @@ import { BOARD_SPEC, canRedoBoard, canUndoBoard, docOf, isBoardUnsaved, type Boa
 import { loadBoard, saveBoard } from '../../lib/boardStore.ts'
 import { loadMemory, saveMemory } from '../../lib/memoryStore.ts'
 import type { ProjectMemory } from '../../lib/memorySave.ts'
-import { forgetIdea, withIdea, type IdeaKind } from '../../lib/projectMemory.ts'
+import { useLoaded } from '../../hooks/useLoaded.ts'
+import { emptyMemory, forgetIdea, withIdea, type IdeaKind } from '../../lib/projectMemory.ts'
 import type { ShelfTool } from '../ToolShelf.tsx'
 import WorkspaceShell, { type HeaderSlots } from '../WorkspaceShell.tsx'
 import BoardCanvas, { type BoardHandle } from './BoardCanvas.tsx'
@@ -39,28 +40,30 @@ const REASONS = {
 // The board workspace: a toolbar of the tools in hand, and the board, on the shared workspace shell. "Save" saves the notes and how the
 // workspace is arranged. Nothing is saved until the founder saves.
 export default function BoardWorkspace({ projectId, projectName = 'Droplet', state, dispatch, handleRef, headerSlots, topInset = 0 }: Props) {
-  const [saved, setSaved] = useState(() => loadBoard(projectId))
+  // What was saved, and what the project remembers, are read from storage, which takes a moment. Until they have arrived the bar says nothing
+  // and Save waits.
+  const { value: saved, loaded, set: setSaved } = useLoaded(projectId, () => loadBoard(projectId), null)
   const [saveFailed, setSaveFailed] = useState(false)
   const ownRef = useRef<BoardHandle | null>(null)
   const boardRef = handleRef ?? ownRef
 
   // What the project remembers. Words are only put in it from the board after the founder's confirm, and only here.
-  const [memory, setMemory] = useState<ProjectMemory>(() => loadMemory(projectId))
-  const remember = (kind: IdeaKind, text: string) => {
+  const { value: memory, set: setMemory } = useLoaded<ProjectMemory>(projectId, () => loadMemory(projectId), emptyMemory())
+  const remember = async (kind: IdeaKind, text: string) => {
     const next = withIdea(memory, kind, text, new Date().toISOString())
-    if (saveMemory(projectId, next)) setMemory(next)
+    if (await saveMemory(projectId, next)) setMemory(next)
   }
-  const forget = (kind: IdeaKind) => {
+  const forget = async (kind: IdeaKind) => {
     const next = forgetIdea(memory, kind)
-    if (saveMemory(projectId, next)) setMemory(next)
+    if (await saveMemory(projectId, next)) setMemory(next)
   }
 
   const doc = docOf(state)
-  const unsaved = isBoardUnsaved(doc, saved)
-  const saveStatus = saveFailed ? 'Could not save' : !saved ? 'Not saved yet' : unsaved ? 'Unsaved changes' : 'All changes saved'
+  const unsaved = loaded && isBoardUnsaved(doc, saved)
+  const saveStatus = !loaded ? '' : saveFailed ? 'Could not save' : !saved ? 'Not saved yet' : unsaved ? 'Unsaved changes' : 'All changes saved'
 
-  const save = () => {
-    const result = saveBoard(projectId, { items: doc.items, layout: doc.layout, tools: doc.tools, expanded: doc.expanded, hidden: doc.hidden })
+  const save = async () => {
+    const result = await saveBoard(projectId, { items: doc.items, layout: doc.layout, tools: doc.tools, expanded: doc.expanded, hidden: doc.hidden })
     setSaveFailed(result === null)
     if (result) setSaved(result)
   }

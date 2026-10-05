@@ -1,11 +1,13 @@
 import { useCallback, useState } from 'react'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import { openBoard, reduceBoard, type BoardAction } from '../../lib/boardState.ts'
 import type { NoteItem } from '../../lib/boardTypes.ts'
 import { loadMemory } from '../../lib/memoryStore.ts'
+import { useDocumentStorage, type DocumentStorage } from '../../lib/storage.ts'
+import { slowMemoryStorage } from '../../test/slowStorage.ts'
 import BoardWorkspace from './BoardWorkspace.tsx'
 
 const note = (id: string, text: string): NoteItem => ({ id, kind: 'note', x: 400, y: 400, w: 200, h: 180, text, colour: 'yellow', author: 'you' })
@@ -28,10 +30,10 @@ describe('the board workspace', () => {
     render(<Harness />)
     await user.click(document.querySelector<HTMLElement>('[data-item-id="a"]')!)
     await user.click(screen.getByRole('button', { name: 'Use as business name' }))
-    expect(loadMemory('p1').idea).toBeUndefined()
+    expect((await loadMemory('p1')).idea).toBeUndefined()
     await user.click(screen.getByRole('button', { name: 'Remember' }))
-    expect(loadMemory('p1').idea?.name).toBe('Kindred Gifting')
-    expect(loadMemory('p1').business?.details.name).toBe('Kindred Gifting')
+    expect((await loadMemory('p1')).idea?.name).toBe('Kindred Gifting')
+    expect((await loadMemory('p1')).business?.details.name).toBe('Kindred Gifting')
   })
 
   it('has no Windows menu, since the board is the whole screen and there is no window to take away', () => {
@@ -45,14 +47,14 @@ describe('the board workspace', () => {
     await user.click(document.querySelector<HTMLElement>('[data-item-id="a"]')!)
     await user.click(screen.getByRole('button', { name: 'Use as business name' }))
     await user.click(screen.getByRole('button', { name: 'Remember' }))
-    expect(loadMemory('p1').idea?.name).toBe('Kindred Gifting')
+    expect((await loadMemory('p1')).idea?.name).toBe('Kindred Gifting')
     await user.click(screen.getByRole('button', { name: 'Use as business name' }))
     expect(screen.getByRole('group', { name: 'Remember this as the business name?' })).toHaveTextContent('already remembered as the business name')
     expect(screen.queryByRole('button', { name: 'Remember' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Forget it' }))
-    expect(loadMemory('p1').idea).toBeUndefined()
+    expect((await loadMemory('p1')).idea).toBeUndefined()
     // what is on invoices is the founder's to change there, so the business name stays
-    expect(loadMemory('p1').business?.details.name).toBe('Kindred Gifting')
+    expect((await loadMemory('p1')).business?.details.name).toBe('Kindred Gifting')
   })
 
   it('remembers nothing when the founder cancels', async () => {
@@ -61,7 +63,7 @@ describe('the board workspace', () => {
     await user.click(document.querySelector<HTMLElement>('[data-item-id="a"]')!)
     await user.click(screen.getByRole('button', { name: 'Use as offer' }))
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(loadMemory('p1').idea).toBeUndefined()
+    expect((await loadMemory('p1')).idea).toBeUndefined()
   })
 
   it('has an Export button in the header', () => {
@@ -87,4 +89,28 @@ describe('the board workspace', () => {
     expect(document.querySelector<HTMLElement>('.board__sizer')!.style.height).toBe(`${3200 * 0.5 + 256 + 56}px`)
   })
 
+})
+
+describe('the board workspace while what was saved is still being read', () => {
+  let before: DocumentStorage
+  afterEach(() => useDocumentStorage(before))
+
+  it('says nothing about saving, and keeps Save waiting, until it has been read, then says where things stand', async () => {
+    before = useDocumentStorage(slowMemoryStorage(30).driver)
+    render(<Harness />)
+    expect(screen.queryByText(/Not saved yet|Unsaved changes|All changes saved/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Save/ })).toBeDisabled()
+    expect(await screen.findByText('Not saved yet')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Save/ })).toBeEnabled()
+  })
+
+  it('is not told a board was saved that was, once it has read it', async () => {
+    const slow = slowMemoryStorage(10)
+    before = useDocumentStorage(slow.driver)
+    render(<Harness />)
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: /Save/ }))
+    expect(await screen.findByText('All changes saved')).toBeInTheDocument()
+    expect(slow.documents.has('p1/board')).toBe(true)
+  })
 })

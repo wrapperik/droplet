@@ -78,7 +78,20 @@ export default function Home() {
   const [thread, setThread] = useState<ThreadMessage[]>([])
   // Which conversation this is, and the project's others that are kept (the open one is added to the list from the thread itself).
   const [chatId, setChatId] = useState(() => newId())
-  const [chats, setChats] = useState<StoredChat[]>(() => loadChats(mockProjects[0].id))
+  const [chats, setChats] = useState<StoredChat[]>([])
+  // Reads and writes of the saved conversations go one after another, so a save is never read past and two saves never cross, whatever
+  // the storage is.
+  const chatQueue = useRef<Promise<unknown>>(Promise.resolve())
+  const enqueueChats = useCallback(<T,>(task: () => Promise<T>): Promise<T> => {
+    const next = chatQueue.current.then(task, task)
+    chatQueue.current = next.catch(() => undefined)
+    return next
+  }, [])
+  // The project's saved conversations, for the list. Queued behind any save that is still on its way.
+  const refreshChats = useCallback((projectId: string) => enqueueChats(async () => setChats(await loadChats(projectId))), [enqueueChats])
+  useEffect(() => {
+    void refreshChats(mockProjects[0].id)
+  }, [refreshChats])
   // The name the composer gave this conversation, or empty while it has none (the list then shows how the conversation began). Held in
   // a ref as well, so a request made straight after one that named the chat tells the composer its name.
   const [chatName, setChatName] = useState('')
@@ -93,6 +106,8 @@ export default function Home() {
   // The question about unsaved work that is open in the thread, if there is one: which message, and what is still unsaved.
   const leaveRef = useRef<{ id: number; brand: boolean; invoice: boolean; board: boolean } | null>(null)
   const busyRef = useRef(false)
+  // Set while what was saved is being read to see whether leaving would lose anything.
+  const checkingLeaveRef = useRef(false)
   // The header and toolbar, and how tall they are: a board that fills the screen is drawn under them and starts below.
   const topRef = useRef<HTMLDivElement>(null)
   const [topHeight, setTopHeight] = useState(0)
@@ -139,12 +154,14 @@ export default function Home() {
   useEffect(() => {
     const messages = storableMessages(thread)
     if (!hasFounderMessage(messages)) return
-    const kept = loadChats(currentProjectId)
-    const there = kept.find((chat) => chat.id === chatId)
     const title = chatName || chatTitle(messages)
-    if (there && there.title === title && JSON.stringify(there.messages) === JSON.stringify(messages)) return
-    saveChats(currentProjectId, upsertChat(kept, { id: chatId, title, ...(chatName ? { named: true } : {}), updatedAt: new Date().toISOString(), messages }))
-  }, [thread, chatId, chatName, currentProjectId])
+    void enqueueChats(async () => {
+      const kept = await loadChats(currentProjectId)
+      const there = kept.find((chat) => chat.id === chatId)
+      if (there && there.title === title && JSON.stringify(there.messages) === JSON.stringify(messages)) return
+      await saveChats(currentProjectId, upsertChat(kept, { id: chatId, title, ...(chatName ? { named: true } : {}), updatedAt: new Date().toISOString(), messages }))
+    })
+  }, [thread, chatId, chatName, currentProjectId, enqueueChats])
 
   // Once a workspace exists the conversation moves to a side panel, beside it.
   const docked = workspace !== null || invoice !== null || board !== null
@@ -169,8 +186,8 @@ export default function Home() {
   const dispatchInvoice = useCallback((action: InvoiceAction) => setInvoice((current) => (current ? reduceInvoice(current, action) : current)), [])
 
   // Whether the board has been saved, for what the composer is told.
-  const boardSaveStatus = (state: BoardState) => {
-    const saved = loadBoard(currentProjectId)
+  const boardSaveStatus = async (state: BoardState) => {
+    const saved = await loadBoard(currentProjectId)
     return saved ? (isBoardUnsaved(boardDocOf(state), saved) ? ('unsaved' as const) : ('saved' as const)) : ('none' as const)
   }
 
@@ -183,21 +200,21 @@ export default function Home() {
   // Opens a workspace and puts it on screen, for a reply that asks to be taken there. The refs are set at once, since the next
   // request is made before the screen has had a chance to catch up.
   const openWorkspaceFor = useCallback(
-    (target: View) => {
+    async (target: View) => {
       if (target === 'board') {
         if (!boardRef.current) {
-          const opened = openBoardForProject(currentProjectId)
+          const opened = await openBoardForProject(currentProjectId)
           boardRef.current = opened
           setBoard(opened)
         }
       } else if (target === 'invoice') {
         if (!invoiceRef.current) {
-          const opened = openInvoiceForProject(currentProjectId)
+          const opened = await openInvoiceForProject(currentProjectId)
           invoiceRef.current = opened
           setInvoice(opened)
         }
       } else if (!workspaceRef.current) {
-        const saved = loadPalette(currentProjectId)
+        const saved = await loadPalette(currentProjectId)
         const opened = openWorkspace(saved?.blocks ?? starterBlocks(), saved)
         workspaceRef.current = opened
         setWorkspace(opened)
@@ -215,11 +232,11 @@ export default function Home() {
   const converse = useCallback(
     async (text: string, history: { role: 'founder' | 'droplet'; text: string }[], pendingId: number, routed: boolean) => {
       const view = onScreen()
-      const saved = loadPalette(currentProjectId)
+      const [saved, memory] = await Promise.all([loadPalette(currentProjectId), loadMemory(currentProjectId)])
       const open = workspaceRef.current
       const invoiceOpen = invoiceRef.current
       const boardOpen = boardRef.current
-      const memory = loadMemory(currentProjectId)
+      const boardStatus = view === 'board' && boardOpen ? await boardSaveStatus(boardOpen) : 'none'
       const result = await requestComposition({
         intent: text,
         ...(history.length > 0 ? { history } : {}),
@@ -230,7 +247,7 @@ export default function Home() {
           ? { workspace: snapshotOfState(open, drawnRef.current.layout.length > 0 ? drawnRef.current.layout : null, saved ? (isUnsaved(docOf(open), saved) ? 'unsaved' : 'saved') : 'none') }
           : {}),
         ...(view === 'board' && boardOpen
-          ? { board: snapshotOfBoard(boardOpen, boardHandleRef.current?.viewMiddle() ?? { x: 2400, y: 1600 }, boardSaveStatus(boardOpen)) }
+          ? { board: snapshotOfBoard(boardOpen, boardHandleRef.current?.viewMiddle() ?? { x: 2400, y: 1600 }, boardStatus) }
           : {}),
         ...(saved ? { memory: paletteSnapshotOf(saved.blocks) } : {}),
       })
@@ -261,7 +278,7 @@ export default function Home() {
       if (target && !routed) {
         // Taking the founder to another workspace: the next answer will carry the question, so this one has none.
         finish(paragraphs(result.turn.message, result.note))
-        openWorkspaceFor(target)
+        await openWorkspaceFor(target)
         const next = message('droplet', '', true)
         setThread((current) => [...current, next])
         return converse(text, history, next.id, true)
@@ -359,25 +376,35 @@ export default function Home() {
   // The familiar path: choosing a task opens its fixed layout without asking the model, the same layout the
   // composer falls back to. Tasks without a workspace say so.
   const chooseTask = useCallback(
-    (id: TaskId) => {
+    async (id: TaskId) => {
       if (busyRef.current) return
       // Choosing a task says nothing in the thread. A divider marks the move once something is said in the new workspace.
       spaceRef.current = id
+      // What was saved is read before the workspace opens. If the same task was chosen twice meanwhile, the first to arrive is the one opened.
       if (id === 'brand') {
         setView('brand')
         if (workspaceRef.current) return
-        const saved = loadPalette(currentProjectId)
-        setWorkspace(openWorkspace(saved?.blocks ?? starterBlocks(), saved))
+        const saved = await loadPalette(currentProjectId)
+        if (workspaceRef.current) return
+        const opened = openWorkspace(saved?.blocks ?? starterBlocks(), saved)
+        workspaceRef.current = opened
+        setWorkspace(opened)
         workspaceOpened()
       } else if (id === 'invoice') {
         setView('invoice')
         if (invoiceRef.current) return
-        setInvoice(openInvoiceForProject(currentProjectId))
+        const opened = await openInvoiceForProject(currentProjectId)
+        if (invoiceRef.current) return
+        invoiceRef.current = opened
+        setInvoice(opened)
         workspaceOpened()
       } else if (id === 'ideation') {
         setView('board')
         if (boardRef.current) return
-        setBoard(openBoardForProject(currentProjectId))
+        const opened = await openBoardForProject(currentProjectId)
+        if (boardRef.current) return
+        boardRef.current = opened
+        setBoard(opened)
         workspaceOpened()
       }
     },
@@ -397,10 +424,10 @@ export default function Home() {
     leaveRef.current = null
     sentInRef.current = undefined
     nextMessageId.current = messages.reduce((highest, item) => Math.max(highest, item.id), 0) + 1
-    setChats(loadChats(projectId))
+    void refreshChats(projectId)
     setChatId(id)
     setThread(messages)
-  }, [nameChat])
+  }, [nameChat, refreshChats])
 
   const newChat = useCallback(() => {
     if (!busyRef.current) beginChat(newId(), [], currentProjectId)
@@ -409,20 +436,26 @@ export default function Home() {
   const openChat = useCallback(
     (id: string) => {
       if (busyRef.current) return
-      const chat = loadChats(currentProjectId).find((entry) => entry.id === id)
-      if (chat) beginChat(chat.id, chat.messages.map((item) => ({ ...item })), currentProjectId, chat.named ? chat.title : '')
+      // Read from what is saved, behind any save still on its way, so a conversation is opened as it was last kept.
+      void enqueueChats(async () => {
+        const chat = (await loadChats(currentProjectId)).find((entry) => entry.id === id)
+        if (chat) beginChat(chat.id, chat.messages.map((item) => ({ ...item })), currentProjectId, chat.named ? chat.title : '')
+      })
     },
-    [beginChat, currentProjectId],
+    [beginChat, currentProjectId, enqueueChats],
   )
 
   const deleteChat = useCallback(
     (id: string) => {
       if (busyRef.current) return
-      saveChats(currentProjectId, removeChat(loadChats(currentProjectId), id))
+      void enqueueChats(async () => {
+        await saveChats(currentProjectId, removeChat(await loadChats(currentProjectId), id))
+      })
+      // Either way the list is read again, behind the delete.
       if (id === chatId) beginChat(newId(), [], currentProjectId)
-      else setChats(loadChats(currentProjectId))
+      else void refreshChats(currentProjectId)
     },
-    [beginChat, chatId, currentProjectId],
+    [beginChat, chatId, currentProjectId, enqueueChats, refreshChats],
   )
 
   // Both workspaces go, and the conversation has the whole screen again. What was saved stays; anything else is gone.
@@ -474,11 +507,21 @@ export default function Home() {
   // Back to the conversation as the whole screen. Closing a workspace loses what was not saved, so if there is any, Droplet asks first,
   // in the thread, with a button for each way out. Nothing is saved without the founder's say: the palette saves when its button is
   // pressed, and the invoice opens its note of what would be remembered, which the founder confirms.
-  const backToChat = useCallback(() => {
-    if (busyRef.current || leaveRef.current) return
-    const brand = workspaceRef.current ? paletteHasChanges(workspaceRef.current, loadPalette(currentProjectId)) : false
-    const invoiceChanged = invoiceRef.current ? invoiceHasChanges(invoiceRef.current, loadMemory(currentProjectId), loadInvoice(currentProjectId)) : false
-    const boardChanged = boardRef.current ? boardHasChanges(boardRef.current, loadBoard(currentProjectId)) : false
+  const backToChat = useCallback(async () => {
+    if (busyRef.current || leaveRef.current || checkingLeaveRef.current) return
+    // What was saved has to be read to know whether anything is unsaved, so a second press meanwhile is ignored.
+    checkingLeaveRef.current = true
+    let brand = false
+    let invoiceChanged = false
+    let boardChanged = false
+    try {
+      const [palette, memory, arrangement, board] = await Promise.all([loadPalette(currentProjectId), loadMemory(currentProjectId), loadInvoice(currentProjectId), loadBoard(currentProjectId)])
+      brand = workspaceRef.current ? paletteHasChanges(workspaceRef.current, palette) : false
+      invoiceChanged = invoiceRef.current ? invoiceHasChanges(invoiceRef.current, memory, arrangement) : false
+      boardChanged = boardRef.current ? boardHasChanges(boardRef.current, board) : false
+    } finally {
+      checkingLeaveRef.current = false
+    }
     if (!brand && !invoiceChanged && !boardChanged) {
       closeWorkspaces()
       return
@@ -491,7 +534,7 @@ export default function Home() {
   }, [closeWorkspaces, currentProjectId, message])
 
   const onThreadAction = useCallback(
-    (messageId: number, actionId: string) => {
+    async (messageId: number, actionId: string) => {
       const prompt = leaveRef.current
       if (!prompt || prompt.id !== messageId || busyRef.current) return
       if (actionId === 'stay') settleLeave(messageId, 'Okay, I left the workspace as it is.')
@@ -500,16 +543,16 @@ export default function Home() {
         closeWorkspaces()
       } else if (actionId === 'save-brand' && workspaceRef.current) {
         const doc = docOf(workspaceRef.current)
-        const result = savePalette(currentProjectId, { blocks: doc.blocks, layout: doc.layout, tools: doc.tools, expanded: doc.expanded, hidden: doc.hidden })
-        if (result === null) settleLeave(messageId, 'I could not save the palette, because the browser would not store it.', leaveActions(prompt))
+        const result = await savePalette(currentProjectId, { blocks: doc.blocks, layout: doc.layout, tools: doc.tools, expanded: doc.expanded, hidden: doc.hidden })
+        if (result === null) settleLeave(messageId, 'I could not save the palette, because it could not be stored.', leaveActions(prompt))
         else {
           prompt.brand = false
           savedForLeave('I saved the palette.')
         }
       } else if (actionId === 'save-board' && boardRef.current) {
         const doc = boardDocOf(boardRef.current)
-        const result = saveBoard(currentProjectId, { items: doc.items, layout: doc.layout, tools: doc.tools, expanded: doc.expanded, hidden: doc.hidden })
-        if (result === null) settleLeave(messageId, 'I could not save the board, because the browser would not store it.', leaveActions(prompt))
+        const result = await saveBoard(currentProjectId, { items: doc.items, layout: doc.layout, tools: doc.tools, expanded: doc.expanded, hidden: doc.hidden })
+        if (result === null) settleLeave(messageId, 'I could not save the board, because it could not be stored.', leaveActions(prompt))
         else {
           prompt.board = false
           savedForLeave('I saved the board.')
@@ -523,10 +566,11 @@ export default function Home() {
   )
 
   // The founder confirmed what the invoice would remember. If that was the last unsaved thing in a question about leaving, it is done.
-  const invoiceConfirmed = useCallback(() => {
+  const invoiceConfirmed = useCallback(async () => {
     const prompt = leaveRef.current
     if (!prompt?.invoice) return
-    const still = invoiceRef.current ? invoiceHasChanges(invoiceRef.current, loadMemory(currentProjectId), loadInvoice(currentProjectId)) : false
+    const [memory, arrangement] = await Promise.all([loadMemory(currentProjectId), loadInvoice(currentProjectId)])
+    const still = invoiceRef.current ? invoiceHasChanges(invoiceRef.current, memory, arrangement) : false
     if (still) return
     prompt.invoice = false
     savedForLeave('I saved the invoice.')
@@ -534,17 +578,30 @@ export default function Home() {
 
   // Another project has its own saved palette, so an open workspace is replaced by that project's.
   const selectProject = useCallback(
-    (id: string) => {
-    // Conversations belong to a project, so another project starts with a new one.
-    if (id !== currentProjectId) beginChat(newId(), [], id)
-    setCurrentProjectId(id)
-    setInvoice((current) => (current ? openInvoiceForProject(id) : current))
-    setBoard((current) => (current ? openBoardForProject(id) : current))
-    setWorkspace((current) => {
-      if (!current) return current
-      const saved = loadPalette(id)
-      return openWorkspace(saved?.blocks ?? starterBlocks(), saved)
-    })
+    async (id: string) => {
+      // The other project's workspaces are read first, and everything changes together once they have arrived, so a workspace is never shown
+      // with another project's name on it.
+      const [nextInvoice, nextBoard, palette] = await Promise.all([
+        invoiceRef.current ? openInvoiceForProject(id) : null,
+        boardRef.current ? openBoardForProject(id) : null,
+        workspaceRef.current ? loadPalette(id) : null,
+      ])
+      // Conversations belong to a project, so another project starts with a new one.
+      if (id !== currentProjectId) beginChat(newId(), [], id)
+      setCurrentProjectId(id)
+      if (nextInvoice) {
+        invoiceRef.current = nextInvoice
+        setInvoice(nextInvoice)
+      }
+      if (nextBoard) {
+        boardRef.current = nextBoard
+        setBoard(nextBoard)
+      }
+      if (workspaceRef.current) {
+        const opened = openWorkspace(palette?.blocks ?? starterBlocks(), palette)
+        workspaceRef.current = opened
+        setWorkspace(opened)
+      }
     },
     [beginChat, currentProjectId],
   )

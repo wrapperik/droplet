@@ -4,6 +4,7 @@ import type { Heights, Placement } from '../lib/gridLayout.ts'
 import { replaceableIds } from '../lib/harmony.ts'
 import { resolveRoles, type ColourRole } from '../lib/palette.ts'
 import { exportBrandSheet } from '../lib/exportSheet.ts'
+import { useLoaded } from '../hooks/useLoaded.ts'
 import { loadPalette, savePalette, type PaletteSave } from '../lib/projectStore.ts'
 import {
   MAX_BLOCKS,
@@ -47,7 +48,8 @@ type Props = {
 // The palette workspace: tools for the colours in the toolbar and windows (the palette canvas, the document preview), on
 // the shared workspace shell. "Save" saves the palette, the tools and the layout.
 export default function PaletteWorkspace({ projectId, projectName, state, dispatch, onResolved, headerSlots }: Props) {
-  const [saved, setSaved] = useState<PaletteSave | null>(() => loadPalette(projectId))
+  // What was saved is read from storage, which takes a moment. Until it has arrived the bar says nothing and Save waits.
+  const { value: saved, loaded, set: setSaved } = useLoaded<PaletteSave | null>(projectId, () => loadPalette(projectId), null)
   const [saveFailed, setSaveFailed] = useState(false)
 
   const doc = docOf(state)
@@ -59,10 +61,10 @@ export default function PaletteWorkspace({ projectId, projectName, state, dispat
   const roles = useMemo(() => resolveRoles(docOf(state).blocks), [state])
   const fillCount = replaceableIds(blocks, activeId).length
 
-  const unsaved = isUnsaved(doc, saved)
+  const unsaved = loaded && isUnsaved(doc, saved)
 
-  const save = () => {
-    const result = savePalette(projectId, { blocks, layout: doc.layout, tools: doc.tools, expanded: doc.expanded, hidden: doc.hidden })
+  const save = async () => {
+    const result = await savePalette(projectId, { blocks, layout: doc.layout, tools: doc.tools, expanded: doc.expanded, hidden: doc.hidden })
     setSaveFailed(result === null)
     if (result) setSaved(result)
   }
@@ -228,7 +230,7 @@ export default function PaletteWorkspace({ projectId, projectName, state, dispat
   const windowsById = useMemo(() => Object.fromEntries(items.map((item) => [item.id, item])), [items])
 
   // A short word beside the Save button. Nothing is saved until the founder saves.
-  const saveStatus = saveFailed ? 'Could not save' : !saved ? 'Not saved yet' : unsaved ? 'Unsaved changes' : 'All changes saved'
+  const saveStatus = !loaded ? '' : saveFailed ? 'Could not save' : !saved ? 'Not saved yet' : unsaved ? 'Unsaved changes' : 'All changes saved'
 
   return (
     <WorkspaceShell

@@ -9,11 +9,13 @@ import { starterBlocks } from '../../compose/fallback.ts'
 import { loadPalette } from '../../lib/projectStore.ts'
 import { newId } from '../../lib/ids.ts'
 import { duplicateInvoice, loadInvoice, openNewInvoice, openSavedInvoice, saveArrangement } from '../../lib/invoiceStore.ts'
+import { useLoaded } from '../../hooks/useLoaded.ts'
 import { loadMemory, saveMemory } from '../../lib/memoryStore.ts'
 import type { ProjectMemory } from '../../lib/memorySave.ts'
 import {
   businessStatus,
   clientStatus,
+  emptyMemory,
   forgetBusiness,
   forgetClient,
   forgetInvoice,
@@ -80,10 +82,14 @@ const sameContent = (a: InvoiceContent, b: InvoiceContent) => JSON.stringify(a) 
 // business, their clients and their invoices, so none is typed twice, but only what the founder confirms: Save opens a note of what
 // would be remembered, and nothing is kept unless it is confirmed. Leaving an invoice with unsaved changes asks first.
 export default function InvoiceWorkspace({ projectId, projectName, state, dispatch, onReplace, saveSignal, onConfirmed, headerSlots }: Props) {
-  const [memory, setMemory] = useState<ProjectMemory>(() => loadMemory(projectId))
-  const [arrangementSave, setArrangementSave] = useState(() => loadInvoice(projectId))
+  // What the project remembers, how this workspace was arranged and the confirmed palette are read from storage, which takes a moment. Until
+  // they have arrived the bar says nothing and Save waits, so nothing is judged against what has not been read yet.
+  const { value: memory, loaded: memoryLoaded, set: setMemory } = useLoaded<ProjectMemory>(projectId, () => loadMemory(projectId), emptyMemory())
+  const { value: arrangementSave, loaded: arrangementLoaded, set: setArrangementSave } = useLoaded(projectId, () => loadInvoice(projectId), null)
+  const { value: paletteBlocks } = useLoaded(projectId, async () => (await loadPalette(projectId))?.blocks ?? starterBlocks(), starterBlocks())
+  const loaded = memoryLoaded && arrangementLoaded
   const [saveFailed, setSaveFailed] = useState(false)
-  const [leaving, setLeaving] = useState<{ what: string; run: () => void } | null>(null)
+  const [leaving, setLeaving] = useState<{ what: string; run: () => void | Promise<void> } | null>(null)
 
   const doc = invoiceDocOf(state)
   const { content } = doc
@@ -91,13 +97,13 @@ export default function InvoiceWorkspace({ projectId, projectName, state, dispat
   const [opened] = useState(content)
 
   // The brand: the palette the founder confirmed for this project, or the starter palette until there is one.
-  const roles = useMemo(() => resolveRoles(loadPalette(projectId)?.blocks ?? starterBlocks()), [projectId])
+  const roles = useMemo(() => resolveRoles(paletteBlocks), [paletteBlocks])
 
   const saved = savedInvoice(memory, doc.invoiceId)
-  const unsaved = isInvoiceUnsaved(doc, saved, arrangementSave)
+  const unsaved = loaded && isInvoiceUnsaved(doc, saved, arrangementSave)
   // Changes that would be lost on leaving: anything different from what was confirmed, or from a new invoice if none was.
   const hasChanges = saved ? !sameContent(content, saved.content) : !sameContent(content, opened)
-  const saveStatus = saveFailed ? 'Could not save' : !saved ? 'Not saved yet' : unsaved ? 'Unsaved changes' : 'All changes saved'
+  const saveStatus = !loaded ? '' : saveFailed ? 'Could not save' : !saved ? 'Not saved yet' : unsaved ? 'Unsaved changes' : 'All changes saved'
 
   // What confirming would remember, so the founder sees it before anything is kept.
   const business = businessStatus(memory, content.business)
@@ -116,8 +122,8 @@ export default function InvoiceWorkspace({ projectId, projectName, state, dispat
       : []),
   ]
 
-  const persist = (next: ProjectMemory) => {
-    if (saveMemory(projectId, next)) {
+  const persist = async (next: ProjectMemory) => {
+    if (await saveMemory(projectId, next)) {
       setMemory(next)
       return true
     }
@@ -126,30 +132,30 @@ export default function InvoiceWorkspace({ projectId, projectName, state, dispat
   }
 
   // Only what the founder ticked is remembered. How the workspace is arranged is not a memory, so it is kept with it.
-  const confirm = (ids: string[]) => {
+  const confirm = async (ids: string[]) => {
     const now = new Date().toISOString()
     let next = memory
     if (ids.includes('business')) next = withBusiness(next, content.business, now)
     if (ids.includes('client')) next = withClient(next, content.client, now, newId())
     if (ids.includes('invoice')) next = withInvoice(next, doc.invoiceId, content, now)
-    const remembered = next === memory || persist(next)
-    const arrangement = saveArrangement(projectId, doc)
+    const remembered = next === memory || (await persist(next))
+    const arrangement = await saveArrangement(projectId, doc)
     if (arrangement) setArrangementSave(arrangement)
     setSaveFailed(!remembered || arrangement === null)
     if (remembered && arrangement !== null) onConfirmed?.()
   }
 
   // Leaving saves nothing, so an invoice with changes asks first.
-  const guard = (what: string, run: () => void) => (hasChanges ? setLeaving({ what, run }) : run())
+  const guard = (what: string, run: () => void | Promise<void>) => (hasChanges ? setLeaving({ what, run }) : run())
   const openInvoice = (id: string) =>
-    guard(number, () => {
-      const next = openSavedInvoice(projectId, id, doc)
+    guard(number, async () => {
+      const next = await openSavedInvoice(projectId, id, doc)
       if (next) onReplace(next)
     })
-  const newInvoice = () => guard(number, () => onReplace(openNewInvoice(projectId, doc)))
+  const newInvoice = () => guard(number, async () => onReplace(await openNewInvoice(projectId, doc)))
   const copyInvoice = (id: string) =>
-    guard(number, () => {
-      const next = duplicateInvoice(projectId, id, doc)
+    guard(number, async () => {
+      const next = await duplicateInvoice(projectId, id, doc)
       if (next) onReplace(next)
     })
 

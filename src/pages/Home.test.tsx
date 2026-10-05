@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { loadBoard } from '../lib/boardStore.ts'
 import { loadChats, saveChats } from '../lib/chatStore.ts'
 import { loadPalette } from '../lib/projectStore.ts'
+import { useDocumentStorage, type DocumentStorage } from '../lib/storage.ts'
+import { slowMemoryStorage } from '../test/slowStorage.ts'
 import Home from './Home.tsx'
 
 // Home with the composer's server standing in: what is asked of it is recorded, and what it says back is what the test decides.
@@ -297,9 +299,9 @@ describe('going back to the full chat', () => {
     expect(prompt()).toHaveTextContent('the brand palette')
     // nothing has been closed or saved yet
     expect(toolbar()).toBeInTheDocument()
-    expect(loadPalette('duckstack')).toBeNull()
+    expect(await loadPalette('duckstack')).toBeNull()
     await user.click(screen.getByRole('button', { name: 'Save the palette' }))
-    expect(loadPalette('duckstack')).not.toBeNull()
+    expect(await loadPalette('duckstack')).not.toBeNull()
     await waitFor(() => expect(toolbar()).not.toBeInTheDocument())
     expect(screen.getByText(/I saved the palette\. Everything is saved/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Leave without saving' })).not.toBeInTheDocument()
@@ -313,7 +315,7 @@ describe('going back to the full chat', () => {
     await user.click(back())
     await user.click(screen.getByRole('button', { name: 'Leave without saving' }))
     await waitFor(() => expect(toolbar()).not.toBeInTheDocument())
-    expect(loadPalette('duckstack')).toBeNull()
+    expect(await loadPalette('duckstack')).toBeNull()
     expect(screen.getByText('I closed the workspace without saving.')).toBeInTheDocument()
   })
 
@@ -437,7 +439,7 @@ describe('the chat history', () => {
     await user.click(entry(/^First question/))
     await talk(user, 'Follow up', 'Follow answer.')
     expect(within(screen.getByRole('navigation', { name: 'Chats' })).getAllByRole('listitem')).toHaveLength(1)
-    expect(loadChatsFor()[0].messages.map((item) => item.text)).toEqual(['First question', 'First answer.', 'Follow up', 'Follow answer.'])
+    expect((await loadChatsFor())[0].messages.map((item) => item.text)).toEqual(['First question', 'First answer.', 'Follow up', 'Follow answer.'])
   })
 
   it('forgets a conversation only when asked twice', async () => {
@@ -453,7 +455,7 @@ describe('the chat history', () => {
     await user.click(screen.getByRole('button', { name: 'Delete First question' }))
     await user.click(screen.getByRole('button', { name: 'Delete' }))
     expect(within(screen.getByRole('navigation', { name: 'Chats' })).getAllByRole('listitem')).toHaveLength(1)
-    expect(loadChatsFor().map((chat) => chat.title)).toEqual(['Second question'])
+    expect((await loadChatsFor()).map((chat) => chat.title)).toEqual(['Second question'])
   })
 
   it('starts a new conversation when the open one is deleted', async () => {
@@ -463,7 +465,7 @@ describe('the chat history', () => {
     await user.click(screen.getByRole('button', { name: 'Delete Only question' }))
     await user.click(screen.getByRole('button', { name: 'Delete' }))
     expect(screen.queryByText('Only answer.')).not.toBeInTheDocument()
-    expect(loadChatsFor()).toEqual([])
+    expect(await loadChatsFor()).toEqual([])
   })
 
   const seed = (count: number) =>
@@ -479,24 +481,25 @@ describe('the chat history', () => {
     )
   const recent = () => within(screen.getByRole('navigation', { name: 'Chats' })).getAllByRole('listitem').map((item) => item.querySelector('.chatlist__title')?.textContent)
 
-  it('lists only the eight most recent chats in the sidebar, with a way to see all of them', () => {
-    seed(12)
+  it('lists only the eight most recent chats in the sidebar, with a way to see all of them', async () => {
+    await seed(12)
     renderHome()
-    expect(recent()).toEqual(['Chat 1', 'Chat 2', 'Chat 3', 'Chat 4', 'Chat 5', 'Chat 6', 'Chat 7', 'Chat 8'])
+    await waitFor(() => expect(recent()).toEqual(['Chat 1', 'Chat 2', 'Chat 3', 'Chat 4', 'Chat 5', 'Chat 6', 'Chat 7', 'Chat 8']))
     expect(screen.getByRole('button', { name: 'See all chats' })).toBeInTheDocument()
   })
 
-  it('offers no "See all" when everything is already listed', () => {
-    seed(8)
+  it('offers no "See all" when everything is already listed', async () => {
+    await seed(8)
     renderHome()
+    await waitFor(() => expect(recent()).toHaveLength(8))
     expect(screen.queryByRole('button', { name: 'See all chats' })).not.toBeInTheDocument()
   })
 
   it('opens every chat in a dialog with a search, opens one from it and closes', async () => {
     const user = userEvent.setup()
-    seed(12)
+    await seed(12)
     renderHome()
-    await user.click(screen.getByRole('button', { name: 'See all chats' }))
+    await user.click(await screen.findByRole('button', { name: 'See all chats' }))
     const dialog = screen.getByRole('dialog', { name: 'All chats' })
     expect(within(dialog).getAllByRole('listitem')).toHaveLength(12)
     await user.type(within(dialog).getByRole('searchbox', { name: 'Search chats' }), 'chat 11')
@@ -508,9 +511,9 @@ describe('the chat history', () => {
 
   it('says when no chat matches the search, and closes on Escape', async () => {
     const user = userEvent.setup()
-    seed(10)
+    await seed(10)
     renderHome()
-    await user.click(screen.getByRole('button', { name: 'See all chats' }))
+    await user.click(await screen.findByRole('button', { name: 'See all chats' }))
     await user.type(screen.getByRole('searchbox', { name: 'Search chats' }), 'zebra')
     expect(screen.getByText(/No chats match/)).toBeInTheDocument()
     await user.keyboard('{Escape}')
@@ -519,14 +522,14 @@ describe('the chat history', () => {
 
   it('can delete a chat from the full list, after a second press', async () => {
     const user = userEvent.setup()
-    seed(10)
+    await seed(10)
     renderHome()
-    await user.click(screen.getByRole('button', { name: 'See all chats' }))
+    await user.click(await screen.findByRole('button', { name: 'See all chats' }))
     const dialog = screen.getByRole('dialog', { name: 'All chats' })
     await user.click(within(dialog).getByRole('button', { name: 'Delete Chat 10' }))
-    expect(loadChatsFor()).toHaveLength(10)
+    expect(await loadChatsFor()).toHaveLength(10)
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
-    expect(loadChatsFor()).toHaveLength(9)
+    expect(await loadChatsFor()).toHaveLength(9)
   })
 
   it('keeps nothing for a conversation the founder has not spoken in', async () => {
@@ -535,7 +538,7 @@ describe('the chat history', () => {
     await pickTask(user, /Build the brand/)
     await user.click(screen.getByRole('button', { name: /^Remove colour 1,/ }))
     await user.click(screen.getByRole('button', { name: 'Back to the full chat' }))
-    expect(loadChatsFor()).toEqual([])
+    expect(await loadChatsFor()).toEqual([])
   })
 
   it('is still there once a workspace is open, and does not lose the conversation going there: the sidebar steps back to icons, and the chat history icon opens the full list', async () => {
@@ -739,7 +742,12 @@ describe('the light while Droplet works', () => {
 
 describe('the board for shaping the business idea', () => {
   const toolbar = () => screen.queryByRole('toolbar', { name: 'Tools' })
-  const addNote = async (user: ReturnType<typeof userEvent.setup>) => user.click(await screen.findByRole('button', { name: 'Add a note to the middle of the view' }))
+  // The plus is among the options of the sticky note tool, which show while it is in hand.
+  const addNote = async (user: ReturnType<typeof userEvent.setup>) => {
+    const note = await screen.findByRole('button', { name: 'Note' })
+    if (note.getAttribute('aria-pressed') !== 'true') await user.click(note)
+    await user.click(await screen.findByRole('button', { name: 'Add a note to the middle of the view' }))
+  }
 
   it('opens from the task menu without asking the model, and says nothing in the thread', async () => {
     const user = userEvent.setup()
@@ -756,8 +764,13 @@ describe('the board for shaping the business idea', () => {
     await pickTask(user, /Shape the business idea/)
     const bar = within(toolbar()!)
     for (const name of ['Select', 'Sticky note', 'Shape', 'Text', 'Frame', 'Arrow', 'Templates']) expect(bar.getByRole('group', { name })).toBeInTheDocument()
+    // the options of a tool are there while it is in hand
+    expect(bar.queryByRole('radiogroup', { name: 'Colour of the next note' })).not.toBeInTheDocument()
+    await user.click(bar.getByRole('button', { name: 'Note' }))
     expect(bar.getByRole('radiogroup', { name: 'Colour of the next note' })).toBeInTheDocument()
+    await user.click(bar.getByRole('button', { name: 'Shape' }))
     expect(bar.getByRole('radiogroup', { name: 'Kind of the next shape' })).toBeInTheDocument()
+    await user.click(bar.getByRole('button', { name: 'Arrow' }))
     expect(bar.getByRole('radiogroup', { name: 'Line of the next arrow' })).toBeInTheDocument()
     // none of them can be taken away
     await user.click(bar.getByRole('button', { name: 'Add or remove a tool' }))
@@ -786,7 +799,7 @@ describe('the board for shaping the business idea', () => {
     expect(screen.getByText('Brain dump: every idea, however rough', { selector: '.frame__title' })).toBeInTheDocument()
     expect(document.querySelectorAll('[data-guide]').length).toBeGreaterThan(0)
     await user.click(screen.getByRole('button', { name: 'Save' }))
-    const saved = loadBoard('duckstack')!
+    const saved = (await loadBoard('duckstack'))!
     expect(saved.items.some((item) => item.kind === 'frame' && item.group?.startsWith('brain_dump:'))).toBe(true)
     expect(saved.items.some((item) => item.kind === 'note' && item.hint === 'An idea, however rough')).toBe(true)
     await user.click(screen.getByRole('button', { name: 'Back to the full chat' }))
@@ -802,10 +815,10 @@ describe('the board for shaping the business idea', () => {
     await pickTask(user, /Shape the business idea/)
     await addNote(user)
     await user.keyboard('A name idea{Escape}')
-    expect(loadBoard('duckstack')).toBeNull()
+    expect(await loadBoard('duckstack')).toBeNull()
     expect(screen.getByText('Not saved yet')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Save' }))
-    expect(loadBoard('duckstack')?.items.map((item) => ('text' in item ? item.text : null))).toEqual(['A name idea'])
+    expect((await loadBoard('duckstack'))?.items.map((item) => ('text' in item ? item.text : null))).toEqual(['A name idea'])
     expect(screen.getByText('All changes saved')).toBeInTheDocument()
   })
 
@@ -840,9 +853,9 @@ describe('the board for shaping the business idea', () => {
     await user.click(screen.getByRole('button', { name: 'Back to the full chat' }))
     expect(screen.getByText(/You have unsaved changes in the board/)).toBeInTheDocument()
     expect(toolbar()).toBeInTheDocument()
-    expect(loadBoard('duckstack')).toBeNull()
+    expect(await loadBoard('duckstack')).toBeNull()
     await user.click(screen.getByRole('button', { name: 'Save the board' }))
-    expect(loadBoard('duckstack')?.items).toHaveLength(1)
+    expect((await loadBoard('duckstack'))?.items).toHaveLength(1)
     await waitFor(() => expect(toolbar()).not.toBeInTheDocument())
     expect(screen.getByText(/I saved the board\. Everything is saved/)).toBeInTheDocument()
   })
@@ -856,7 +869,7 @@ describe('the board for shaping the business idea', () => {
     await user.click(screen.getByRole('button', { name: 'Back to the full chat' }))
     await user.click(screen.getByRole('button', { name: 'Leave without saving' }))
     await waitFor(() => expect(toolbar()).not.toBeInTheDocument())
-    expect(loadBoard('duckstack')).toBeNull()
+    expect(await loadBoard('duckstack')).toBeNull()
   })
 
   it('asks about the board and the palette together when both have changes', async () => {
@@ -905,7 +918,12 @@ describe('the board for shaping the business idea', () => {
 })
 
 describe('the AI on the board', () => {
-  const addNote = async (user: ReturnType<typeof userEvent.setup>) => user.click(await screen.findByRole('button', { name: 'Add a note to the middle of the view' }))
+  // The plus is among the options of the sticky note tool, which show while it is in hand.
+  const addNote = async (user: ReturnType<typeof userEvent.setup>) => {
+    const note = await screen.findByRole('button', { name: 'Note' })
+    if (note.getAttribute('aria-pressed') !== 'true') await user.click(note)
+    await user.click(await screen.findByRole('button', { name: 'Add a note to the middle of the view' }))
+  }
   const withNote = async (user: ReturnType<typeof userEvent.setup>, text: string) => {
     await addNote(user)
     await user.keyboard(`${text}{Escape}`)
@@ -1084,5 +1102,59 @@ describe('the AI on the board', () => {
     await waitFor(() => expect(screen.getByText(/Added it/)).toBeInTheDocument())
     expect(screen.getByText('Name ideas', { selector: '.frame__title' })).toBeInTheDocument()
     expect(pink().map((note) => note.textContent)).toEqual([expect.stringContaining('Kindred Boxes'), expect.stringContaining('Maker Crate')])
+  })
+})
+
+describe('with storage that takes its time', () => {
+  let before: DocumentStorage
+  afterEach(() => useDocumentStorage(before))
+
+  it('opens a workspace once what was saved has been read, and only once if the task is chosen twice meanwhile', async () => {
+    const slow = slowMemoryStorage(25)
+    before = useDocumentStorage(slow.driver)
+    const user = userEvent.setup()
+    renderHome()
+    await waitFor(() => expect(slow.calls).toContain('read duckstack/chats'))
+    await user.click(screen.getByRole('button', { name: 'Choose a task' }))
+    const menuitem = await screen.findByRole('menuitem', { name: /Build the brand/ })
+    await user.click(menuitem)
+    // chosen again before the first has arrived
+    await user.click(screen.getByRole('button', { name: 'Choose a task' }))
+    await user.click(await screen.findByRole('menuitem', { name: /Build the brand/ }))
+    expect(await screen.findByRole('region', { name: 'Palette' })).toBeInTheDocument()
+    await waitFor(() => expect(slow.calls.filter((call) => call === 'read duckstack/palette').length).toBeGreaterThanOrEqual(1))
+    expect(screen.getAllByRole('region', { name: 'Palette' })).toHaveLength(1)
+  })
+
+  it('keeps conversations in order when they are saved and read slowly: a chat said, then a new one, then the first opened', async () => {
+    const slow = slowMemoryStorage(15)
+    before = useDocumentStorage(slow.driver)
+    const user = userEvent.setup()
+    renderHome()
+    answers = [reply('chat', 'First answer.')]
+    await say(user, 'First question')
+    await waitFor(() => expect(screen.getByText('First answer.')).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'New chat' }))
+    answers = [reply('chat', 'Second answer.')]
+    await say(user, 'Second question')
+    await waitFor(() => expect(screen.getByText('Second answer.')).toBeInTheDocument())
+    const nav = () => within(screen.getByRole('navigation', { name: 'Chats' }))
+    await waitFor(() => expect(nav().getAllByRole('listitem').map((item) => item.querySelector('.chatlist__title')?.textContent)).toEqual(['Second question', 'First question']))
+    await user.click(nav().getByRole('button', { name: /^First question/ }))
+    await waitFor(() => expect(screen.getByText('First answer.')).toBeInTheDocument())
+    expect(screen.queryByText('Second answer.')).not.toBeInTheDocument()
+    // both were kept, whole
+    await waitFor(async () => expect((await loadChatsFor()).map((chat) => chat.title).sort()).toEqual(['First question', 'Second question']))
+  })
+
+  it('saves the palette through the storage when asked, and does not touch this browser\'s', async () => {
+    const slow = slowMemoryStorage(5)
+    before = useDocumentStorage(slow.driver)
+    const user = userEvent.setup()
+    renderHome()
+    await pickTask(user, /Build the brand/)
+    await user.click(await screen.findByRole('button', { name: /Save/ }))
+    await waitFor(() => expect(slow.documents.has('duckstack/palette')).toBe(true))
+    expect(window.localStorage.getItem('droplet-project-duckstack-palette')).toBeNull()
   })
 })

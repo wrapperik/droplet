@@ -1,7 +1,9 @@
 import { useCallback, useState } from 'react'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { useDocumentStorage, type DocumentStorage } from '../../lib/storage.ts'
+import { slowMemoryStorage } from '../../test/slowStorage.ts'
 import { newContent } from '../../lib/invoice.ts'
 import { invoiceDocOf, openInvoiceWorkspace, reduceInvoice, type InvoiceAction } from '../../lib/invoiceState.ts'
 import InvoiceWorkspace from './InvoiceWorkspace.tsx'
@@ -154,7 +156,8 @@ describe('the invoice workspace', () => {
   it('does not save when Save is pressed: it says what would be remembered and keeps nothing until it is confirmed', async () => {
     const user = userEvent.setup()
     render(<Harness />)
-    expect(screen.getByText('Not saved yet')).toBeInTheDocument()
+    // what was saved is read first, so the bar says nothing for a moment
+    expect(await screen.findByText('Not saved yet')).toBeInTheDocument()
     await user.type(await businessName(user), 'Kindred Gifting')
     await user.type(await clientName(user), 'Pretoria Print Works')
     await user.click(screen.getByRole('button', { name: 'Save' }))
@@ -269,5 +272,33 @@ describe('the invoice workspace', () => {
     await user.type(await clientName(user), 'Pretoria')
     await user.click(screen.getByRole('button', { name: 'Undo' }))
     expect(await clientName(user)).toHaveValue('')
+  })
+})
+
+describe('the invoice workspace while the project\'s memory is still being read', () => {
+  let before: DocumentStorage
+  afterEach(() => useDocumentStorage(before))
+
+  it('says nothing about saving until the memory has been read, so nothing is judged against what has not arrived', async () => {
+    before = useDocumentStorage(slowMemoryStorage(30).driver)
+    render(<Harness />)
+    expect(screen.queryByText(/Not saved yet|Unsaved changes|All changes saved/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Save/ })).toBeDisabled()
+    expect(await screen.findByText('Not saved yet')).toBeInTheDocument()
+  })
+
+  it('remembers a confirmed invoice through the storage, and not in this browser\'s', async () => {
+    const slow = slowMemoryStorage(5)
+    before = useDocumentStorage(slow.driver)
+    const user = userEvent.setup()
+    render(<Harness />)
+    await screen.findByText('Not saved yet')
+    await user.type(await businessName(user), 'Kindred Gifting')
+    await user.type(await clientName(user), 'Pretoria Print Works')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm and save' }))
+    await waitFor(() => expect(slow.documents.has('duckstack/memory')).toBe(true))
+    expect(slow.documents.has('duckstack/invoice')).toBe(true)
+    expect(window.localStorage.length).toBe(0)
   })
 })
