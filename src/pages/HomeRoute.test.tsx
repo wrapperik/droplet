@@ -7,10 +7,13 @@ import { useAuth } from '../store/auth.ts'
 
 // Home itself is large and has its own tests: here it is a stand-in that shows what it was given.
 vi.mock('./Home.tsx', () => ({
-  default: ({ projects, userName, onSignOut }: { projects: ProjectSummary[]; userName: string; onSignOut: () => void }) => (
+  default: ({ projects, userName, onAccount, onSignOut }: { projects: ProjectSummary[]; userName: string; onAccount: () => void; onSignOut: () => void }) => (
     <div>
       <p>Projects: {projects.map((project) => project.name).join(', ')}</p>
       <p>User: {userName}</p>
+      <button type="button" onClick={onAccount}>
+        Account now
+      </button>
       <button type="button" onClick={onSignOut}>
         Sign out now
       </button>
@@ -39,6 +42,7 @@ const renderRoute = () =>
         <Route path="/home" element={<HomeRoute />} />
         <Route path="/sign-in" element={<p>Sign in here</p>} />
         <Route path="/welcome" element={<p>The introduction</p>} />
+        <Route path="/account" element={<p>The account page</p>} />
       </Routes>
     </MemoryRouter>,
   )
@@ -77,6 +81,14 @@ describe('HomeRoute', () => {
     store.createProject.mockResolvedValue(null)
     renderRoute()
     expect(await screen.findByRole('alert')).toBeInTheDocument()
+  })
+
+  it('opens the account page from Home', async () => {
+    const user = userEvent.setup()
+    store.listProjects.mockResolvedValue([{ id: 'p1', name: 'Kindred Gifting' }])
+    renderRoute()
+    await user.click(await screen.findByRole('button', { name: 'Account now' }))
+    expect(await screen.findByText('The account page')).toBeInTheDocument()
   })
 
   it('signs out and goes to the sign-in screen', async () => {

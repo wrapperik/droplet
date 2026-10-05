@@ -27,6 +27,8 @@ type Props = {
   mobileOpen: boolean
   // Who is signed in, shown in the account section at the bottom.
   userName: string
+  // Opens the account page.
+  onAccount?: () => void
   // Ends the session.
   onSignOut?: () => void
 }
@@ -47,6 +49,7 @@ export default function Sidebar({
   onToggleCollapsed,
   mobileOpen,
   userName,
+  onAccount,
   onSignOut,
 }: Props) {
   const [allOpen, setAllOpen] = useState(false)
@@ -90,7 +93,7 @@ export default function Sidebar({
 
       <ThemeSwitcher />
 
-      <AccountMenu name={userName} collapsed={collapsed} onSignOut={onSignOut} />
+      <AccountMenu name={userName} collapsed={collapsed} onAccount={onAccount} onSignOut={onSignOut} />
 
       <button
         type="button"

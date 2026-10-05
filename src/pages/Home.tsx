@@ -60,11 +60,13 @@ type HomeProps = {
   projects?: ProjectSummary[]
   // Who is signed in.
   userName?: string
+  // Opens the account page. Without it the sidebar's Account does nothing.
+  onAccount?: () => void
   // Ends the session. Without it the sidebar's Sign out does nothing.
   onSignOut?: () => void
 }
 
-export default function Home({ projects = mockProjects, userName = mockUser.name, onSignOut }: HomeProps) {
+export default function Home({ projects = mockProjects, userName = mockUser.name, onAccount, onSignOut }: HomeProps) {
   const projectName = useCallback((id: string) => projects.find((project) => project.id === id)?.name ?? '', [projects])
   const [currentProjectId, setCurrentProjectId] = useState(projects[0].id)
   const [collapsed, setCollapsed] = useState(false)
@@ -645,6 +647,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         onToggleCollapsed={() => setCollapsed((value) => !value)}
         mobileOpen={mobileOpen}
         userName={userName}
+        onAccount={onAccount}
         onSignOut={onSignOut}
       />
       {mobileOpen && <div className="home__scrim" onClick={() => setMobileOpen(false)} aria-hidden="true" />}

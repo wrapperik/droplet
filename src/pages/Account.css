@@ -1,0 +1,137 @@
+.account-page {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  width: min(40rem, 100%);
+  min-height: 100dvh;
+  margin-inline: auto;
+  padding: 0.75rem 1rem 3rem;
+}
+
+.account-page__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 3rem;
+}
+
+.account-page__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 1rem 0.5rem 0.625rem;
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.account-page__back:hover {
+  background: var(--overlay-06);
+  color: var(--text);
+}
+
+.account-page__title {
+  margin: 1rem 0 0.25rem;
+  font-size: clamp(2rem, 1.5rem + 1.5vw, 2.75rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+/* Each part is a card on the working screen's own colour, the same raised white as the app. */
+.account-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 1.25rem 1.5rem;
+  border-radius: var(--radius-lg);
+  background: var(--canvas);
+  box-shadow: var(--shadow-sm);
+}
+
+.account-card h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.account-card p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9375rem;
+}
+
+.account-card--profile {
+  flex-direction: row;
+  align-items: center;
+  gap: 1rem;
+}
+
+.account-card__avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 50%;
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.account-card__who {
+  min-width: 0;
+}
+
+.account-card .account-card__name {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 1.25rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-card .account-card__detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-card--action {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.account-card__button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.125rem;
+  border: 1px solid var(--overlay-10);
+  border-radius: var(--radius-pill);
+  background: var(--overlay-06);
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.account-card__button:hover {
+  background: var(--accent-tint-soft);
+}
+
+@media (max-width: 34rem) {
+  .account-card--action {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .account-card__button {
+    justify-content: center;
+  }
+}

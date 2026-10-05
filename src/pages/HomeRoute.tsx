@@ -64,5 +64,5 @@ export default function HomeRoute() {
   }
   // Until the projects of the person who is signed in now have arrived.
   if (!loaded || loaded.userId !== userId) return <div className="auth-loading" role="status" aria-label="Loading your projects" />
-  return <Home key={userId} projects={loaded.projects} userName={user?.name} onSignOut={leave} />
+  return <Home key={userId} projects={loaded.projects} userName={user?.name} onAccount={() => navigate('/account')} onSignOut={leave} />
 }
