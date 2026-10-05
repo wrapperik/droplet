@@ -27,6 +27,41 @@
   box-shadow: var(--shadow-md);
 }
 
+.home__top {
+  /* The header and the toolbar are one block, above whatever is drawn under them. */
+  position: relative;
+  z-index: 30;
+  flex: none;
+}
+
+/* A board that fills the screen is drawn under the header and the toolbar. They are lit from below by a blur that grows towards the top and
+   fades to nothing a little way under the toolbar, and a soft tint of the canvas so the controls read over any note. Two layers of blur, a
+   light one that reaches further and a stronger one that stays near the top, make it gradual instead of a hard band. */
+.home__screen[data-immersive] .home__top::before,
+.home__screen[data-immersive] .home__top::after {
+  content: '';
+  position: absolute;
+  inset: 0 0 -3rem 0;
+  z-index: -1;
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  pointer-events: none;
+}
+
+.home__screen[data-immersive] .home__top::before {
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--canvas) 78%, transparent), color-mix(in srgb, var(--canvas) 36%, transparent) 55%, transparent);
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 45%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 45%, transparent 100%);
+}
+
+.home__screen[data-immersive] .home__top::after {
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 30%, transparent 78%);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 30%, transparent 78%);
+}
+
 .home__header {
   /* Above the toolbar beneath it, so a note that opens from a header button is not covered by it. */
   position: relative;
@@ -108,6 +143,28 @@
 
 .home__component {
   min-height: 100%;
+}
+
+/* The board workspace: the board fills the whole screen, behind the header and the toolbar, with nothing round it. */
+.home__canvas--board {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  padding: 0;
+  overflow: hidden;
+  /* Only the board and what floats over it take presses; the empty grid beside them does not. */
+  pointer-events: none;
+}
+
+.home__component--board {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+}
+
+.home__component--board .board-stage,
+.home__component--board .board__label {
+  pointer-events: auto;
 }
 
 .home__footer {
@@ -232,14 +289,21 @@
 .home__canvas--chat {
   display: flex;
   justify-content: center;
+  /* The thread's own scrollbar belongs on the right edge of the screen, not at the edge of the readable column, so the screen has no side padding. */
+  padding-inline: 0;
   overflow: hidden;
 }
 
 .home__conversation {
   display: flex;
   flex-direction: column;
-  width: min(46rem, 100%);
+  width: 100%;
   min-height: 0;
+}
+
+/* The thread fills the width, so its scrollbar is at the edge of the screen, and its words stay in a readable column in the middle. */
+.home__conversation .thread {
+  padding-inline: max(1.5rem, calc((100% - 46rem) / 2));
 }
 
 /* While the next answer is worked out the windows ripple (see useRipple). They are not dimmed, but they cannot be pressed. */

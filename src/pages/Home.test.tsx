@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { loadBoard } from '../lib/boardStore.ts'
-import { loadChats } from '../lib/chatStore.ts'
+import { loadChats, saveChats } from '../lib/chatStore.ts'
 import { loadPalette } from '../lib/projectStore.ts'
 import Home from './Home.tsx'
 
@@ -45,6 +45,13 @@ const clientName = async (user: ReturnType<typeof userEvent.setup>) => {
   return screen.getByLabelText('Client or company name')
 }
 
+// The tasks are chosen from the message bar's menu: the sidebar has no list of them.
+const pickTask = async (user: ReturnType<typeof userEvent.setup>, name: RegExp) => {
+  await waitFor(() => expect(screen.queryByRole('menu', { name: 'Workspaces' })).not.toBeInTheDocument())
+  await user.click(screen.getByRole('button', { name: 'Choose a task' }))
+  await user.click(await screen.findByRole('menuitem', { name }))
+}
+
 const say = async (user: ReturnType<typeof userEvent.setup>, text: string) => {
   await user.type(screen.getByLabelText('Describe what you need'), text)
   await user.click(screen.getByRole('button', { name: 'Send' }))
@@ -60,7 +67,7 @@ describe('asking Droplet to fill in the invoice', () => {
       ]),
     ]
     renderHome()
-    await user.click(screen.getByRole('button', { name: /Make an invoice/ }))
+    await pickTask(user, /Make an invoice/)
     await say(user, 'Bill Karoo Candles for 30 soy candles at R85 each')
     await waitFor(() => expect(screen.getByText('I added the box.')).toBeInTheDocument())
     expect(asked).toHaveLength(1)
@@ -84,7 +91,7 @@ describe('asking Droplet to fill in the invoice', () => {
       ]),
     ]
     renderHome()
-    await user.click(screen.getByRole('button', { name: /Make an invoice/ }))
+    await pickTask(user, /Make an invoice/)
     // the answer is checked again in the browser, which refuses a price nobody wrote even if the server let it through
     await say(user, 'Add 30 soy candles, due in 7 days')
     await waitFor(() => expect(screen.getByText(/I got an answer I could not use/)).toBeInTheDocument())
@@ -121,7 +128,7 @@ describe('asking Droplet to fill in the invoice', () => {
     const user = userEvent.setup()
     answers = [reply('brand', 'Opening the brand workspace.'), reply('brand', 'Colour 1 reads best.')]
     renderHome()
-    await user.click(screen.getByRole('button', { name: /Make an invoice/ }))
+    await pickTask(user, /Make an invoice/)
     await say(user, 'Which brand colour has the best contrast?')
     await waitFor(() => expect(screen.getByText('Colour 1 reads best.')).toBeInTheDocument())
     expect(asked[0].view).toBe('invoice')
@@ -134,7 +141,7 @@ describe('asking Droplet to fill in the invoice', () => {
     const user = userEvent.setup()
     answers = [reply('invoice', 'It still needs the name of the client.')]
     renderHome()
-    await user.click(screen.getByRole('button', { name: /Make an invoice/ }))
+    await pickTask(user, /Make an invoice/)
     await say(user, 'What does it still need?')
     await waitFor(() => expect(screen.getByText('It still needs the name of the client.')).toBeInTheDocument())
     expect(await clientName(user)).toHaveValue('')
@@ -152,7 +159,7 @@ describe('asking Droplet to fill in the invoice', () => {
     )
     answers = [reply('invoice', 'Fine.')]
     renderHome()
-    await user.click(screen.getByRole('button', { name: /Make an invoice/ }))
+    await pickTask(user, /Make an invoice/)
     await say(user, 'What is the total?')
     await waitFor(() => expect(asked).toHaveLength(1))
     const sent = JSON.stringify(asked[0])
@@ -163,7 +170,6 @@ describe('asking Droplet to fill in the invoice', () => {
 
 describe('the thread and the task menu', () => {
   const entries = () => within(screen.getByRole('log', { name: 'Conversation' })).queryAllByRole('listitem')
-  const task = (name: RegExp) => screen.getByRole('button', { name })
   const sendAndWait = async (user: ReturnType<typeof userEvent.setup>, text: string, answer: string) => {
     answers = [reply('chat', answer)]
     await say(user, text)
@@ -173,20 +179,20 @@ describe('the thread and the task menu', () => {
   it('says nothing in the thread when a task is chosen', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(task(/Make an invoice/))
-    await user.click(task(/Build the brand/))
-    await user.click(task(/Get a logo/))
+    await pickTask(user, /Make an invoice/)
+    await pickTask(user, /Build the brand/)
+    await pickTask(user, /Get a logo/)
     expect(entries()).toHaveLength(0)
   })
 
   it('marks a move to another workspace with a divider, once a message is sent there', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(task(/Build the brand/))
+    await pickTask(user, /Build the brand/)
     await sendAndWait(user, 'What suits a gift business?', 'Something warm.')
     // the first message has nothing before it to have moved from
     expect(entries().map((item) => item.className)).not.toContain('thread__divider')
-    await user.click(task(/Make an invoice/))
+    await pickTask(user, /Make an invoice/)
     expect(entries()).toHaveLength(2)
     await sendAndWait(user, 'What does it need?', 'A client.')
     const items = entries()
@@ -197,12 +203,12 @@ describe('the thread and the task menu', () => {
   it('shows one divider, not one per move, when the founder moves about without saying anything', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(task(/Build the brand/))
+    await pickTask(user, /Build the brand/)
     await sendAndWait(user, 'Hello', 'Hi.')
-    await user.click(task(/Make an invoice/))
-    await user.click(task(/Build the brand/))
-    await user.click(task(/Get a logo/))
-    await user.click(task(/Make an invoice/))
+    await pickTask(user, /Make an invoice/)
+    await pickTask(user, /Build the brand/)
+    await pickTask(user, /Get a logo/)
+    await pickTask(user, /Make an invoice/)
     await sendAndWait(user, 'Now?', 'Here.')
     const dividers = entries().filter((item) => item.classList.contains('thread__divider'))
     expect(dividers.map((item) => item.textContent)).toEqual(['Switched workspace to Invoice'])
@@ -211,10 +217,10 @@ describe('the thread and the task menu', () => {
   it('shows no divider for a move that was made and undone before anything was said', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(task(/Build the brand/))
+    await pickTask(user, /Build the brand/)
     await sendAndWait(user, 'Hello', 'Hi.')
-    await user.click(task(/Make an invoice/))
-    await user.click(task(/Build the brand/))
+    await pickTask(user, /Make an invoice/)
+    await pickTask(user, /Build the brand/)
     await sendAndWait(user, 'Again', 'Still here.')
     expect(entries().filter((item) => item.classList.contains('thread__divider'))).toHaveLength(0)
   })
@@ -222,11 +228,11 @@ describe('the thread and the task menu', () => {
   it('does not send a divider to the composer as part of the conversation', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(task(/Build the brand/))
+    await pickTask(user, /Build the brand/)
     await sendAndWait(user, 'Hello', 'Hi.')
-    await user.click(task(/Make an invoice/))
+    await pickTask(user, /Make an invoice/)
     await sendAndWait(user, 'Next', 'Done.')
-    await user.click(task(/Build the brand/))
+    await pickTask(user, /Build the brand/)
     await sendAndWait(user, 'Last', 'Ok.')
     const history = (asked[2] as unknown as { history: { text: string }[] }).history
     expect(history.map((item) => item.text)).toEqual(['Hello', 'Hi.', 'Next', 'Done.'])
@@ -255,7 +261,7 @@ describe('the start of the conversation', () => {
   it('keeps the tip while a workspace is open and nothing has been said', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(screen.getByRole('button', { name: /Build the brand/ }))
+    await pickTask(user, /Build the brand/)
     expect(screen.getByRole('button', { name: /Show me a menu of available workspaces/ })).toBeInTheDocument()
   })
 })
@@ -269,14 +275,14 @@ describe('going back to the full chat', () => {
     const user = userEvent.setup()
     renderHome()
     expect(screen.queryByRole('button', { name: 'Back to the full chat' })).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /Build the brand/ }))
+    await pickTask(user, /Build the brand/)
     expect(back()).toBeInTheDocument()
   })
 
   it('closes a workspace nobody has changed at once, without asking', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(screen.getByRole('button', { name: /Build the brand/ }))
+    await pickTask(user, /Build the brand/)
     await user.click(back())
     await waitFor(() => expect(toolbar()).not.toBeInTheDocument())
     expect(screen.queryByText(/unsaved changes/)).not.toBeInTheDocument()
@@ -285,7 +291,7 @@ describe('going back to the full chat', () => {
   it('asks first, in the thread, when the palette has changes, and saves it from a button there before it closes', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(screen.getByRole('button', { name: /Build the brand/ }))
+    await pickTask(user, /Build the brand/)
     await user.click(screen.getByRole('button', { name: /^Remove colour 1,/ }))
     await user.click(back())
     expect(prompt()).toHaveTextContent('the brand palette')
@@ -302,7 +308,7 @@ describe('going back to the full chat', () => {
   it('closes without saving when asked to, and keeps nothing', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(screen.getByRole('button', { name: /Build the brand/ }))
+    await pickTask(user, /Build the brand/)
     await user.click(screen.getByRole('button', { name: /^Remove colour 1,/ }))
     await user.click(back())
     await user.click(screen.getByRole('button', { name: 'Leave without saving' }))
@@ -314,7 +320,7 @@ describe('going back to the full chat', () => {
   it('stays in the workspace when asked to keep working', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(screen.getByRole('button', { name: /Build the brand/ }))
+    await pickTask(user, /Build the brand/)
     await user.click(screen.getByRole('button', { name: /^Remove colour 1,/ }))
     await user.click(back())
     await user.click(screen.getByRole('button', { name: 'Keep working' }))
@@ -329,7 +335,7 @@ describe('going back to the full chat', () => {
   it('does not ask twice while a question is still open', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(screen.getByRole('button', { name: /Build the brand/ }))
+    await pickTask(user, /Build the brand/)
     await user.click(screen.getByRole('button', { name: /^Remove colour 1,/ }))
     await user.click(back())
     await user.click(back())
@@ -339,7 +345,7 @@ describe('going back to the full chat', () => {
   it('opens the invoice note of what would be remembered from the button, and closes only once the founder has confirmed it', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(screen.getByRole('button', { name: /Make an invoice/ }))
+    await pickTask(user, /Make an invoice/)
     await user.type(await clientName(user), 'Pretoria Print Works')
     await user.click(back())
     expect(prompt()).toHaveTextContent('the invoice')
@@ -357,7 +363,7 @@ describe('going back to the full chat', () => {
   it('stays open, with the question, if the invoice note is closed without confirming', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(screen.getByRole('button', { name: /Make an invoice/ }))
+    await pickTask(user, /Make an invoice/)
     await user.type(await clientName(user), 'Pretoria Print Works')
     await user.click(back())
     await user.click(screen.getByRole('button', { name: 'Review and save the invoice' }))
@@ -370,7 +376,7 @@ describe('going back to the full chat', () => {
   it('does not send the question to the composer as part of the conversation', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(screen.getByRole('button', { name: /Build the brand/ }))
+    await pickTask(user, /Build the brand/)
     answers = [reply('chat', 'Fine.')]
     await say(user, 'Hello')
     await waitFor(() => expect(screen.getByText('Fine.')).toBeInTheDocument())
@@ -386,30 +392,27 @@ describe('going back to the full chat', () => {
 })
 
 describe('the chat history', () => {
-  const entry = (name: string | RegExp) => within(screen.getByRole('dialog', { name: 'Chat history' })).getByRole('button', { name })
-  const openHistory = (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole('button', { name: 'History' }))
+  const entry = (name: string | RegExp) => within(screen.getByRole('navigation', { name: 'Chats' })).getByRole('button', { name })
   const talk = async (user: ReturnType<typeof userEvent.setup>, text: string, answer: string) => {
     answers = [reply('chat', answer)]
     await say(user, text)
     await waitFor(() => expect(screen.getByText(answer)).toBeInTheDocument())
   }
 
-  it('opens and closes, and says what it is for while there is nothing in it', async () => {
-    const user = userEvent.setup()
+  it('says what it is for while there is nothing in it, and has no menu of places to go', () => {
     renderHome()
-    await openHistory(user)
-    expect(screen.getByText(/kept here once you have said something/)).toBeInTheDocument()
-    await user.keyboard('{Escape}')
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Chat history' })).not.toBeInTheDocument())
+    expect(within(screen.getByRole('navigation', { name: 'Chats' })).getByText(/kept here once you have said something/)).toBeInTheDocument()
+    // the tasks are chosen from the message bar and with Droplet, not from the sidebar
+    for (const name of [/Make an invoice/, /Build the brand/, /Get a logo/, /Shape the business idea/, /Write to a client/, /^Home$/, /Review and export/, /Assets/]) {
+      expect(within(screen.getByRole('complementary', { name: 'Sidebar' })).queryByRole('button', { name })).not.toBeInTheDocument()
+    }
   })
 
   it('lists a conversation once something has been said in it, called by how it began', async () => {
     const user = userEvent.setup()
     renderHome()
     await talk(user, 'Help me name my business', 'Happy to.')
-    await openHistory(user)
     expect(entry(/^Help me name my business/)).toHaveAttribute('aria-current', 'true')
-    expect(within(screen.getByRole('dialog', { name: 'Chat history' })).getByText('Open now')).toBeInTheDocument()
   })
 
   it('keeps a conversation when a new one is started, and brings it back when it is opened', async () => {
@@ -419,14 +422,11 @@ describe('the chat history', () => {
     await user.click(screen.getByRole('button', { name: 'New chat' }))
     expect(screen.queryByText('First answer.')).not.toBeInTheDocument()
     await talk(user, 'Second question', 'Second answer.')
-    await openHistory(user)
-    const items = within(screen.getByRole('dialog', { name: 'Chat history' })).getAllByRole('listitem')
-    expect(items.map((item) => item.querySelector('.chatbar__title')?.textContent)).toEqual(['Second question', 'First question'])
+    const items = within(screen.getByRole('navigation', { name: 'Chats' })).getAllByRole('listitem')
+    expect(items.map((item) => item.querySelector('.chatlist__title')?.textContent)).toEqual(['Second question', 'First question'])
     await user.click(entry(/^First question/))
     expect(screen.getByText('First answer.')).toBeInTheDocument()
     expect(screen.queryByText('Second answer.')).not.toBeInTheDocument()
-    // and the panel has closed
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Chat history' })).not.toBeInTheDocument())
   })
 
   it('carries on a conversation that was opened, in the same entry', async () => {
@@ -434,11 +434,9 @@ describe('the chat history', () => {
     renderHome()
     await talk(user, 'First question', 'First answer.')
     await user.click(screen.getByRole('button', { name: 'New chat' }))
-    await openHistory(user)
     await user.click(entry(/^First question/))
     await talk(user, 'Follow up', 'Follow answer.')
-    await openHistory(user)
-    expect(within(screen.getByRole('dialog', { name: 'Chat history' })).getAllByRole('listitem')).toHaveLength(1)
+    expect(within(screen.getByRole('navigation', { name: 'Chats' })).getAllByRole('listitem')).toHaveLength(1)
     expect(loadChatsFor()[0].messages.map((item) => item.text)).toEqual(['First question', 'First answer.', 'Follow up', 'Follow answer.'])
   })
 
@@ -448,14 +446,13 @@ describe('the chat history', () => {
     await talk(user, 'First question', 'First answer.')
     await user.click(screen.getByRole('button', { name: 'New chat' }))
     await talk(user, 'Second question', 'Second answer.')
-    await openHistory(user)
     await user.click(screen.getByRole('button', { name: 'Delete First question' }))
     expect(screen.getByText('Delete this chat?')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Keep' }))
-    expect(within(screen.getByRole('dialog', { name: 'Chat history' })).getAllByRole('listitem')).toHaveLength(2)
+    expect(within(screen.getByRole('navigation', { name: 'Chats' })).getAllByRole('listitem')).toHaveLength(2)
     await user.click(screen.getByRole('button', { name: 'Delete First question' }))
     await user.click(screen.getByRole('button', { name: 'Delete' }))
-    expect(within(screen.getByRole('dialog', { name: 'Chat history' })).getAllByRole('listitem')).toHaveLength(1)
+    expect(within(screen.getByRole('navigation', { name: 'Chats' })).getAllByRole('listitem')).toHaveLength(1)
     expect(loadChatsFor().map((chat) => chat.title)).toEqual(['Second question'])
   })
 
@@ -463,30 +460,95 @@ describe('the chat history', () => {
     const user = userEvent.setup()
     renderHome()
     await talk(user, 'Only question', 'Only answer.')
-    await openHistory(user)
     await user.click(screen.getByRole('button', { name: 'Delete Only question' }))
     await user.click(screen.getByRole('button', { name: 'Delete' }))
     expect(screen.queryByText('Only answer.')).not.toBeInTheDocument()
     expect(loadChatsFor()).toEqual([])
   })
 
+  const seed = (count: number) =>
+    saveChats(
+      'duckstack',
+      Array.from({ length: count }, (_, index) => ({
+        id: `chat-${index + 1}`,
+        title: `Chat ${index + 1}`,
+        // chat 1 is the most recent
+        updatedAt: new Date(2026, 9, 5, 12, 0, 0 - index).toISOString(),
+        messages: [{ id: 1, from: 'you' as const, text: `Chat ${index + 1}`, }, { id: 2, from: 'droplet' as const, text: `Answer ${index + 1}` }],
+      })),
+    )
+  const recent = () => within(screen.getByRole('navigation', { name: 'Chats' })).getAllByRole('listitem').map((item) => item.querySelector('.chatlist__title')?.textContent)
+
+  it('lists only the eight most recent chats in the sidebar, with a way to see all of them', () => {
+    seed(12)
+    renderHome()
+    expect(recent()).toEqual(['Chat 1', 'Chat 2', 'Chat 3', 'Chat 4', 'Chat 5', 'Chat 6', 'Chat 7', 'Chat 8'])
+    expect(screen.getByRole('button', { name: 'See all chats' })).toBeInTheDocument()
+  })
+
+  it('offers no "See all" when everything is already listed', () => {
+    seed(8)
+    renderHome()
+    expect(screen.queryByRole('button', { name: 'See all chats' })).not.toBeInTheDocument()
+  })
+
+  it('opens every chat in a dialog with a search, opens one from it and closes', async () => {
+    const user = userEvent.setup()
+    seed(12)
+    renderHome()
+    await user.click(screen.getByRole('button', { name: 'See all chats' }))
+    const dialog = screen.getByRole('dialog', { name: 'All chats' })
+    expect(within(dialog).getAllByRole('listitem')).toHaveLength(12)
+    await user.type(within(dialog).getByRole('searchbox', { name: 'Search chats' }), 'chat 11')
+    expect(within(dialog).getAllByRole('listitem')).toHaveLength(1)
+    await user.click(within(dialog).getByRole('button', { name: /^Chat 11/ }))
+    expect(screen.getByText('Answer 11')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'All chats' })).not.toBeInTheDocument()
+  })
+
+  it('says when no chat matches the search, and closes on Escape', async () => {
+    const user = userEvent.setup()
+    seed(10)
+    renderHome()
+    await user.click(screen.getByRole('button', { name: 'See all chats' }))
+    await user.type(screen.getByRole('searchbox', { name: 'Search chats' }), 'zebra')
+    expect(screen.getByText(/No chats match/)).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'All chats' })).not.toBeInTheDocument()
+  })
+
+  it('can delete a chat from the full list, after a second press', async () => {
+    const user = userEvent.setup()
+    seed(10)
+    renderHome()
+    await user.click(screen.getByRole('button', { name: 'See all chats' }))
+    const dialog = screen.getByRole('dialog', { name: 'All chats' })
+    await user.click(within(dialog).getByRole('button', { name: 'Delete Chat 10' }))
+    expect(loadChatsFor()).toHaveLength(10)
+    await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
+    expect(loadChatsFor()).toHaveLength(9)
+  })
+
   it('keeps nothing for a conversation the founder has not spoken in', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(screen.getByRole('button', { name: /Build the brand/ }))
+    await pickTask(user, /Build the brand/)
     await user.click(screen.getByRole('button', { name: /^Remove colour 1,/ }))
     await user.click(screen.getByRole('button', { name: 'Back to the full chat' }))
     expect(loadChatsFor()).toEqual([])
   })
 
-  it('is in the side panel too, once a workspace is open, and does not lose the conversation going there', async () => {
+  it('is still there once a workspace is open, and does not lose the conversation going there: the sidebar steps back to icons, and the chat history icon opens the full list', async () => {
     const user = userEvent.setup()
     renderHome()
     await talk(user, 'Before the workspace', 'Noted.')
-    await user.click(screen.getByRole('button', { name: /Build the brand/ }))
+    await pickTask(user, /Build the brand/)
     expect(screen.getByText('Noted.')).toBeInTheDocument()
-    await openHistory(user)
-    expect(entry(/^Before the workspace/)).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByRole('button', { name: 'New chat' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Chat history' }))
+    const dialog = screen.getByRole('dialog', { name: 'All chats' })
+    expect(within(dialog).getByRole('button', { name: /^Before the workspace/ })).toHaveAttribute('aria-current', 'true')
+    expect(within(dialog).getByText('Open now')).toBeInTheDocument()
   })
 })
 
@@ -517,7 +579,7 @@ describe('a question and suggested replies', () => {
     const user = userEvent.setup()
     answers = [{ outcome: 'valid', turn: { task: 'brand', message: 'Done.', question: 'Does it feel right?', actions: [{ type: 'select_colour', index: 9 }], memoryUsed: [] } }]
     renderHome()
-    await user.click(screen.getByRole('button', { name: /Build the brand/ }))
+    await pickTask(user, /Build the brand/)
     await say(user, 'Select colour 9')
     // the composer's own check refuses a colour that is not there, so the question is not shown for an answer nobody could use
     await waitFor(() => expect(screen.getByText(/I got an answer I could not use/)).toBeInTheDocument())
@@ -561,15 +623,14 @@ describe('the wave behind the conversation', () => {
   it('is not behind a workspace', async () => {
     const user = userEvent.setup()
     const { container } = renderHome()
-    await user.click(screen.getByRole('button', { name: /Build the brand/ }))
+    await pickTask(user, /Build the brand/)
     expect(backdrop(container)).toBeNull()
   })
 })
 
 describe('the composer naming a chat', () => {
   const named = (message: string, title?: string) => ({ outcome: 'valid', turn: { task: 'chat', message, actions: [], memoryUsed: [], ...(title ? { title } : {}) } })
-  const openHistory = (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole('button', { name: 'History' }))
-  const titles = () => within(screen.getByRole('dialog', { name: 'Chat history' })).getAllByRole('listitem').map((item) => item.querySelector('.chatbar__title')?.textContent)
+  const titles = () => within(screen.getByRole('navigation', { name: 'Chats' })).getAllByRole('listitem').map((item) => item.querySelector('.chatlist__title')?.textContent)
 
   it('lists the chat by the name the composer gave it, tidied, instead of the founder\'s first words', async () => {
     const user = userEvent.setup()
@@ -577,7 +638,6 @@ describe('the composer naming a chat', () => {
     renderHome()
     await say(user, 'hi, how should I price my boxes?')
     await waitFor(() => expect(screen.getByText('Start from your costs.')).toBeInTheDocument())
-    await openHistory(user)
     expect(titles()).toEqual(['Pricing gift boxes'])
   })
 
@@ -587,7 +647,6 @@ describe('the composer naming a chat', () => {
     renderHome()
     await say(user, 'hi')
     await waitFor(() => expect(screen.getByText('Hello.')).toBeInTheDocument())
-    await openHistory(user)
     expect(titles()).toEqual(['hi'])
     await user.keyboard('{Escape}')
     await say(user, 'how should I price my boxes?')
@@ -597,7 +656,6 @@ describe('the composer naming a chat', () => {
     expect((asked[0] as { chatTitle?: string }).chatTitle).toBeUndefined()
     expect((asked[1] as { chatTitle?: string }).chatTitle).toBeUndefined()
     expect((asked[2] as { chatTitle?: string }).chatTitle).toBe('Pricing gift boxes')
-    await openHistory(user)
     expect(titles()).toEqual(['Pricing gift boxes'])
   })
 
@@ -609,7 +667,6 @@ describe('the composer naming a chat', () => {
     await waitFor(() => expect(screen.getByText('One.')).toBeInTheDocument())
     await say(user, 'actually, names')
     await waitFor(() => expect(screen.getByText('Two.')).toBeInTheDocument())
-    await openHistory(user)
     expect(titles()).toEqual(['Naming the business'])
   })
 
@@ -623,9 +680,8 @@ describe('the composer naming a chat', () => {
     answers = [named('Hello.')]
     await say(user, 'hi there')
     await waitFor(() => expect(screen.getByText('Hello.')).toBeInTheDocument())
-    await openHistory(user)
     expect(titles()).toEqual(['hi there', 'Pricing gift boxes'])
-    await user.click(within(screen.getByRole('dialog', { name: 'Chat history' })).getByRole('button', { name: /^Pricing gift boxes/ }))
+    await user.click(within(screen.getByRole('navigation', { name: 'Chats' })).getByRole('button', { name: /^Pricing gift boxes/ }))
     answers = [named('A margin of your choice.')]
     await say(user, 'and the margin?')
     await waitFor(() => expect(screen.getByText('A margin of your choice.')).toBeInTheDocument())
@@ -651,7 +707,7 @@ describe('the start of the page', () => {
   it('is not plain behind a workspace', async () => {
     const user = userEvent.setup()
     const { container } = renderHome()
-    await user.click(screen.getByRole('button', { name: /Build the brand/ }))
+    await pickTask(user, /Build the brand/)
     expect(home(container)).not.toHaveAttribute('data-start')
   })
 })
@@ -673,7 +729,7 @@ describe('the light while Droplet works', () => {
     let release: () => void = () => {}
     vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => { release = () => resolve(new Response(JSON.stringify(reply('brand', 'Done.')), { status: 200, headers: { 'content-type': 'application/json' } })) })))
     const { container } = renderHome()
-    await user.click(screen.getByRole('button', { name: /Build the brand/ }))
+    await pickTask(user, /Build the brand/)
     await say(user, 'Warmer please')
     expect(container.querySelector('.glow')).not.toBeNull()
     release()
@@ -682,14 +738,13 @@ describe('the light while Droplet works', () => {
 })
 
 describe('the board for shaping the business idea', () => {
-  const shape = () => screen.getByRole('button', { name: /Shape the business idea/ })
   const toolbar = () => screen.queryByRole('toolbar', { name: 'Tools' })
   const addNote = async (user: ReturnType<typeof userEvent.setup>) => user.click(await screen.findByRole('button', { name: 'Add a note to the middle of the view' }))
 
   it('opens from the task menu without asking the model, and says nothing in the thread', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(shape())
+    await pickTask(user, /Shape the business idea/)
     expect(screen.getByRole('region', { name: 'Board' })).toBeInTheDocument()
     expect(asked).toHaveLength(0)
     expect(within(screen.getByRole('log', { name: 'Conversation' })).queryAllByRole('listitem')).toHaveLength(0)
@@ -698,7 +753,7 @@ describe('the board for shaping the business idea', () => {
   it('has the board tools in the toolbar, which cannot be taken away', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(shape())
+    await pickTask(user, /Shape the business idea/)
     const bar = within(toolbar()!)
     for (const name of ['Select', 'Sticky note', 'Shape', 'Text', 'Frame', 'Arrow', 'Templates']) expect(bar.getByRole('group', { name })).toBeInTheDocument()
     expect(bar.getByRole('radiogroup', { name: 'Colour of the next note' })).toBeInTheDocument()
@@ -712,12 +767,12 @@ describe('the board for shaping the business idea', () => {
   it('keeps the board while another workspace is shown, and brings it back as it was', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(shape())
+    await pickTask(user, /Shape the business idea/)
     await addNote(user)
     await user.keyboard('Gift boxes{Escape}')
-    await user.click(screen.getByRole('button', { name: /Build the brand/ }))
+    await pickTask(user, /Build the brand/)
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Board' })).not.toBeInTheDocument())
-    await user.click(shape())
+    await pickTask(user, /Shape the business idea/)
     expect(await screen.findByRole('region', { name: 'Board' })).toBeInTheDocument()
     expect(screen.getByText('Gift boxes')).toBeInTheDocument()
   })
@@ -725,7 +780,7 @@ describe('the board for shaping the business idea', () => {
   it('puts a template on the board from the toolbar, which is saved with it and comes back as it was', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(shape())
+    await pickTask(user, /Shape the business idea/)
     await user.click(await screen.findByRole('button', { name: 'Templates' }))
     await user.click(screen.getByRole('menuitem', { name: /^Brain dump/ }))
     expect(screen.getByText('Brain dump: every idea, however rough', { selector: '.frame__title' })).toBeInTheDocument()
@@ -736,7 +791,7 @@ describe('the board for shaping the business idea', () => {
     expect(saved.items.some((item) => item.kind === 'note' && item.hint === 'An idea, however rough')).toBe(true)
     await user.click(screen.getByRole('button', { name: 'Back to the full chat' }))
     await waitFor(() => expect(toolbar()).not.toBeInTheDocument())
-    await user.click(shape())
+    await pickTask(user, /Shape the business idea/)
     expect(await screen.findByText('Brain dump: every idea, however rough', { selector: '.frame__title' })).toBeInTheDocument()
     expect(document.querySelectorAll('[data-guide]').length).toBeGreaterThan(0)
   })
@@ -744,7 +799,7 @@ describe('the board for shaping the business idea', () => {
   it('saves from the header only when Save is pressed', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(shape())
+    await pickTask(user, /Shape the business idea/)
     await addNote(user)
     await user.keyboard('A name idea{Escape}')
     expect(loadBoard('duckstack')).toBeNull()
@@ -757,20 +812,20 @@ describe('the board for shaping the business idea', () => {
   it('opens with what was saved', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(shape())
+    await pickTask(user, /Shape the business idea/)
     await addNote(user)
     await user.keyboard('Remembered{Escape}')
     await user.click(screen.getByRole('button', { name: 'Save' }))
     await user.click(screen.getByRole('button', { name: 'Back to the full chat' }))
     await waitFor(() => expect(toolbar()).not.toBeInTheDocument())
-    await user.click(shape())
+    await pickTask(user, /Shape the business idea/)
     expect(await screen.findByText('Remembered')).toBeInTheDocument()
   })
 
   it('closes at once with Back to the full chat when nothing has been put on it', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(shape())
+    await pickTask(user, /Shape the business idea/)
     await user.click(screen.getByRole('button', { name: 'Back to the full chat' }))
     await waitFor(() => expect(toolbar()).not.toBeInTheDocument())
     expect(screen.queryByText(/unsaved changes/)).not.toBeInTheDocument()
@@ -779,7 +834,7 @@ describe('the board for shaping the business idea', () => {
   it('asks first, in the thread, when there are notes that are not saved, and saves the board from the button there', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(shape())
+    await pickTask(user, /Shape the business idea/)
     await addNote(user)
     await user.keyboard('Not saved yet{Escape}')
     await user.click(screen.getByRole('button', { name: 'Back to the full chat' }))
@@ -795,7 +850,7 @@ describe('the board for shaping the business idea', () => {
   it('closes without saving when asked to', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(shape())
+    await pickTask(user, /Shape the business idea/)
     await addNote(user)
     await user.keyboard('Throw away{Escape}')
     await user.click(screen.getByRole('button', { name: 'Back to the full chat' }))
@@ -807,9 +862,9 @@ describe('the board for shaping the business idea', () => {
   it('asks about the board and the palette together when both have changes', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(screen.getByRole('button', { name: /Build the brand/ }))
+    await pickTask(user, /Build the brand/)
     await user.click(screen.getByRole('button', { name: /^Remove colour 1,/ }))
-    await user.click(shape())
+    await pickTask(user, /Shape the business idea/)
     await addNote(user)
     await user.keyboard('Both{Escape}')
     await user.click(screen.getByRole('button', { name: 'Back to the full chat' }))
@@ -824,7 +879,7 @@ describe('the board for shaping the business idea', () => {
   it('does not call the model until the founder sends a message: nothing on the board asks it in the background', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(shape())
+    await pickTask(user, /Shape the business idea/)
     await addNote(user)
     await user.keyboard('Something{Escape}')
     await user.click(await screen.findByRole('button', { name: 'Templates' }))
@@ -837,11 +892,11 @@ describe('the board for shaping the business idea', () => {
   it('starts the next message with a divider when it is sent in the board after another workspace', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(screen.getByRole('button', { name: /Build the brand/ }))
+    await pickTask(user, /Build the brand/)
     answers = [reply('chat', 'Hi.')]
     await say(user, 'Hello')
     await waitFor(() => expect(screen.getByText('Hi.')).toBeInTheDocument())
-    await user.click(shape())
+    await pickTask(user, /Shape the business idea/)
     answers = [reply('chat', 'Here.')]
     await say(user, 'Now?')
     await waitFor(() => expect(screen.getByText('Here.')).toBeInTheDocument())
@@ -850,7 +905,6 @@ describe('the board for shaping the business idea', () => {
 })
 
 describe('the AI on the board', () => {
-  const shape = () => screen.getByRole('button', { name: /Shape the business idea/ })
   const addNote = async (user: ReturnType<typeof userEvent.setup>) => user.click(await screen.findByRole('button', { name: 'Add a note to the middle of the view' }))
   const withNote = async (user: ReturnType<typeof userEvent.setup>, text: string) => {
     await addNote(user)
@@ -862,7 +916,7 @@ describe('the AI on the board', () => {
   it('is shown the board, by reference, when it is on screen, and not the palette or the invoice', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(shape())
+    await pickTask(user, /Shape the business idea/)
     await withNote(user, 'Gift boxes for offices')
     answers = [reply('chat', 'Noted.')]
     await say(user, 'What do you think?')
@@ -878,7 +932,7 @@ describe('the AI on the board', () => {
   it('puts the notes it is asked for on the board, pink, with its name on them, and says what to do with them', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(shape())
+    await pickTask(user, /Shape the business idea/)
     await withNote(user, 'Gift boxes for offices')
     answers = [reply('ideation', 'I added two ideas beside your note.', [{ type: 'add_note', text: 'Corporate hampers', near: 'n1', connect: true }, { type: 'add_note', text: 'Thank-you boxes', near: 'n1', connect: true }])]
     await say(user, 'Give me some related ideas')
@@ -893,7 +947,7 @@ describe('the AI on the board', () => {
   it('says what pink means only the first time', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(shape())
+    await pickTask(user, /Shape the business idea/)
     await withNote(user, 'A note')
     answers = [reply('ideation', 'First batch.', [{ type: 'add_note', text: 'One' }])]
     await say(user, 'ideas')
@@ -908,7 +962,7 @@ describe('the AI on the board', () => {
   it('is one step: one Undo takes back everything it did', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(shape())
+    await pickTask(user, /Shape the business idea/)
     await withNote(user, 'A note')
     answers = [reply('ideation', 'Done.', [{ type: 'add_note', text: 'One', near: 'n1', connect: true }, { type: 'add_note', text: 'Two', near: 'n1', connect: true }, { type: 'add_note', text: 'Three' }])]
     await say(user, 'ideas please')
@@ -922,7 +976,7 @@ describe('the AI on the board', () => {
   it('leaves the founder\'s own notes as they were', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(shape())
+    await pickTask(user, /Shape the business idea/)
     await withNote(user, 'Mine')
     const mine = () => document.querySelector<HTMLElement>('.note:not([data-colour="pink"])')!
     const before = { left: mine().style.left, top: mine().style.top, colour: mine().dataset.colour, text: mine().textContent }
@@ -935,7 +989,7 @@ describe('the AI on the board', () => {
   it('lets the founder keep a note as their own, and the note is then no longer pink or Droplet\'s', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(shape())
+    await pickTask(user, /Shape the business idea/)
     await withNote(user, 'A note')
     answers = [reply('ideation', 'Done.', [{ type: 'add_note', text: 'An idea', near: 'n1' }])]
     await say(user, 'an idea')
@@ -950,7 +1004,7 @@ describe('the AI on the board', () => {
   it('lets the founder dismiss one with Delete, and the others stay', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(shape())
+    await pickTask(user, /Shape the business idea/)
     await withNote(user, 'A note')
     answers = [reply('ideation', 'Done.', [{ type: 'add_note', text: 'One', near: 'n1' }, { type: 'add_note', text: 'Two', near: 'n1' }])]
     await say(user, 'ideas')
@@ -963,7 +1017,7 @@ describe('the AI on the board', () => {
   it('refuses an answer that names a thing that is not on the board, and changes nothing', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(shape())
+    await pickTask(user, /Shape the business idea/)
     await withNote(user, 'A note')
     answers = [reply('ideation', 'Done.', [{ type: 'add_note', text: 'x', near: 'n99' }])]
     await say(user, 'a note near n99')
@@ -974,7 +1028,7 @@ describe('the AI on the board', () => {
   it('opens the board and asks again with it in front of the composer when the founder asks to brainstorm and a palette is open', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(screen.getByRole('button', { name: /Build the brand/ }))
+    await pickTask(user, /Build the brand/)
     answers = [reply('ideation', 'I am opening the board.'), reply('ideation', 'Here are some ideas.', [{ type: 'add_note', text: 'An idea' }])]
     await say(user, 'I want to brainstorm on a board')
     await waitFor(() => expect(screen.getByText(/Here are some ideas/)).toBeInTheDocument())
@@ -998,7 +1052,7 @@ describe('the AI on the board', () => {
   it('takes a founder who is on the board to the invoice when that is what they ask for', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(shape())
+    await pickTask(user, /Shape the business idea/)
     answers = [reply('invoice', 'Opening the invoice.'), reply('invoice', 'Added the line.', [{ type: 'add_line', description: 'Gift box', quantity: 12, unitPrice: '450' }])]
     await say(user, 'Invoice them for 12 gift boxes at 450')
     await waitFor(() => expect(screen.getByText(/Added the line/)).toBeInTheDocument())
@@ -1010,7 +1064,7 @@ describe('the AI on the board', () => {
   it('fills the prompts of a template the founder put on the board, as notes by Droplet in the same places', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(shape())
+    await pickTask(user, /Shape the business idea/)
     await user.click(await screen.findByRole('button', { name: 'Templates' }))
     await user.click(screen.getByRole('menuitem', { name: /^Customer and problem/ }))
     expect(document.querySelectorAll('[data-guide]')).toHaveLength(6)
@@ -1024,7 +1078,7 @@ describe('the AI on the board', () => {
   it('puts a template on the board when asked, with its prompts filled in', async () => {
     const user = userEvent.setup()
     renderHome()
-    await user.click(shape())
+    await pickTask(user, /Shape the business idea/)
     answers = [reply('ideation', 'Added it.', [{ type: 'add_template', template: 'name_ideas', fill: ['Kindred Boxes', 'Maker Crate'] }])]
     await say(user, 'set me up to brainstorm names')
     await waitFor(() => expect(screen.getByText(/Added it/)).toBeInTheDocument())

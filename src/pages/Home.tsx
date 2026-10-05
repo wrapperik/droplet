@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { HamburgerMenuIcon } from '@solar-icons/react/linear'
-import ChatBar, { type ChatEntry } from '../components/ChatBar.tsx'
+import ChatBar from '../components/ChatBar.tsx'
+import type { ChatEntry } from '../components/ChatList.tsx'
 import type { BoardHandle } from '../components/board/BoardCanvas.tsx'
 import BoardWorkspace from '../components/board/BoardWorkspace.tsx'
 import ChatThread, { type ThreadAction, type ThreadMessage } from '../components/ChatThread.tsx'
@@ -58,7 +59,6 @@ const projectName = (id: string) => mockProjects.find((project) => project.id ==
 
 export default function Home() {
   const [currentProjectId, setCurrentProjectId] = useState(mockProjects[0].id)
-  const [activeId, setActiveId] = useState('home')
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   // The palette workspace, once there is one. The AI and the person both change it through `reduce`.
@@ -93,6 +93,19 @@ export default function Home() {
   // The question about unsaved work that is open in the thread, if there is one: which message, and what is still unsaved.
   const leaveRef = useRef<{ id: number; brand: boolean; invoice: boolean; board: boolean } | null>(null)
   const busyRef = useRef(false)
+  // The header and toolbar, and how tall they are: a board that fills the screen is drawn under them and starts below.
+  const topRef = useRef<HTMLDivElement>(null)
+  const [topHeight, setTopHeight] = useState(0)
+  useLayoutEffect(() => {
+    const top = topRef.current
+    if (!top) return
+    const measure = () => setTopHeight(Math.round(top.getBoundingClientRect().height))
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(top)
+    return () => observer.disconnect()
+  }, [])
   // Which workspace the founder is in, from the task menu or because the composer took them there. And which one the last message
   // was sent in (undefined until one is sent), so a divider marks a move only once a message follows it, never for a move that was
   // made and left again without a word.
@@ -495,7 +508,7 @@ export default function Home() {
         }
       } else if (actionId === 'save-board' && boardRef.current) {
         const doc = boardDocOf(boardRef.current)
-        const result = saveBoard(currentProjectId, { items: doc.items, summary: doc.summary, layout: doc.layout, tools: doc.tools, expanded: doc.expanded, hidden: doc.hidden })
+        const result = saveBoard(currentProjectId, { items: doc.items, layout: doc.layout, tools: doc.tools, expanded: doc.expanded, hidden: doc.hidden })
         if (result === null) settleLeave(messageId, 'I could not save the board, because the browser would not store it.', leaveActions(prompt))
         else {
           prompt.board = false
@@ -536,17 +549,12 @@ export default function Home() {
     [beginChat, currentProjectId],
   )
 
-  const navigate = (id: string) => {
-    setActiveId(id)
-    setMobileOpen(false)
-  }
-
   // The tip that offers the workspace menu is for the very start, before the founder has said anything.
   const bar = (isDocked: boolean) => (
     <IntentBar docked={isDocked} busy={composing} showTip={!hasFounderMessage(thread)} onSubmitIntent={submitIntent} onChooseTask={chooseTask} />
   )
   const chatBar = (isDocked: boolean) => (
-    <ChatBar chats={chatList} onOpen={openChat} onNew={newChat} onDelete={deleteChat} onFullScreen={isDocked ? backToChat : undefined} busy={composing} />
+    <ChatBar onFullScreen={isDocked ? backToChat : undefined} busy={composing} />
   )
 
   return (
@@ -555,9 +563,17 @@ export default function Home() {
         projects={mockProjects}
         currentProjectId={currentProjectId}
         onSelectProject={selectProject}
-        activeId={activeId}
-        onNavigate={navigate}
-        onChooseTask={chooseTask}
+        chats={chatList}
+        onNewChat={() => {
+          newChat()
+          setMobileOpen(false)
+        }}
+        onOpenChat={(id) => {
+          openChat(id)
+          setMobileOpen(false)
+        }}
+        onDeleteChat={deleteChat}
+        busy={composing}
         collapsed={collapsed}
         onToggleCollapsed={() => setCollapsed((value) => !value)}
         mobileOpen={mobileOpen}
@@ -565,13 +581,15 @@ export default function Home() {
       />
       {mobileOpen && <div className="home__scrim" onClick={() => setMobileOpen(false)} aria-hidden="true" />}
 
-      <div className="home__screen glass glass--strong">
+      <div className="home__screen glass glass--strong" data-immersive={(docked && shown === 'board') || undefined}>
         {/* Before anything has been said, a wave of blue behind the conversation. It fades out when the first message is sent. */}
         {!docked && (
           <div className="home__backdrop" data-gone={hasFounderMessage(thread) || undefined} aria-hidden="true">
             <div className="home__wave" />
           </div>
         )}
+        {/* The header and the toolbar, together: over a board that fills the screen they are lit from below by a gradual blur. */}
+        <div className="home__top" ref={topRef}>
         <header className="home__header">
           <div className="home__header-start">
             <div className="home__menu">
@@ -595,8 +613,9 @@ export default function Home() {
           </div>
         </header>
         <div className="home__shelf" ref={setShelfSlot} />
+        </div>
 
-        <main ref={canvasRef} className={docked ? 'home__canvas' : 'home__canvas home__canvas--chat'} aria-busy={composing}>
+        <main ref={canvasRef} className={docked ? (shown === 'board' ? 'home__canvas home__canvas--board' : 'home__canvas') : 'home__canvas home__canvas--chat'} aria-busy={composing}>
           <h1 className="visually-hidden">Home</h1>
           {/* Before there is a workspace, the whole screen is the conversation. Droplet answers like any assistant until it is asked to build something. */}
           {!docked && (
@@ -646,7 +665,7 @@ export default function Home() {
               </motion.div>
             )}
             {board && shown === 'board' && (
-              <motion.div key="board" className="home__component" exit={{ opacity: 0, transition: { duration: 0.2 } }}>
+              <motion.div key="board" className="home__component home__component--board" exit={{ opacity: 0, transition: { duration: 0.2 } }}>
                 <BoardWorkspace
                   key={currentProjectId}
                   projectId={currentProjectId}
@@ -654,7 +673,7 @@ export default function Home() {
                   state={board}
                   dispatch={dispatchBoard}
                   handleRef={boardHandleRef}
-                  onAsk={submitIntent}
+                  topInset={topHeight}
                   headerSlots={{ start: headerStart, end: headerEnd, shelf: shelfSlot }}
                 />
               </motion.div>
