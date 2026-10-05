@@ -16,7 +16,6 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
   min-width: 2.25rem;
   height: 2.25rem;
   padding: 0;
@@ -24,143 +23,17 @@
   border-radius: var(--radius-pill);
   background: transparent;
   color: var(--text-muted);
-  font-size: 0.875rem;
-  font-weight: 600;
   transition:
     background var(--duration-fast) var(--ease-out),
     color var(--duration-fast) var(--ease-out);
 }
 
-.chatbar__button--history {
-  padding: 0 0.875rem 0 0.75rem;
-}
-
 .chatbar__button:not(:disabled):hover,
-.chatbar__button:focus-visible,
-.chatbar__button[aria-expanded='true'] {
+.chatbar__button:focus-visible {
   background: var(--overlay-06);
   color: var(--text);
 }
 
 .chatbar__button:disabled {
   opacity: 0.45;
-}
-
-.chatbar__panel {
-  position: absolute;
-  top: calc(100% + 0.375rem);
-  left: 0;
-  z-index: 40;
-  width: min(22rem, calc(100vw - 2rem));
-  max-height: min(24rem, 60dvh);
-  padding: 0.375rem;
-  overflow-y: auto;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-}
-
-.chatbar__empty {
-  margin: 0;
-  padding: 0.75rem;
-  color: var(--text-muted);
-  font-size: 0.875rem;
-}
-
-.chatbar__list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.chatbar__item {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  border-radius: var(--radius-md);
-}
-
-.chatbar__item[data-current] {
-  background: var(--accent-tint-soft);
-}
-
-.chatbar__open {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 0.125rem;
-  min-width: 0;
-  padding: 0.5rem 0.75rem;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  text-align: left;
-  transition: background var(--duration-fast) var(--ease-out);
-}
-
-.chatbar__open:not(:disabled):hover,
-.chatbar__open:focus-visible {
-  background: var(--accent-tint-soft);
-}
-
-.chatbar__title {
-  overflow: hidden;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chatbar__when {
-  color: var(--text-muted);
-  font-size: 0.8125rem;
-}
-
-.chatbar__forget {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 2rem;
-  height: 2rem;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--text-muted);
-}
-
-.chatbar__forget:not(:disabled):hover,
-.chatbar__forget:focus-visible {
-  background: var(--overlay-06);
-  color: var(--text);
-}
-
-.chatbar__ask {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.875rem;
-}
-
-.chatbar__small {
-  padding: 0.25rem 0.75rem;
-  border: 1px solid var(--overlay-10);
-  border-radius: var(--radius-pill);
-  background: transparent;
-  font-size: 0.8125rem;
-  font-weight: 600;
-}
-
-.chatbar__small--danger {
-  border-color: transparent;
-  background: var(--button);
-  color: var(--on-button);
-}
-
-/* In the side panel the whole bar is the width of the panel, and the list opens beneath it. */
-.home__chat .chatbar__panel {
-  width: calc(18.5rem - 0.75rem);
 }

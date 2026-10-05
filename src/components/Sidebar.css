@@ -15,17 +15,53 @@
   border-top: 1px dashed var(--overlay-10);
 }
 
-.nav {
+.chats {
+  display: flex;
   flex: 1;
+  flex-direction: column;
+  gap: 0.25rem;
   min-height: 0;
   overflow-y: auto;
 }
 
-.nav__list,
-.subnav {
+.chats__recent {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.75rem;
+}
+
+.chats__heading {
   margin: 0;
-  padding: 0;
-  list-style: none;
+  padding: 0 1rem;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.chats__empty {
+  margin: 0;
+  padding: 0.25rem 1rem;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.chats__all {
+  align-self: flex-start;
+  margin: 0.25rem 0 0 0.5rem;
+  padding: 0.375rem 0.75rem;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--accent);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.chats__all:hover,
+.chats__all:focus-visible {
+  background: var(--accent-tint-soft);
 }
 
 .nav__item {
@@ -53,95 +89,13 @@
   background: var(--overlay-06);
 }
 
-.nav__item:focus-visible,
-.subnav__item:focus-visible {
+.nav__item:focus-visible {
   outline-offset: -2px;
 }
 
 .nav__label {
   flex: 1;
   min-width: 0;
-}
-
-/* Active marker: a short dark bar, as in the reference. */
-.nav__item[aria-current='page'],
-.subnav__item[aria-current='page'] {
-  background: var(--overlay-06);
-  font-weight: 700;
-}
-
-.nav__item[aria-current='page']::before,
-.subnav__item[aria-current='page']::before {
-  content: '';
-  position: absolute;
-  left: 0.3125rem;
-  top: 50%;
-  width: 3px;
-  height: 1.25rem;
-  border-radius: 2px;
-  background: var(--text);
-  transform: translateY(-50%);
-}
-
-.nav__item[aria-current='page'] svg {
-  color: var(--text);
-}
-
-.nav__chevron {
-  transition: transform var(--duration-base) var(--ease-out);
-}
-
-.nav__item--group[aria-expanded='true'] .nav__chevron {
-  transform: rotate(90deg);
-}
-
-.nav__badge {
-  display: grid;
-  place-items: center;
-  min-width: 1.5rem;
-  height: 1.5rem;
-  padding: 0 0.375rem;
-  border-radius: var(--radius-pill);
-  background: var(--accent-tint);
-  color: var(--accent);
-  font-size: 0.8125rem;
-  font-weight: 700;
-}
-
-/* Sub-navigation hangs off a dashed guide line, aligned under the parent icon. */
-.subnav {
-  overflow: hidden;
-  margin-left: 1.5rem;
-  border-left: 1px dashed var(--overlay-10);
-}
-
-.subnav__item {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  width: 100%;
-  padding: 0.5rem 0.75rem 0.5rem 1.25rem;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--text-muted);
-  font-weight: 500;
-  text-align: left;
-  transition: background var(--duration-fast) var(--ease-out);
-}
-
-.subnav__item:hover {
-  background: var(--overlay-06);
-}
-
-.subnav__item[aria-current='page'] {
-  color: var(--text);
-}
-
-.subnav__item[aria-current='page']::before {
-  left: -2px;
 }
 
 .sidebar__collapse {
@@ -172,8 +126,7 @@
   .sidebar[data-collapsed='true'] .nav__label,
   .sidebar[data-collapsed='true'] .account__name,
   .sidebar[data-collapsed='true'] .account__chevron,
-  .sidebar[data-collapsed='true'] .nav__chevron,
-  .sidebar[data-collapsed='true'] .subnav {
+  .sidebar[data-collapsed='true'] .chats__recent {
     display: none;
   }
 
@@ -186,36 +139,6 @@
   .sidebar[data-collapsed='true'] .sidebar__collapse {
     justify-content: center;
     padding-inline: 0.75rem;
-  }
-
-  .sidebar[data-collapsed='true'] .nav__badge {
-    position: absolute;
-    top: 0.125rem;
-    right: 0.125rem;
-    min-width: 1.125rem;
-    height: 1.125rem;
-    font-size: 0.6875rem;
-  }
-
-  .sidebar[data-collapsed='true'] .nav__item[aria-current='page']::before,
-  .sidebar[data-collapsed='true'] .nav__item[data-contains-active]::before {
-    left: 0.125rem;
-  }
-
-  /* An active asset is hidden while collapsed, so mark its group instead. */
-  .sidebar[data-collapsed='true'] .nav__item[data-contains-active] {
-    background: var(--overlay-06);
-  }
-
-  .sidebar[data-collapsed='true'] .nav__item[data-contains-active]::before {
-    content: '';
-    position: absolute;
-    top: 50%;
-    width: 3px;
-    height: 1.25rem;
-    border-radius: 2px;
-    background: var(--text);
-    transform: translateY(-50%);
   }
 }
 
