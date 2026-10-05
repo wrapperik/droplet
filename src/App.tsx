@@ -1,11 +1,21 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
-import Home from './pages/Home.tsx'
+import RequireAuth from './components/RequireAuth.tsx'
+import HomeRoute from './pages/HomeRoute.tsx'
+import SignIn from './pages/SignIn.tsx'
 
 export default function App() {
   return (
     <Routes>
-      <Route path="/home" element={<Home />} />
-      {/* The landing page is not built yet, so the root goes to Home for now. */}
+      <Route path="/sign-in" element={<SignIn />} />
+      <Route
+        path="/home"
+        element={
+          <RequireAuth>
+            <HomeRoute />
+          </RequireAuth>
+        }
+      />
+      {/* The landing page is not built yet, so the root goes to Home for now (and Home sends anyone not signed in to sign in). */}
       <Route path="*" element={<Navigate to="/home" replace />} />
     </Routes>
   )

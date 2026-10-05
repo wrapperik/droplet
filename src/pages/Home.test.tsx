@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { loadBoard } from '../lib/boardStore.ts'
 import { loadChats, saveChats } from '../lib/chatStore.ts'
 import { loadPalette } from '../lib/projectStore.ts'
-import { useDocumentStorage, type DocumentStorage } from '../lib/storage.ts'
+import { setDocumentStorage, type DocumentStorage } from '../lib/storage.ts'
 import { slowMemoryStorage } from '../test/slowStorage.ts'
 import Home from './Home.tsx'
 
@@ -1107,11 +1107,11 @@ describe('the AI on the board', () => {
 
 describe('with storage that takes its time', () => {
   let before: DocumentStorage
-  afterEach(() => useDocumentStorage(before))
+  afterEach(() => setDocumentStorage(before))
 
   it('opens a workspace once what was saved has been read, and only once if the task is chosen twice meanwhile', async () => {
     const slow = slowMemoryStorage(25)
-    before = useDocumentStorage(slow.driver)
+    before = setDocumentStorage(slow.driver)
     const user = userEvent.setup()
     renderHome()
     await waitFor(() => expect(slow.calls).toContain('read duckstack/chats'))
@@ -1128,7 +1128,7 @@ describe('with storage that takes its time', () => {
 
   it('keeps conversations in order when they are saved and read slowly: a chat said, then a new one, then the first opened', async () => {
     const slow = slowMemoryStorage(15)
-    before = useDocumentStorage(slow.driver)
+    before = setDocumentStorage(slow.driver)
     const user = userEvent.setup()
     renderHome()
     answers = [reply('chat', 'First answer.')]
@@ -1149,7 +1149,7 @@ describe('with storage that takes its time', () => {
 
   it('saves the palette through the storage when asked, and does not touch this browser\'s', async () => {
     const slow = slowMemoryStorage(5)
-    before = useDocumentStorage(slow.driver)
+    before = setDocumentStorage(slow.driver)
     const user = userEvent.setup()
     renderHome()
     await pickTask(user, /Build the brand/)

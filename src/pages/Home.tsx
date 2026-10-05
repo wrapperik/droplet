@@ -30,7 +30,7 @@ import { loadBoard, openBoardForProject, saveBoard } from '../lib/boardStore.ts'
 import { docOf as boardDocOf, isBoardUnsaved, reduceBoard, type BoardAction, type BoardState } from '../lib/boardState.ts'
 import { exportBrandSheet } from '../lib/exportSheet.ts'
 import type { Heights, Placement } from '../lib/gridLayout.ts'
-import { mockProjects, mockUser } from '../lib/mockProjects.ts'
+import { mockProjects, mockUser, type ProjectSummary } from '../lib/mockProjects.ts'
 import { newId } from '../lib/ids.ts'
 import { boardHasChanges, invoiceHasChanges, paletteHasChanges } from '../lib/leaveCheck.ts'
 import { loadPalette, savePalette } from '../lib/projectStore.ts'
@@ -55,10 +55,18 @@ const SPACE_NAMES: Record<TaskId, string> = {
 // Parts of a reply, each its own paragraph. A part that is not there is left out.
 const paragraphs = (...parts: (string | undefined)[]) => parts.filter((part) => part && part.trim() !== '').join('\n\n')
 
-const projectName = (id: string) => mockProjects.find((project) => project.id === id)?.name ?? ''
+type HomeProps = {
+  // The founder's projects, the first of which opens. Without them, the three sample projects.
+  projects?: ProjectSummary[]
+  // Who is signed in.
+  userName?: string
+  // Ends the session. Without it the sidebar's Sign out does nothing.
+  onSignOut?: () => void
+}
 
-export default function Home() {
-  const [currentProjectId, setCurrentProjectId] = useState(mockProjects[0].id)
+export default function Home({ projects = mockProjects, userName = mockUser.name, onSignOut }: HomeProps) {
+  const projectName = useCallback((id: string) => projects.find((project) => project.id === id)?.name ?? '', [projects])
+  const [currentProjectId, setCurrentProjectId] = useState(projects[0].id)
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   // The palette workspace, once there is one. The AI and the person both change it through `reduce`.
@@ -90,7 +98,9 @@ export default function Home() {
   // The project's saved conversations, for the list. Queued behind any save that is still on its way.
   const refreshChats = useCallback((projectId: string) => enqueueChats(async () => setChats(await loadChats(projectId))), [enqueueChats])
   useEffect(() => {
-    void refreshChats(mockProjects[0].id)
+    void refreshChats(projects[0].id)
+    // Only the project that opens first: another project's conversations are read when it is chosen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshChats])
   // The name the composer gave this conversation, or empty while it has none (the list then shows how the conversation began). Held in
   // a ref as well, so a request made straight after one that named the chat tells the composer its name.
@@ -342,7 +352,7 @@ export default function Home() {
     },
     // onScreen only reads refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentProjectId, message, nameChat, openWorkspaceFor, workspaceOpened],
+    [currentProjectId, message, nameChat, openWorkspaceFor, projectName, workspaceOpened],
   )
 
   const submitIntent = useCallback(
@@ -617,7 +627,7 @@ export default function Home() {
   return (
     <div className={docked ? 'home home--docked' : 'home'} data-start={(!docked && !hasFounderMessage(thread)) || undefined}>
       <Sidebar
-        projects={mockProjects}
+        projects={projects}
         currentProjectId={currentProjectId}
         onSelectProject={selectProject}
         chats={chatList}
@@ -634,7 +644,8 @@ export default function Home() {
         collapsed={collapsed}
         onToggleCollapsed={() => setCollapsed((value) => !value)}
         mobileOpen={mobileOpen}
-        userName={mockUser.name}
+        userName={userName}
+        onSignOut={onSignOut}
       />
       {mobileOpen && <div className="home__scrim" onClick={() => setMobileOpen(false)} aria-hidden="true" />}
 

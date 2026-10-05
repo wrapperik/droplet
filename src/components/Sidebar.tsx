@@ -27,6 +27,8 @@ type Props = {
   mobileOpen: boolean
   // Who is signed in, shown in the account section at the bottom.
   userName: string
+  // Ends the session.
+  onSignOut?: () => void
 }
 
 // The sidebar has no menu of places to go. What to work on is decided in the conversation, with Droplet (the task menu is still one press
@@ -45,6 +47,7 @@ export default function Sidebar({
   onToggleCollapsed,
   mobileOpen,
   userName,
+  onSignOut,
 }: Props) {
   const [allOpen, setAllOpen] = useState(false)
   const recent = chats.slice(0, RECENT_CHATS)
@@ -87,7 +90,7 @@ export default function Sidebar({
 
       <ThemeSwitcher />
 
-      <AccountMenu name={userName} collapsed={collapsed} />
+      <AccountMenu name={userName} collapsed={collapsed} onSignOut={onSignOut} />
 
       <button
         type="button"
