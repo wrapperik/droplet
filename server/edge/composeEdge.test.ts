@@ -184,6 +184,46 @@ describe('the compose function in Supabase', () => {
     expect((await withModel(() => createEdgeComposeHandler(env, empty.fetchImpl)(post({ intent: 'a palette' })))).status).toBe(200)
   })
 
+  it('does not search, or count searches, unless a daily allowance is set', async () => {
+    const { fetchImpl, calls } = fakeSupabase()
+    const bodies: string[] = []
+    const before = globalThis.fetch
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      bodies.push(String(init?.body))
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: validOpenReply }] }, finishReason: 'STOP' }] }), { status: 200 })
+    }) as unknown as typeof fetch
+    try {
+      await createEdgeComposeHandler(env, fetchImpl)(post({ intent: 'a palette' }))
+    } finally {
+      globalThis.fetch = before
+    }
+    expect(calls.some((call) => call.url.includes('searched='))).toBe(false)
+    expect(JSON.parse(bodies[0]).tools).toBeUndefined()
+  })
+
+  it('with an allowance, counts the founder\'s searched rows over the last day, lets the model search, and marks the row that searched', async () => {
+    const { fetchImpl, calls } = fakeSupabase()
+    const bodies: string[] = []
+    const before = globalThis.fetch
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      bodies.push(String(init?.body))
+      const reply = { candidates: [{ content: { parts: [{ text: validOpenReply }] }, finishReason: 'STOP', groundingMetadata: { webSearchQueries: ['palette trends'] } }] }
+      return new Response(JSON.stringify(reply), { status: 200 })
+    }) as unknown as typeof fetch
+    try {
+      const response = await createEdgeComposeHandler({ ...env, COMPOSE_SEARCH_PER_DAY: '5' }, fetchImpl)(post({ intent: 'a palette' }))
+      expect(response.status).toBe(200)
+      expect(((await response.json()) as { grounding?: unknown }).grounding).toEqual({ queries: ['palette trends'], sources: [] })
+    } finally {
+      globalThis.fetch = before
+    }
+    const counted = calls.find((call) => call.url.includes('searched=is.true'))!
+    expect(counted.url).toContain('user_id=eq.user-1')
+    expect(JSON.parse(bodies[0]).tools).toEqual([{ googleSearch: {} }])
+    const insert = calls.find((call) => call.init?.method === 'POST')!
+    expect(JSON.parse(String(insert.init?.body))).toMatchObject({ searched: true })
+  })
+
   it('records how it went with no words of the founder\'s, or the model\'s, in the row', async () => {
     const { fetchImpl, calls } = fakeSupabase()
     const response = await withModel(() => createEdgeComposeHandler(env, fetchImpl)(post({ intent: 'a palette for Pretoria Print Works invoices at R450' })))

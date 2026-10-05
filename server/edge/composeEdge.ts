@@ -17,6 +17,7 @@ import type { CompositionLogEntry } from '../compositionLog.ts'
 // The Gemini key is a secret of the function and is read here and nowhere else.
 
 const HOUR_MS = 60 * 60 * 1000
+const DAY_MS = 24 * HOUR_MS
 // A board is sent with the request, up to 120 things with their words, so this is room for one.
 export const MAX_BODY_BYTES = 90_000
 
@@ -29,6 +30,10 @@ export type ComposeHandlerDeps = {
   recentCount: (userId: string, sinceIso: string) => Promise<number>
   record: (userId: string, entry: CompositionLogEntry) => Promise<void>
   limitPerHour: number
+  // Requests a founder may have answered with a web search in a day. 0 (the default) never searches.
+  searchPerDay?: number
+  // How many of this founder's requests since the given time searched the web. Throws if it cannot be found out.
+  recentSearches?: (userId: string, sinceIso: string) => Promise<number>
   modelUsed?: () => string | undefined
   now?: () => number
 }
@@ -80,6 +85,10 @@ export function createComposeHandler(deps: ComposeHandlerDeps): (request: Reques
         modelUsed: deps.modelUsed,
         messages: MESSAGES,
         limiter: { take: async () => (await deps.recentCount(user.id, new Date(now() - HOUR_MS).toISOString())) < deps.limitPerHour },
+        // Off unless a daily allowance is set. The row this request writes says whether it searched, so spending needs nothing more.
+        ...(deps.searchPerDay && deps.searchPerDay > 0 && deps.recentSearches
+          ? { search: { allowed: async () => (await deps.recentSearches!(user.id, new Date(now() - DAY_MS).toISOString())) < deps.searchPerDay!, spend: () => undefined } }
+          : {}),
         log: (entry) => deps.record(user.id, entry),
       })
       return json(reply.status, reply.body)
@@ -100,11 +109,21 @@ export function createEdgeComposeHandler(env: ComposeEnv, fetchImpl: Fetch = fet
   const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY ?? ''
   const service = { apikey: serviceKey, authorization: `Bearer ${serviceKey}` }
   const configured = callerFromEnv(env)
+  // Only the count is wanted, from the Content-Range header: "0-0/12", or "*/0" when there are none.
+  const count = async (query: string) => {
+    const response = await fetchImpl(`${url}/rest/v1/compositions?${query}`, { headers: { ...service, prefer: 'count=exact', range: '0-0' } })
+    if (!response.ok) throw new Error(`could not count (${response.status})`)
+    const total = Number(response.headers.get('content-range')?.split('/')[1])
+    if (!Number.isFinite(total)) throw new Error('could not count')
+    return total
+  }
 
   return createComposeHandler({
     call: configured.call,
     limitPerHour: configured.limitPerHour,
     modelUsed: configured.modelUsed,
+    // Off unless COMPOSE_SEARCH_PER_DAY is set, which needs the migration that adds `searched` (see docs/deploy.md).
+    searchPerDay: configured.searchPerDay ?? 0,
 
     async authenticate(token) {
       const response = await fetchImpl(`${url}/auth/v1/user`, { headers: { apikey: serviceKey, authorization: `Bearer ${token}` } })
@@ -114,13 +133,11 @@ export function createEdgeComposeHandler(env: ComposeEnv, fetchImpl: Fetch = fet
     },
 
     async recentCount(userId, sinceIso) {
-      const query = `select=id&user_id=eq.${encodeURIComponent(userId)}&created_at=gte.${encodeURIComponent(sinceIso)}`
-      // Only the count is wanted, from the Content-Range header: "0-0/12", or "*/0" when there are none.
-      const response = await fetchImpl(`${url}/rest/v1/compositions?${query}`, { headers: { ...service, prefer: 'count=exact', range: '0-0' } })
-      if (!response.ok) throw new Error(`could not count (${response.status})`)
-      const total = Number(response.headers.get('content-range')?.split('/')[1])
-      if (!Number.isFinite(total)) throw new Error('could not count')
-      return total
+      return count(`select=id&user_id=eq.${encodeURIComponent(userId)}&created_at=gte.${encodeURIComponent(sinceIso)}`)
+    },
+
+    async recentSearches(userId, sinceIso) {
+      return count(`select=id&user_id=eq.${encodeURIComponent(userId)}&created_at=gte.${encodeURIComponent(sinceIso)}&searched=is.true`)
     },
 
     async record(userId, entry) {
@@ -134,6 +151,8 @@ export function createEdgeComposeHandler(env: ComposeEnv, fetchImpl: Fetch = fet
         actions: entry.actions ?? null,
         bad_replies: entry.badReplies ?? null,
         ms: Math.round(entry.ms),
+        // Written only when it searched, which happens only once the column exists (search is off until then).
+        ...(entry.searches ? { searched: true } : {}),
       }
       try {
         await fetchImpl(`${url}/rest/v1/compositions`, { method: 'POST', headers: { ...service, 'content-type': 'application/json', prefer: 'return=minimal' }, body: JSON.stringify(row) })

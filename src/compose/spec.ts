@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { boardSnapshotSchema, boardTurnSchema, type BoardTurn } from './boardSpec.ts'
 import { blocksField, messageField, opensField, questionField, repliesField, titleField } from './conversationFields.ts'
 import { invoiceSnapshotSchema, invoiceTurnSchema, type InvoiceTurn } from './invoiceSpec.ts'
+import { groundingSchema } from './grounding.ts'
 import { projectSnapshotSchema } from './journey.ts'
 import { TASKS, type Task } from './taskNames.ts'
 
@@ -205,6 +206,8 @@ export const composeResponseSchema = z.object({
   turn: z.union([turnSchema, invoiceTurnSchema, boardTurnSchema]),
   // Set when a simpler view was used, so the interface can say so.
   note: z.string().max(200).optional(),
+  // What the reply searched for and drew on, from Google Search, when it searched the web.
+  grounding: groundingSchema.optional(),
 })
 export type ComposeResponse = z.infer<typeof composeResponseSchema>
 

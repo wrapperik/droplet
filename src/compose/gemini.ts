@@ -1,4 +1,5 @@
-import { ComposeError, type ModelCaller } from './compose.ts'
+import { ComposeError, type ModelCaller, type ModelReply } from './compose.ts'
+import { groundingFromMetadata } from './grounding.ts'
 
 // Calls the Gemini API over REST. The key is passed in and sent only in a header; it is never put in a URL, a
 // body or an error message. This file only ever runs on a server.
@@ -10,6 +11,9 @@ export const DEFAULT_MODEL = 'gemini-3.8-flash'
 // Used only when the main model cannot answer because its quota is used up or it is overloaded. Each model has its
 // own free quota, so this keeps things working. The model that answered is logged with every request.
 export const DEFAULT_FALLBACK_MODEL = 'gemini-3.5-flash-lite'
+// The models that can use Google Search and answer in the JSON schema in the same request. Others are asked without search.
+export const SEARCH_MODELS = ['gemini-3.8-flash', 'gemini-3.1-pro-preview']
+export const canSearch = (model: string) => SEARCH_MODELS.includes(model)
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models'
 const DEFAULT_TIMEOUT_MS = 45_000
 // The free tier is often briefly overloaded (503). One more try after a short wait usually gets through.
@@ -35,7 +39,7 @@ export type GeminiOptions = {
 }
 
 type GeminiReply = {
-  candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] }; finishReason?: string }[]
+  candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] }; finishReason?: string; groundingMetadata?: unknown }[]
   promptFeedback?: { blockReason?: string }
   error?: { message?: string; details?: { violations?: { quotaId?: string }[]; retryDelay?: string }[] }
 }
@@ -60,10 +64,12 @@ function createModelCaller(options: GeminiOptions, model: string): ModelCaller {
   const { apiKey, timeoutMs = DEFAULT_TIMEOUT_MS, overloadRetryMs = OVERLOAD_RETRY_MS, thinkingLevel, fetchImpl = fetch } = options
   // If the API will not take the schema as a field, carry on with the schema written into the prompt.
   let schemaAccepted = true
+  // If the API will not take Google Search with this model, carry on without it.
+  let searchAccepted = canSearch(model)
   // The schema of the request in hand, so it can be written into the prompt if the API will not take it as a field.
   let schemaFallback: Record<string, unknown> = {}
 
-  const send = async (system: string, user: string, schema: Record<string, unknown> | null): Promise<Response> => {
+  const send = async (system: string, user: string, schema: Record<string, unknown> | null, search: boolean): Promise<Response> => {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
     try {
@@ -73,6 +79,8 @@ function createModelCaller(options: GeminiOptions, model: string): ModelCaller {
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: schema ? system : `${system}\n\nReply with only JSON that matches this JSON schema:\n${JSON.stringify(schemaFallback)}` }] },
           contents: [{ role: 'user', parts: [{ text: user }] }],
+          // Google Search is the only tool, and only when this request may search. The model decides whether to use it.
+          ...(search ? { tools: [{ googleSearch: {} }] } : {}),
           generationConfig: {
             responseMimeType: 'application/json',
             ...(schema ? { responseJsonSchema: schema } : {}),
@@ -89,19 +97,29 @@ function createModelCaller(options: GeminiOptions, model: string): ModelCaller {
     }
   }
 
-  return async ({ system, user, schema }) => {
+  return async ({ system, user, schema, search = false, userWithoutSearch }) => {
     schemaFallback = schema
-    let response = await send(system, user, schemaAccepted ? schema : null)
+    const searching = () => search && searchAccepted
+    // Asked without search, the model is told it cannot search, so it never claims to have looked something up.
+    const plainUser = userWithoutSearch ?? user
+    let response = await send(system, searching() ? user : plainUser, schemaAccepted ? schema : null, searching())
 
     if (response.status === 503) {
       await new Promise((resolve) => setTimeout(resolve, overloadRetryMs))
-      response = await send(system, user, schemaAccepted ? schema : null)
+      response = await send(system, searching() ? user : plainUser, schemaAccepted ? schema : null, searching())
+    }
+
+    // A 400 with search on may be search, which a model or a key may not allow. Try once without it, and only remember that if it works.
+    if (response.status === 400 && searching()) {
+      const retry = await send(system, plainUser, schemaAccepted ? schema : null, false)
+      if (retry.ok) searchAccepted = false
+      response = retry
     }
 
     // A 400 with a schema may be the schema, which the API can refuse for reasons it does not explain. Try once
     // without it, with the schema written into the prompt instead, and only remember that if the retry works.
     if (response.status === 400 && schemaAccepted) {
-      const retry = await send(system, user, null)
+      const retry = await send(system, plainUser, null, false)
       if (retry.ok) schemaAccepted = false
       response = retry
     }
@@ -129,10 +147,13 @@ function createModelCaller(options: GeminiOptions, model: string): ModelCaller {
       throw new ComposeError('blocked', 'The model declined that request.')
     }
     // Reasoning parts, if the model sends any, are not the answer.
-    return (candidate?.content?.parts ?? [])
+    const text = (candidate?.content?.parts ?? [])
       .filter((part) => !part.thought)
       .map((part) => part.text ?? '')
       .join('')
+    const grounding = groundingFromMetadata(candidate?.groundingMetadata)
+    // A reply that searched nothing is plain text.
+    return grounding ? ({ text, grounding } satisfies ModelReply) : text
   }
 }
 
@@ -146,22 +167,22 @@ export function createGeminiCaller(options: GeminiOptions): ModelCaller {
   let mainBlockedUntil = 0
 
   return async (request) => {
-    if (spare && fallbackModel && now() < mainBlockedUntil) {
-      const text = await spare(request)
-      options.onModelUsed?.(fallbackModel)
-      return text
+    // The spare model cannot search and answer in the schema at once, so it is asked without search.
+    const askSpare = async () => {
+      const reply = await spare!({ ...request, search: false })
+      options.onModelUsed?.(fallbackModel!)
+      return reply
     }
+    if (spare && fallbackModel && now() < mainBlockedUntil) return askSpare()
     try {
-      const text = await main(request)
+      const reply = await main(request)
       options.onModelUsed?.(model)
-      return text
+      return reply
     } catch (error) {
       const worthTrying = error instanceof ComposeError && (error.kind === 'quota' || error.kind === 'rate_limited' || error.kind === 'unavailable')
       if (!spare || !fallbackModel || !worthTrying) throw error
       if (error.kind === 'quota') mainBlockedUntil = now() + (error.retryAfterSeconds ?? DEFAULT_BLOCK_SECONDS) * 1000
-      const text = await spare(request)
-      options.onModelUsed?.(fallbackModel)
-      return text
+      return askSpare()
     }
   }
 }

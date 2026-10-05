@@ -80,6 +80,12 @@ describe('the database migrations', () => {
     expect(code).not.toMatch(/create policy "[^"]+" on public\.compositions\s+for (insert|update|delete)/)
   })
 
+  it('add to the record only whether a request searched the web, never what was searched for', () => {
+    const added = [...code.matchAll(/alter table public\.compositions add column (?:if not exists )?(\w+) ([^;]+);/g)].map((match) => [match[1], match[2].trim()])
+    expect(added).toEqual([['searched', 'boolean not null default false']])
+    expect(code).toMatch(/create index if not exists compositions_user_searched_idx on public\.compositions \(user_id, created_at desc\) where searched/)
+  })
+
   it('count a founder\'s recent requests from an index made for it', () => {
     expect(code).toMatch(/create index compositions_user_recent_idx on public\.compositions \(user_id, created_at desc\)/)
   })

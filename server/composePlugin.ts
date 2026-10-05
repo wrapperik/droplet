@@ -3,7 +3,7 @@ import type { Plugin } from 'vite'
 import { appendComposition } from './compositionLog.ts'
 import { callerFromEnv } from './composeEnv.ts'
 import { handleCompose } from './composeService.ts'
-import { createRateLimiter } from './rateLimit.ts'
+import { createRateLimiter, createSearchAllowance } from './rateLimit.ts'
 
 // Serves POST /api/compose from the Vite dev server, so the app can call the composer on the address it already runs
 // on. The key is read here, on the server, from .env.local (a name without the VITE_ prefix, so it can never be
@@ -12,6 +12,7 @@ import { createRateLimiter } from './rateLimit.ts'
 // A board is sent with the request, up to 120 things with their words, so this is room for one.
 const MAX_BODY_BYTES = 90_000
 const HOUR_MS = 60 * 60 * 1000
+export const DEV_SEARCHES_PER_DAY = 25
 
 function readBody(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
@@ -38,14 +39,17 @@ function readBody(req: IncomingMessage): Promise<unknown> {
 }
 
 export function composePlugin(env: Record<string, string>): Plugin {
-  const { call, model, fallbackModel, modelUsed, limitPerHour } = callerFromEnv(env)
+  const { call, model, fallbackModel, modelUsed, limitPerHour, searchPerDay } = callerFromEnv(env)
   const limiter = createRateLimiter(limitPerHour, HOUR_MS)
+  // On this machine the composer may search the web for 25 requests a day unless told otherwise.
+  const searchLimit = searchPerDay ?? DEV_SEARCHES_PER_DAY
+  const search = createSearchAllowance(searchLimit)
 
   return {
     name: 'droplet-compose',
     configureServer(server) {
       server.config.logger.info(
-        call ? `  compose: using ${model}${fallbackModel && fallbackModel !== model ? `, falling back to ${fallbackModel} if its quota is used up` : ''}` : '  compose: no GEMINI_API_KEY set, so /api/compose will say so (see .env.example)',
+        call ? `  compose: using ${model}${fallbackModel && fallbackModel !== model ? `, falling back to ${fallbackModel} if its quota is used up` : ''}, ${searchLimit > 0 ? `web search for up to ${searchLimit} requests a day` : 'no web search'}` : '  compose: no GEMINI_API_KEY set, so /api/compose will say so (see .env.example)',
       )
       server.middlewares.use('/api/compose', async (req, res) => {
         res.setHeader('content-type', 'application/json')
@@ -64,7 +68,7 @@ export function composePlugin(env: Record<string, string>): Plugin {
           res.end(JSON.stringify({ error: 'bad_request', message: 'That request is too large.' }))
           return
         }
-        const reply = await handleCompose(body, { call, limiter, log: appendComposition, modelUsed })
+        const reply = await handleCompose(body, { call, limiter, search, log: appendComposition, modelUsed })
         res.statusCode = reply.status
         res.end(JSON.stringify(reply.body))
       })

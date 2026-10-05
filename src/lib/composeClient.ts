@@ -1,4 +1,5 @@
 import { checkTurnFor } from '../compose/rules.ts'
+import type { Grounding } from '../compose/grounding.ts'
 import { composeHeaders, composeTarget, type ComposeTarget } from './composeEndpoint.ts'
 import { composeResponseSchema, type AnyTurn, type ComposeRequest, type Outcome } from '../compose/spec.ts'
 
@@ -21,7 +22,7 @@ export type ComposeFailureKind =
   | 'unavailable'
   | 'blocked'
 
-export type ComposeSuccess = { ok: true; outcome: Outcome; turn: AnyTurn; note?: string }
+export type ComposeSuccess = { ok: true; outcome: Outcome; turn: AnyTurn; note?: string; grounding?: Grounding }
 export type ComposeFailure = { ok: false; kind: ComposeFailureKind; message: string }
 
 const TIMEOUT_MS = 60_000
@@ -65,5 +66,5 @@ export async function requestComposition(
   if (!parsed.success || checkTurnFor(parsed.data.turn, request).length > 0) {
     return { ok: false, kind: 'bad_response', message: 'I got an answer I could not use. Try again.' }
   }
-  return { ok: true, outcome: parsed.data.outcome, turn: parsed.data.turn, ...(parsed.data.note ? { note: parsed.data.note } : {}) }
+  return { ok: true, outcome: parsed.data.outcome, turn: parsed.data.turn, ...(parsed.data.note ? { note: parsed.data.note } : {}), ...(parsed.data.grounding ? { grounding: parsed.data.grounding } : {}) }
 }

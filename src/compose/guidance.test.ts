@@ -119,6 +119,15 @@ describe('opening and asking whether to open', () => {
   })
 })
 
+describe('descriptions are never sent as words', () => {
+  it('refuses a message or question that is a description in square brackets, or a written-out plan, and leaves ordinary brackets alone', () => {
+    expect(checkReply(reply({ message: '[A warm reaction to the business and its name.]' }), { intent: 'hi' }).errors[0]).toMatch(/not a description in square brackets/)
+    expect(checkReply(reply({ message: 'Here it is.', question: '[How far along they are, asked fresh?]' }), { intent: 'hi' }).errors[0]).toMatch(/^question:/)
+    expect(checkReply(reply({ message: '[Plan "Your plan": 1. Settle the name]' }), { intent: 'hi' }).errors[0]).toMatch(/A plan or a table goes in blocks/)
+    expect(checkReply(reply({ message: 'Fees run about R175 [CIPC, 2026] for a private company.' }), { intent: 'hi' }).errors).toEqual([])
+  })
+})
+
 describe('a question is asked once', () => {
   it('is refused when the message asks it too, or ends on a question, since the question is shown after the message', () => {
     const ask = (message: string) => checkReply(reply({ message, question: 'What do you already have?' }), { intent: 'hi' }).errors
@@ -151,8 +160,13 @@ describe('the shared illustrations in every prompt', () => {
     expect(turns.some((turn) => turn.opens?.because === 'agreed')).toBe(true)
   })
 
-  it('teach nothing the app would refuse: each passes the rules for the situation it shows', () => {
-    const opening = lines(SYSTEM_PROMPT).find((turn) => turn.opens)!
+  it('describe what to write instead of giving sentences to copy, apart from the blocks, whose shape is the lesson', () => {
+    const turns = lines(SYSTEM_PROMPT).filter((turn) => !turn.opens && !turn.blocks?.some((block) => block.type === 'table'))
+    for (const turn of turns) expect(turn.message, turn.message).toMatch(/^\[/)
+  })
+
+  it('teach nothing the app would refuse in shape: each opening passes the rules for the situation it shows', () => {
+    const opening = lines(SYSTEM_PROMPT).find((turn) => turn.opens?.because === 'agreed')!
     const history = [{ role: 'droplet' as const, text: 'Shall we do the colours?' }]
     expect(checkReply(JSON.stringify(opening), { intent: opening.opens!.quote, history }).errors).toEqual([])
     for (const turn of lines(SYSTEM_PROMPT).filter((candidate) => !candidate.opens && candidate.actions.length === 0 && candidate.blocks)) {

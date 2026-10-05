@@ -15,3 +15,22 @@ export function createRateLimiter(max: number, windowMs: number, now: () => numb
     },
   }
 }
+
+// How many requests may still search the web. `allowed` says whether this one may; `spend` records the searches it made. The Edge Function counts
+// rows in the database instead, so its `spend` does nothing and the row it writes says whether the request searched.
+export type SearchAllowance = { allowed: () => boolean | Promise<boolean>; spend: (searches: number) => void | Promise<void> }
+
+// For the dev server: so many searched requests in a sliding day, on this machine. A limit of 0 never searches.
+export function createSearchAllowance(perDay: number, windowMs = 24 * 60 * 60 * 1000, now: () => number = Date.now): SearchAllowance {
+  let times: number[] = []
+  return {
+    allowed() {
+      const current = now()
+      times = times.filter((time) => current - time < windowMs)
+      return times.length < perDay
+    },
+    spend(searches) {
+      if (searches > 0) times.push(now())
+    },
+  }
+}

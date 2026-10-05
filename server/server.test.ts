@@ -3,7 +3,8 @@ import { ComposeError, type ModelCaller } from '../src/compose/compose.ts'
 import { validOpenReply } from '../src/compose/fixtures.ts'
 import { handleCompose, type ComposeServiceDeps } from './composeService.ts'
 import type { CompositionLogEntry } from './compositionLog.ts'
-import { createRateLimiter } from './rateLimit.ts'
+import { createRateLimiter, createSearchAllowance } from './rateLimit.ts'
+import { chatTurn } from '../src/compose/fixtures.ts'
 
 const deps = (call: ModelCaller | null, max = 100) => {
   const logged: CompositionLogEntry[] = []
@@ -107,5 +108,52 @@ describe('createRateLimiter', () => {
     expect([limiter.take(), limiter.take(), limiter.take()]).toEqual([true, true, false])
     time = 1001
     expect(limiter.take()).toBe(true)
+  })
+})
+
+describe('the daily allowance of web searches', () => {
+  const grounding = { queries: ['cipc fee'], sources: [{ title: 'cipc.co.za', url: 'https://www.cipc.co.za/' }] }
+
+  it('lets the model search while there is allowance, records what searched, and answers with what it drew on', async () => {
+    const asked: boolean[] = []
+    const call: ModelCaller = async (request) => {
+      asked.push(request.search === true)
+      return { text: JSON.stringify(chatTurn), grounding }
+    }
+    const logged: CompositionLogEntry[] = []
+    const search = createSearchAllowance(1)
+    const deps: ComposeServiceDeps = { call, limiter: createRateLimiter(100, 60_000), search, log: (entry) => void logged.push(entry) }
+    const first = await handleCompose({ intent: 'What does CIPC charge?' }, deps)
+    expect(first.body).toMatchObject({ grounding })
+    expect(logged[0].searches).toBe(1)
+    // the allowance of one is spent, so the next request may not search
+    await handleCompose({ intent: 'and SARS?' }, deps)
+    expect(asked).toEqual([true, false])
+  })
+
+  it('never searches without an allowance, and an allowance that cannot be read means no search, not a failed request', async () => {
+    const asked: boolean[] = []
+    const call: ModelCaller = async (request) => {
+      asked.push(request.search === true)
+      return JSON.stringify(chatTurn)
+    }
+    await handleCompose({ intent: 'hi' }, deps(call).value)
+    const broken = { allowed: () => Promise.reject(new Error('db down')), spend: () => undefined }
+    const reply = await handleCompose({ intent: 'hi' }, { ...deps(call).value, search: broken })
+    expect(reply.status).toBe(200)
+    expect(asked).toEqual([false, false])
+  })
+
+  it('counts a day as a sliding window, and a limit of 0 never searches', () => {
+    let now = 0
+    const allowance = createSearchAllowance(1, 1000, () => now)
+    expect(allowance.allowed()).toBe(true)
+    allowance.spend(0)
+    expect(allowance.allowed()).toBe(true)
+    allowance.spend(2)
+    expect(allowance.allowed()).toBe(false)
+    now = 1001
+    expect(allowance.allowed()).toBe(true)
+    expect(createSearchAllowance(0).allowed()).toBe(false)
   })
 })

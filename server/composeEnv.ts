@@ -14,6 +14,8 @@ export type ConfiguredCaller = {
   // Which model gave the last answer, for the log.
   modelUsed: () => string | undefined
   limitPerHour: number
+  // Requests a founder may have answered with a web search in a day, if set (COMPOSE_SEARCH_PER_DAY). 0 turns search off.
+  searchPerDay: number | undefined
 }
 
 export function callerFromEnv(env: ComposeEnv): ConfiguredCaller {
@@ -25,5 +27,7 @@ export function callerFromEnv(env: ComposeEnv): ConfiguredCaller {
   const fallbackModel = configuredFallback === undefined || configuredFallback === '' ? DEFAULT_FALLBACK_MODEL : configuredFallback === 'none' ? undefined : configuredFallback
   let lastModel: string | undefined
   const call = apiKey ? createGeminiCaller({ apiKey, model, fallbackModel, thinkingLevel, onModelUsed: (used) => (lastModel = used) }) : null
-  return { call, model, fallbackModel, modelUsed: () => lastModel, limitPerHour: Number(env.COMPOSE_LIMIT_PER_HOUR) || 60 }
+  const searchSetting = env.COMPOSE_SEARCH_PER_DAY?.trim()
+  const searchPerDay = searchSetting === undefined || searchSetting === '' ? undefined : Math.max(0, Math.floor(Number(searchSetting) || 0))
+  return { call, model, fallbackModel, modelUsed: () => lastModel, limitPerHour: Number(env.COMPOSE_LIMIT_PER_HOUR) || 60, searchPerDay }
 }

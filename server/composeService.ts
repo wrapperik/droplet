@@ -1,7 +1,7 @@
 import { ComposeError, composeWorkspace, type ModelCaller } from '../src/compose/compose.ts'
 import { composeRequestSchema } from '../src/compose/spec.ts'
 import type { CompositionLogEntry } from './compositionLog.ts'
-import type { RateLimiter } from './rateLimit.ts'
+import type { RateLimiter, SearchAllowance } from './rateLimit.ts'
 
 // The `compose` function: validate the request, call the model, check the answer, log it. It knows nothing about
 // HTTP or Vite, so it can be tested directly and moved into a Supabase Edge Function as it is.
@@ -10,6 +10,8 @@ export type ComposeServiceDeps = {
   // Null when no API key is set.
   call: ModelCaller | null
   limiter: RateLimiter
+  // Whether this request may search the web, and where to record that it did. Without it the model never searches.
+  search?: SearchAllowance
   log: (entry: CompositionLogEntry) => void | Promise<void>
   now?: () => number
   // Which model gave the last answer, for the log.
@@ -65,7 +67,10 @@ export async function handleCompose(body: unknown, deps: ComposeServiceDeps): Pr
   if (!(await deps.limiter.take())) return fail('rate_limited')
 
   try {
-    const result = await composeWorkspace(request, deps.call)
+    // A search allowance that cannot be read means no search this time, never a failed request.
+    const search = deps.search ? await Promise.resolve(deps.search.allowed()).catch(() => false) : false
+    const result = await composeWorkspace(request, deps.call, { search })
+    if (result.searches > 0) await Promise.resolve(deps.search?.spend(result.searches)).catch(() => undefined)
     const problems = result.attempts.flatMap((attempt) => attempt.errors).slice(0, 4)
     await deps.log({
       at: new Date(started).toISOString(),
@@ -76,9 +81,10 @@ export async function handleCompose(body: unknown, deps: ComposeServiceDeps): Pr
       badReplies: result.attempts.filter((attempt) => attempt.errors.length > 0).length,
       ...(deps.modelUsed?.() ? { model: deps.modelUsed() } : {}),
       ...(problems.length > 0 ? { problems } : {}),
+      ...(result.searches > 0 ? { searches: result.searches } : {}),
       ms: now() - started,
     })
-    return { status: 200, body: { outcome: result.outcome, turn: result.turn, ...(result.note ? { note: result.note } : {}) } }
+    return { status: 200, body: { outcome: result.outcome, turn: result.turn, ...(result.note ? { note: result.note } : {}), ...(result.grounding ? { grounding: result.grounding } : {}) } }
   } catch (error) {
     if (error instanceof ComposeError) return fail(error.kind, error.kind === 'quota' ? error.message : undefined)
     await deps.log({ at: new Date(started).toISOString(), intent: request.intent, outcome: 'error', error: 'unexpected', ms: now() - started })

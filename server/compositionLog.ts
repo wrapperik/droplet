@@ -17,6 +17,8 @@ export type CompositionLogEntry = {
   badReplies?: number
   problems?: string[]
   error?: string
+  // How many of the model's replies searched the web.
+  searches?: number
   ms: number
 }
 

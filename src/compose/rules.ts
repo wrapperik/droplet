@@ -121,6 +121,11 @@ export function checkOpening(turn: AnyTurn, request: Pick<ComposeRequest, 'inten
 export function checkConversation(turn: AnyTurn, request: Pick<ComposeRequest, 'intent' | 'history' | 'view'> & { workspace?: unknown }): string[] {
   const errors: string[] = [...checkBlocks(turn.blocks), ...checkOpening(turn, request)]
   const { question, replies } = turn
+  // A description from the illustrations, or a picture of a block from the conversation, written out instead of the words themselves.
+  const placeholder = /\[(?:[A-Z][^\]\n]{14,}|(?:Plan|Checklist|Table)\b[^\]\n]*)\]/
+  for (const [field, text] of [['message', turn.message], ['question', question ?? '']] as const) {
+    if (placeholder.test(text)) errors.push(`${field}: write the actual words for this founder, not a description in square brackets. A plan or a table goes in blocks.`)
+  }
   // The question is shown after the message, so asking it in both places asks it twice.
   if (question && (plain(turn.message).includes(plain(question)) || turn.message.trim().endsWith('?'))) {
     errors.push('message: do not put your question in the message, or end the message with one. It goes in question only, which is shown after the message.')

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { fallbackTurn, FALLBACK_NOTE } from './fallback.ts'
+import type { Grounding } from './grounding.ts'
 import { buildUserContent, systemPromptFor } from './prompt.ts'
 import { checkTurnFor } from './rules.ts'
 import { boardTurnSchema } from './boardSpec.ts'
@@ -9,9 +10,13 @@ import { TASKS, isBoardAction, isInvoiceAction, turnJsonSchema, turnSchema, type
 // The composition loop: ask the model, check the answer against the workspace, and if it is no good ask once more
 // with the reasons. A second failure uses the fixed fallback. Invalid output never reaches the screen.
 
-export type ModelRequest = { system: string; user: string; schema: Record<string, unknown> }
-// Sends one request to the model and returns its reply as text. The only place a model is called from.
-export type ModelCaller = (request: ModelRequest) => Promise<string>
+// `search` lets the model use Google Search for this request, if it can. It decides whether to. `userWithoutSearch` is the same request telling
+// the model it cannot search, for a model that cannot (the spare one, or one the API will not let search), so it never thinks it looked something up.
+export type ModelRequest = { system: string; user: string; schema: Record<string, unknown>; search?: boolean; userWithoutSearch?: string }
+// The reply as text, and what it searched for and drew on, if it searched.
+export type ModelReply = { text: string; grounding?: Grounding }
+// Sends one request to the model and returns its reply. The only place a model is called from. A plain string is a reply that searched nothing.
+export type ModelCaller = (request: ModelRequest) => Promise<string | ModelReply>
 
 export type ComposeErrorKind = 'no_key' | 'bad_key' | 'bad_model' | 'rate_limited' | 'quota' | 'timeout' | 'unavailable' | 'blocked' | 'bad_request'
 
@@ -35,6 +40,10 @@ export type ComposeResult = {
   turn: AnyTurn
   note?: string
   attempts: Attempt[]
+  // What the accepted reply searched for and drew on, if it searched.
+  grounding?: Grounding
+  // How many of the replies asked for searched the web (a retry can search too), for the founder's daily allowance.
+  searches: number
 }
 
 const FENCE = /^```(?:json)?\s*([\s\S]*?)\s*```$/i
@@ -81,21 +90,38 @@ function normalise(turn: AnyTurn): AnyTurn {
   }
 }
 
-export async function composeWorkspace(request: ComposeRequest, call: ModelCaller): Promise<ComposeResult> {
+export type ComposeOptions = {
+  // The model may use Google Search for this request. The server decides, from the founder's daily allowance.
+  search?: boolean
+}
+
+export async function composeWorkspace(request: ComposeRequest, call: ModelCaller, options: ComposeOptions = {}): Promise<ComposeResult> {
   const schema = turnJsonSchema(request.view)
   const system = systemPromptFor(request.view)
+  const search = options.search === true
   const attempts: Attempt[] = []
   let errors: string[] = []
   let task: Task | undefined
+  let searches = 0
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const text = await call({ system, user: buildUserContent(request, attempt === 0 ? undefined : errors), schema })
-    const checked = checkReply(text, request)
+    const sent = attempt === 0 ? undefined : errors
+    const raw = await call({
+      system,
+      user: buildUserContent(request, sent, search),
+      schema,
+      ...(search ? { search, userWithoutSearch: buildUserContent(request, sent, false) } : {}),
+    })
+    const reply: ModelReply = typeof raw === 'string' ? { text: raw } : raw
+    if (reply.grounding) searches += 1
+    const checked = checkReply(reply.text, request)
     attempts.push({ errors: checked.errors })
-    if (checked.turn) return { outcome: attempt === 0 ? 'valid' : 'retried', turn: checked.turn, attempts }
+    if (checked.turn) {
+      return { outcome: attempt === 0 ? 'valid' : 'retried', turn: checked.turn, attempts, searches, ...(reply.grounding ? { grounding: reply.grounding } : {}) }
+    }
     errors = checked.errors
     task = checked.task ?? task
   }
 
-  return { outcome: 'fallback', turn: fallbackTurn(task, Boolean(request.workspace ?? request.invoice ?? request.board)), note: FALLBACK_NOTE, attempts }
+  return { outcome: 'fallback', turn: fallbackTurn(task, Boolean(request.workspace ?? request.invoice ?? request.board)), note: FALLBACK_NOTE, attempts, searches }
 }
