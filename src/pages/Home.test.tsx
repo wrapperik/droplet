@@ -1277,3 +1277,48 @@ describe('guiding the founder', () => {
     expect(within(table).getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual(['Name', 'Feel'])
   })
 })
+
+// A reply that searched the web: shown as the model gave it, with the pages it drew on and Google's suggestions under it.
+describe('a reply that searched the web', () => {
+  const grounding = {
+    queries: ['CIPC company registration fee'],
+    sources: [{ title: 'cipc.co.za', url: 'https://www.cipc.co.za/fees' }],
+    suggestions: '<a class="chip" href="https://www.google.com/search?q=cipc">cipc fee</a>',
+  }
+
+  it('shows the sources as links that open in a new tab, and Google\'s suggestions in a sandboxed frame with no scripts', async () => {
+    const user = userEvent.setup()
+    answers = [{ outcome: 'valid', grounding, turn: { task: 'chat', message: 'Registering a company with CIPC costs R175 at the moment.', question: 'Shall we look at what to register first?', actions: [], memoryUsed: [] } }]
+    renderHome()
+    await say(user, 'What does it cost to register with CIPC?')
+    const link = await screen.findByRole('link', { name: 'cipc.co.za' })
+    expect(link).toHaveAttribute('href', 'https://www.cipc.co.za/fees')
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+    const frame = screen.getByTitle('Google Search suggestions')
+    expect(frame.getAttribute('sandbox')).not.toContain('allow-scripts')
+    expect(frame.getAttribute('srcdoc')).toContain('cipc fee')
+    expect(frame.getAttribute('srcdoc')).toContain('<base target="_blank">')
+  })
+
+  it('keeps the app\'s own notes out of the grounded message, in a note of their own', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await pickTask(user, /Shape the business idea/)
+    answers = [{ outcome: 'valid', grounding, turn: { task: 'ideation', message: 'I added a note with what I found.', actions: [{ type: 'add_note', text: 'CIPC fee is about R175' }], memoryUsed: [] } }]
+    await say(user, 'Add what CIPC charges to the board')
+    const grounded = (await screen.findByText('I added a note with what I found.')).closest('li')!
+    // the first pink note brings the app's note on what pink means: it is a message of its own, not mixed into the grounded answer
+    expect(grounded.textContent).not.toMatch(/My notes are pink/)
+    expect(await screen.findByText(/My notes are pink/)).toBeInTheDocument()
+  })
+
+  it('keeps what it drew on with the saved chat, so the sources show again when the chat is opened', async () => {
+    const user = userEvent.setup()
+    answers = [{ outcome: 'valid', grounding, turn: { task: 'chat', message: 'About R175.', actions: [], memoryUsed: [] } }]
+    renderHome()
+    await say(user, 'What does CIPC charge?')
+    await screen.findByRole('link', { name: 'cipc.co.za' })
+    await waitFor(async () => expect((await loadChatsFor())[0].messages.find((item) => item.from === 'droplet')?.grounding).toEqual(grounding))
+  })
+})

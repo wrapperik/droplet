@@ -14,6 +14,7 @@ import Sidebar from '../components/Sidebar.tsx'
 import Wordmark from '../components/Wordmark.tsx'
 import { applyTurnActions } from '../compose/applyActions.ts'
 import { describeBlocks, type ChatBlock } from '../compose/blocks.ts'
+import type { Grounding } from '../compose/grounding.ts'
 import { doneSteps, OPEN_PHRASE, STEP_WORKSPACE, type JourneyStep, type ProjectSnapshot } from '../compose/journey.ts'
 import { snapshotOfProject } from '../compose/project.ts'
 import { starterBlocks } from '../compose/fallback.ts'
@@ -300,7 +301,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
 
       // The reply goes into the message that was pending. Droplet's question and the answers it suggests sit apart from the text, so
       // notes from the app land between the answer and the question, and the question stays last.
-      const finish = (reply: string, turn?: { question?: string; replies?: string[]; blocks?: ChatBlock[] }) =>
+      const finish = (reply: string, turn?: { question?: string; replies?: string[]; blocks?: ChatBlock[] }, grounding?: Grounding) =>
         setThread((current) =>
           current.map((item) =>
             item.id === pendingId
@@ -309,6 +310,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
                   text: reply,
                   pending: false,
                   ...(turn?.blocks && turn.blocks.length > 0 ? { blocks: turn.blocks } : {}),
+                  ...(grounding ? { grounding } : {}),
                   ...(turn?.question ? { question: turn.question, ...(turn.replies && turn.replies.length > 0 ? { replies: turn.replies } : {}) } : {}),
                 }
               : item,
@@ -324,7 +326,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
       const target = routedTo(result.turn, view)
       if (target && !routed) {
         // Taking the founder to another workspace: the next answer will carry the question, so this one has none.
-        finish(paragraphs(result.turn.message, result.note))
+        finish(result.grounding ? result.turn.message : paragraphs(result.turn.message, result.note), undefined, result.grounding)
         await openWorkspaceFor(target)
         const next = message('droplet', '', true)
         setThread((current) => [...current, next])
@@ -385,7 +387,15 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
           if (!exported) notes.push('I could not make the brand sheet.')
         }
       }
-      finish(paragraphs(result.turn.message, ...notes), result.turn)
+      // An answer that searched the web is shown as the model gave it, with nothing of the app's mixed in (Google's terms), so the app's own
+      // notes go in a message of their own after it.
+      if (result.grounding) {
+        finish(result.turn.message, result.turn, result.grounding)
+        const said = paragraphs(...notes)
+        if (said) setThread((current) => [...current, { ...message('droplet', said), local: true }])
+      } else {
+        finish(paragraphs(result.turn.message, ...notes), result.turn)
+      }
     },
     // onScreen only reads refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps

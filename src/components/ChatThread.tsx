@@ -1,7 +1,9 @@
 import { Fragment, useEffect, useRef } from 'react'
 import type { ChatBlock } from '../compose/blocks.ts'
 import type { JourneyStep } from '../compose/journey.ts'
+import type { Grounding } from '../compose/grounding.ts'
 import ChatBlocks from './ChatBlocks.tsx'
+import WebSources from './WebSources.tsx'
 import DropletLoader from './DropletLoader.tsx'
 import RichText from './RichText.tsx'
 import './ChatThread.css'
@@ -23,6 +25,8 @@ export type ThreadMessage = {
   checks?: Record<string, boolean>
   // The one question Droplet asks next, set apart from the answer above it.
   question?: string
+  // What the reply searched the web for and drew on. Shown under it, with Google's suggestions, whenever the reply is shown.
+  grounding?: Grounding
   // Answers to that question the founder can tap instead of typing. Offered only while the message is the last in the thread.
   replies?: string[]
   // Buttons under the message, while its question is still open.
@@ -93,6 +97,7 @@ export default function ChatThread({ messages, onAction, onReply, done = NO_STEP
                 <ChatBlocks blocks={message.blocks} checks={message.checks} done={done} busy={busy} onToggle={(block, item, checked) => onToggle?.(message.id, block, item, checked)} onOpen={onOpenStep} />
               )}
               {!message.pending && message.question && <p className="thread__question">{message.question}</p>}
+              {!message.pending && message.grounding && <WebSources grounding={message.grounding} />}
               {message.actions && message.actions.length > 0 && (
                 <span className="thread__actions">
                   {message.actions.map((action) => (
