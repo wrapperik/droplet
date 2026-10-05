@@ -1,0 +1,77 @@
+# Deploying Droplet
+
+Two things go live: the **`compose` Edge Function** in Supabase (the only place the Gemini key exists) and the **web app** on Vercel. Do them in
+this order. Set up Supabase first (`docs/supabase-setup.md`): the project, the keys in `.env`, and the first migration.
+
+## 1. The record of compositions (one more migration)
+
+In the Supabase dashboard, open **SQL Editor**, make a new query, paste `supabase/migrations/20261005000100_compositions.sql`, and run it.
+It makes the `compositions` table the function writes to and counts from. It keeps no words of anyone's: only who asked, the task, how it went, the
+model, and how long it took.
+
+## 2. The function
+
+The function is generated from the app's own code, so it can never disagree with the app about what a valid turn is.
+
+```
+npm run build:edge       # writes supabase/functions/compose/index.ts (git-ignored, one self-contained file)
+```
+
+**Set its secrets** (once; they live in Supabase, never in the repo or the browser). The Gemini key is the only one that must be set:
+
+```
+npx supabase login
+npx supabase link --project-ref untyznmtxgacrkogigar
+npx supabase secrets set GEMINI_API_KEY=your-gemini-key
+```
+
+Optional secrets, the same names as in `.env.example`: `GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL`, `GEMINI_THINKING_LEVEL`, and
+`COMPOSE_LIMIT_PER_HOUR` (default 60 requests an hour for each founder). `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are given to the function
+by Supabase itself.
+
+**Deploy:**
+
+```
+npm run deploy:compose
+```
+
+That builds the file and deploys it. To deploy without the command line, run `npm run build:edge`, then in the dashboard open **Edge Functions**,
+make a function called `compose`, paste the whole of `supabase/functions/compose/index.ts`, and turn **Verify JWT** off (the function checks the
+founder's token itself). After any change to the function's source, build and deploy again.
+
+**What it does:** it only answers a signed-in founder (their token is checked with Supabase Auth, so an expired, forged or anonymous token gets a
+401), holds each founder to an hour's worth of requests (counted from `compositions`, so it holds across every copy of the function), and records how
+each request went. It never stores what was asked or answered.
+
+**Check it**, with a founder's token from the browser (Application, Local Storage, the `sb-...-auth-token` entry, `access_token`):
+
+```
+curl -s https://untyznmtxgacrkogigar.supabase.co/functions/v1/compose \
+  -H "authorization: Bearer YOUR_ACCESS_TOKEN" -H "content-type: application/json" \
+  -d '{"intent":"a calm colour palette for a gift box business"}'
+```
+
+Without the header it answers `{"error":"unauthorised",...}` with a 401. In the dashboard, **Edge Functions, compose, Logs** shows each call, and
+**Table Editor, compositions** shows the record.
+
+## 3. The web app on Vercel
+
+1. Push the repo to GitHub, then in Vercel choose **Add New, Project** and import it. `vercel.json` already says: Vite, `npm run build`,
+   output `dist`, and every path goes to `index.html` (the app has its own routes, such as `/sign-in` and `/home`).
+2. Add two **Environment Variables**, for Production and Preview: `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (the project URL and the
+   publishable key, as in `.env`). Do **not** add the Gemini key, the secret key, or the connection string: the app does not need them and
+   anything starting with `VITE_` is public.
+3. Deploy. The deployed app asks the `compose` function by itself; nothing else needs setting.
+
+## 4. Tell Supabase where the app lives
+
+In **Authentication, URL Configuration**, set the **Site URL** to the Vercel address (such as `https://droplet.vercel.app`) and add it, with `/**`
+after it, to **Redirect URLs** (keep `http://localhost:5173/**` for development). Add the Preview address pattern too if you test branch
+deployments (`https://*-your-team.vercel.app/**`). The link in a confirmation email and the return from Google both go to `/home` on these
+addresses, so without this a founder is sent back to the wrong place.
+
+## Working on the function from your own machine
+
+Nothing needs deploying to work on the app: in development the app asks the dev server's own `/api/compose`, which reads `GEMINI_API_KEY` from
+`.env`. To try the deployed function from the dev server, put its address in `.env` as `VITE_COMPOSE_URL` (see `.env.example`) and restart
+`npm run dev`; you must be signed in.

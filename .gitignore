@@ -33,3 +33,8 @@ supabase/.branches/
 coverage/
 # Local composition log and eval results (see server/compositionLog.ts)
 .droplet/
+
+# The compose Edge Function is generated from server/edge by `npm run build:edge`
+supabase/functions/compose/index.ts
+supabase/.temp
+supabase/.branches
