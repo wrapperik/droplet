@@ -5,6 +5,7 @@ import { dirname } from 'node:path'
 // Stand-in for the `compositions` table: one JSON line per request, on this machine only, in a git-ignored folder.
 export type CompositionLogEntry = {
   at: string
+  // What the founder asked. It is kept in the log on this machine only. The deployed function never stores it (see composeEdge.ts).
   intent: string
   outcome: 'valid' | 'retried' | 'fallback' | 'error'
   task?: string

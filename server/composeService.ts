@@ -14,6 +14,9 @@ export type ComposeServiceDeps = {
   now?: () => number
   // Which model gave the last answer, for the log.
   modelUsed?: () => string | undefined
+  // Words to use in place of the standard ones for some failures. The dev server says what to do in .env.local, which means nothing to
+  // anyone using the deployed app.
+  messages?: Partial<Record<ComposeError['kind'], string>>
 }
 
 export type ServiceReply = { status: number; body: Record<string, unknown> }
@@ -55,11 +58,11 @@ export async function handleCompose(body: unknown, deps: ComposeServiceDeps): Pr
   // A used-up quota says when it resets. That text is built from numbers only, so it is safe to show.
   const fail = async (kind: ComposeError['kind'], message?: string): Promise<ServiceReply> => {
     await deps.log({ at: new Date(started).toISOString(), intent: request.intent, outcome: 'error', error: kind, ms: now() - started })
-    return { status: STATUS[kind], body: { error: kind, message: message ?? MESSAGES[kind] } }
+    return { status: STATUS[kind], body: { error: kind, message: message ?? deps.messages?.[kind] ?? MESSAGES[kind] } }
   }
 
   if (!deps.call) return fail('no_key')
-  if (!deps.limiter.take()) return fail('rate_limited')
+  if (!(await deps.limiter.take())) return fail('rate_limited')
 
   try {
     const result = await composeWorkspace(request, deps.call)

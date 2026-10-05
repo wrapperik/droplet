@@ -1,7 +1,7 @@
 import type { IncomingMessage } from 'node:http'
 import type { Plugin } from 'vite'
-import { createGeminiCaller, DEFAULT_FALLBACK_MODEL, DEFAULT_MODEL } from '../src/compose/gemini.ts'
 import { appendComposition } from './compositionLog.ts'
+import { callerFromEnv } from './composeEnv.ts'
 import { handleCompose } from './composeService.ts'
 import { createRateLimiter } from './rateLimit.ts'
 
@@ -38,15 +38,8 @@ function readBody(req: IncomingMessage): Promise<unknown> {
 }
 
 export function composePlugin(env: Record<string, string>): Plugin {
-  const apiKey = env.GEMINI_API_KEY?.trim()
-  const model = env.GEMINI_MODEL?.trim() || DEFAULT_MODEL
-  const thinkingLevel = env.GEMINI_THINKING_LEVEL?.trim() || undefined
-  // GEMINI_FALLBACK_MODEL=none turns the fallback off.
-  const configuredFallback = env.GEMINI_FALLBACK_MODEL?.trim()
-  const fallbackModel = configuredFallback === undefined || configuredFallback === '' ? DEFAULT_FALLBACK_MODEL : configuredFallback === 'none' ? undefined : configuredFallback
-  let lastModel: string | undefined
-  const call = apiKey ? createGeminiCaller({ apiKey, model, fallbackModel, thinkingLevel, onModelUsed: (used) => (lastModel = used) }) : null
-  const limiter = createRateLimiter(Number(env.COMPOSE_LIMIT_PER_HOUR) || 60, HOUR_MS)
+  const { call, model, fallbackModel, modelUsed, limitPerHour } = callerFromEnv(env)
+  const limiter = createRateLimiter(limitPerHour, HOUR_MS)
 
   return {
     name: 'droplet-compose',
@@ -71,7 +64,7 @@ export function composePlugin(env: Record<string, string>): Plugin {
           res.end(JSON.stringify({ error: 'bad_request', message: 'That request is too large.' }))
           return
         }
-        const reply = await handleCompose(body, { call, limiter, log: appendComposition, modelUsed: () => lastModel })
+        const reply = await handleCompose(body, { call, limiter, log: appendComposition, modelUsed })
         res.statusCode = reply.status
         res.end(JSON.stringify(reply.body))
       })

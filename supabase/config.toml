@@ -1,0 +1,9 @@
+# Supabase CLI settings for this repo. Only what the CLI needs to deploy the `compose` function.
+project_id = "droplet"
+
+[functions.compose]
+enabled = true
+# The function checks the founder's token itself, with Supabase Auth (see server/edge/composeEdge.ts), so the platform's own check, which
+# does not understand every kind of project key, is switched off. A request with no valid founder's token still gets a 401.
+verify_jwt = false
+entrypoint = "./functions/compose/index.ts"
