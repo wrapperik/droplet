@@ -99,27 +99,6 @@ export const attachedTo = (end: End): string | null => ('item' in end ? end.item
 
 export const rectOf = (item: RectItem): Rect => ({ x: item.x, y: item.y, w: item.w, h: item.h })
 
-// ---- The summary ----
-
-// What the board comes to, in three short lists: what is decided, what is still open, and what to do next. Written by Droplet when it is asked,
-// or by the founder, and fully editable either way. It is kept with the board.
-export const SUMMARY_SECTIONS = ['decided', 'open', 'next'] as const
-export type SummarySection = (typeof SUMMARY_SECTIONS)[number]
-export const SUMMARY_LABELS: Record<SummarySection, string> = { decided: 'Decided', open: 'Still open', next: 'Next' }
-export const MAX_SUMMARY_LINES = 8
-export const MAX_SUMMARY_LINE = 160
-
-export type BoardSummary = {
-  decided: string[]
-  open: string[]
-  next: string[]
-  // Who wrote it, and whether the founder has changed what Droplet wrote.
-  by: 'droplet' | 'you'
-  edited: boolean
-  // When it was written, as an ISO date.
-  writtenAt: string
-}
-
 // ---- Limits ----
 
 export const MAX_ITEMS = 500

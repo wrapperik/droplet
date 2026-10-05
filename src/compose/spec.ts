@@ -229,7 +229,7 @@ export function turnJsonSchema(view?: View): Record<string, unknown> {
 // Which actions in a reply are for which workspace. An action type belongs to one workspace, except undo and redo, which fit all of them.
 const INVOICE_ONLY = ['set_client', 'use_saved_client', 'set_terms', 'set_date', 'set_note', 'set_vat_registered', 'add_line', 'update_line', 'remove_line']
 export const isInvoiceAction = (action: { type: string }) => INVOICE_ONLY.includes(action.type)
-const BOARD_ONLY = ['add_note', 'fill_prompt', 'cluster', 'add_template', 'connect', 'write_summary']
+const BOARD_ONLY = ['add_note', 'fill_prompt', 'cluster', 'add_template', 'connect']
 export const isBoardAction = (action: { type: string }) => BOARD_ONLY.includes(action.type)
 
 // Where a reply asks to be taken. The composer names the task (that is what it is for), and when that task belongs to another workspace and

@@ -72,7 +72,6 @@ export function snapshotOfBoard(state: BoardState, view: Point, saved: BoardSnap
     more: doc.items.length - items.length,
     view: { x: Math.round(clamp(view.x, 0, 4800)), y: Math.round(clamp(view.y, 0, 3200)) },
     selection: state.selection.filter((id) => shown.has(id)).map((id) => refs.get(id)!),
-    summary: doc.summary ? { decided: doc.summary.decided, open: doc.summary.open, next: doc.summary.next, by: doc.summary.by, edited: doc.summary.edited } : null,
     canUndo: state.history.past.length > 0,
     canRedo: state.history.future.length > 0,
     saved,
@@ -102,7 +101,7 @@ export function stateOfBoardSnapshot(snapshot: BoardSnapshot): BoardState {
       }
     }
   })
-  const state = openBoard(items, null, snapshot.summary ? { ...snapshot.summary, writtenAt: '' } : null)
+  const state = openBoard(items)
   const doc = docOf(state)
   const history = createHistory(doc)
   return { ...state, selection: snapshot.selection.filter((ref) => doc.items.some((item) => item.id === ref)), history: { ...history, past: snapshot.canUndo ? [doc] : [], future: snapshot.canRedo ? [doc] : [] } }
@@ -154,9 +153,6 @@ export function describeBoard(snapshot: BoardSnapshot): Record<string, unknown> 
       .filter((item) => item.kind === 'note' && item.text.trim() === '')
       .map((item) => ({ ref: item.id, hint: 'hint' in item ? item.hint : undefined, inFrame: holder(item.id) ?? undefined })),
     selected: snapshot.selection,
-    summary: snapshot.summary
-      ? { writtenBy: snapshot.summary.by === 'droplet' ? 'Droplet' : 'the founder', editedByTheFounder: snapshot.summary.edited || undefined, decided: snapshot.summary.decided, stillOpen: snapshot.summary.open, next: snapshot.summary.next }
-      : 'none yet',
     notShown: snapshot.more > 0 ? `${snapshot.more} more things are on the board that are not shown here, so you cannot refer to them.` : undefined,
     canUndo: snapshot.canUndo,
     canRedo: snapshot.canRedo,

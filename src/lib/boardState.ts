@@ -15,8 +15,6 @@ import {
   MAX_GROUP,
   MAX_HINT,
   MAX_ITEMS,
-  MAX_SUMMARY_LINE,
-  MAX_SUMMARY_LINES,
   MAX_LABEL,
   MAX_NOTE_TEXT,
   MAX_TEXT,
@@ -30,7 +28,6 @@ import {
   rectOf,
   type BoardItem,
   type ConnectorItem,
-  type BoardSummary,
   type ConnectorStyle,
   type End,
   type FounderColour,
@@ -39,7 +36,6 @@ import {
   type RectItem,
   type ShapeColour,
   type ShapeKind,
-  type SummarySection,
   type TextSize,
 } from './boardTypes.ts'
 import { canRedo, canUndo, commit, createHistory, redo, undo, type History } from './history.ts'
@@ -66,27 +62,21 @@ export const BOARD_COMPONENTS: ArrangementSpec['components'] = [
   { id: 'connector', label: 'Arrow', kind: 'toolbar', hideable: false },
   { id: 'templates', label: 'Templates', kind: 'toolbar', hideable: false },
   { id: 'board', label: 'Board', kind: 'panel', hideable: false },
-  { id: 'summary', label: 'Summary', kind: 'panel', hideable: true },
 ]
 
 export const BOARD_WINDOW_SIZES: ArrangementSpec['windowSizes'] = {
   board: { w: 24, heightPx: 720 },
-  summary: { w: 12, heightPx: 560 },
 }
 
 export const BOARD_LAYOUT: Placement[] = [
   { id: 'board', col: 0, row: 0, w: BOARD_WINDOW_SIZES.board.w },
-  // Under the board. It is off the screen until there is a summary, or the founder opens it from the Windows menu.
-  { id: 'summary', col: 0, row: 22, w: BOARD_WINDOW_SIZES.summary.w },
 ]
 
-export const BOARD_SPEC: ArrangementSpec = { components: BOARD_COMPONENTS, layout: BOARD_LAYOUT, windowSizes: BOARD_WINDOW_SIZES, defaultHidden: ['summary'] }
+export const BOARD_SPEC: ArrangementSpec = { components: BOARD_COMPONENTS, layout: BOARD_LAYOUT, windowSizes: BOARD_WINDOW_SIZES }
 
 export type BoardDoc = Arrangement & {
   // In the order they are drawn: frames, then arrows, then everything else, each from back to front.
   items: BoardItem[]
-  // What the board comes to, if anyone has written it.
-  summary: BoardSummary | null
 }
 
 export type BoardState = {
@@ -134,11 +124,6 @@ export type BoardAction =
   | { type: 'set_shape'; ids: string[]; shape: ShapeKind }
   | { type: 'set_text_size'; ids: string[]; size: TextSize }
   | { type: 'set_connector'; id: string; patch: Partial<Pick<ConnectorItem, 'style' | 'head' | 'from' | 'to'>> }
-  // The summary, all of it (or none): as Droplet wrote it, or cleared. Each line is tidied and cut to length, and an empty one is dropped.
-  | { type: 'set_summary'; summary: BoardSummary | null }
-  // One section of the summary, as lines the founder wrote. If Droplet wrote the summary it is marked as edited. With no summary, this makes the
-  // founder's own, as of `at`. One step for everything typed in one section.
-  | { type: 'edit_summary'; section: SummarySection; lines: string[]; at: string }
   | { type: 'reorder'; ids: string[]; to: ReorderTo }
   // Deleting a frame leaves what is inside it, unless `contents` says to take that too. An arrow goes with either end.
   | { type: 'delete'; ids: string[]; contents?: boolean }
@@ -212,20 +197,8 @@ function fitItems(items: BoardItem[], context: BoardItem[] = []): BoardItem[] {
 }
 
 // The workspace for a board, arranged as the project's saved arrangement if there is one.
-// Lines of a summary made to fit: each on one line, tidied and cut to length, and no more of them than a section holds.
-export const cleanLines = (lines: string[]): string[] =>
-  lines
-    .map((line) => line.replace(/\s+/g, ' ').trim().slice(0, MAX_SUMMARY_LINE))
-    .filter((line) => line !== '')
-    .slice(0, MAX_SUMMARY_LINES)
-
-export function cleanSummary(summary: BoardSummary | null | undefined): BoardSummary | null {
-  if (!summary) return null
-  return { decided: cleanLines(summary.decided), open: cleanLines(summary.open), next: cleanLines(summary.next), by: summary.by, edited: summary.by === 'droplet' && summary.edited, writtenAt: summary.writtenAt }
-}
-
-export function openBoard(items: BoardItem[] = [], arrangement?: ArrangementSave | null, summary?: BoardSummary | null): BoardState {
-  const doc: BoardDoc = { items: fitItems(items), summary: cleanSummary(summary), ...openArrangement(BOARD_SPEC, arrangement) }
+export function openBoard(items: BoardItem[] = [], arrangement?: ArrangementSave | null): BoardState {
+  const doc: BoardDoc = { items: fitItems(items), ...openArrangement(BOARD_SPEC, arrangement) }
   return { history: createHistory(doc), selection: [], tool: 'select', noteColour: 'yellow', shapeKind: 'rectangle', connectorStyle: 'straight' }
 }
 
@@ -254,11 +227,9 @@ export function sameItems(a: BoardItem[], b: BoardItem[]): boolean {
   return a.length === b.length && a.every((item, index) => stable(item) === stable(b[index]))
 }
 
-export const sameSummary = (a: BoardSummary | null | undefined, b: BoardSummary | null | undefined) => stable(a ?? null) === stable(b ?? null)
-
-// Whether anything differs from what was saved: the board, its summary, or how the workspace is arranged. With nothing saved, it is unsaved.
-export function isBoardUnsaved(doc: BoardDoc, saved: { items: BoardItem[]; summary?: BoardSummary | null } & ArrangementSave | null): boolean {
-  return !saved || !sameItems(doc.items, saved.items) || !sameSummary(doc.summary, saved.summary) || arrangementUnsaved(BOARD_SPEC, doc, saved)
+// Whether anything differs from what was saved: the board, or how the workspace is arranged. With nothing saved, it is unsaved.
+export function isBoardUnsaved(doc: BoardDoc, saved: { items: BoardItem[] } & ArrangementSave | null): boolean {
+  return !saved || !sameItems(doc.items, saved.items) || arrangementUnsaved(BOARD_SPEC, doc, saved)
 }
 
 // ---- Actions ----
@@ -456,22 +427,6 @@ function step(w: Working, action: BoardAction): Working {
       return stable(next) === stable(arrow) ? w : withItems(w, items.map((item) => (item.id === arrow.id ? next : item)))
     }
 
-    case 'set_summary': {
-      const summary = cleanSummary(action.summary)
-      return sameSummary(summary, w.doc.summary) ? w : { ...w, doc: { ...w.doc, summary } }
-    }
-
-    case 'edit_summary': {
-      const lines = cleanLines(action.lines)
-      const current = w.doc.summary
-      if (!current) {
-        const made: BoardSummary = { decided: [], open: [], next: [], by: 'you', edited: false, writtenAt: action.at, [action.section]: lines }
-        return { ...w, doc: { ...w.doc, summary: made } }
-      }
-      if (stable(current[action.section]) === stable(lines)) return w
-      return { ...w, doc: { ...w.doc, summary: { ...current, [action.section]: lines, edited: current.by === 'droplet' } } }
-    }
-
     case 'reorder': {
       const ids = existing(w.doc, action.ids)
       if (ids.length === 0) return w
@@ -547,7 +502,6 @@ function step(w: Working, action: BoardAction): Working {
 function mergeKey(action: BoardAction): string | null {
   if (action.type === 'set_text') return `text-${action.id}`
   if (action.type === 'set_title') return `title-${action.id}`
-  if (action.type === 'edit_summary') return `summary-${action.section}`
   return null
 }
 

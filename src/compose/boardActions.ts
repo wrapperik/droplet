@@ -24,13 +24,11 @@ type Props = {
   view: Point
   // Makes the id of a new thing. Given so that the server's check and a test need not make random ones.
   newId?: () => string
-  // When it is: for the date a summary is written. Given for the same reason.
-  now?: () => string
 }
 
 export type BoardApplyResult = { state: BoardState; skipped: BoardSkipped[] }
 
-export function applyBoardTurnActions({ base, actions, view, newId = freshId, now = () => new Date().toISOString() }: Props): BoardApplyResult {
+export function applyBoardTurnActions({ base, actions, view, newId = freshId }: Props): BoardApplyResult {
   const skipped: BoardSkipped[] = []
 
   // Undo and redo take back or restore a whole step, so they stand alone.
@@ -50,7 +48,7 @@ export function applyBoardTurnActions({ base, actions, view, newId = freshId, no
   const idOf = new Map([...refsOf(docOf(base).items)].map(([id, ref]) => [ref, id]))
   let scratch = base
   const collected: BoardAction[] = []
-  const used = { notes: 0, clusters: 0, templates: 0, arrows: 0, summaries: 0 }
+  const used = { notes: 0, clusters: 0, templates: 0, arrows: 0 }
   const clustered = new Set<string>()
 
   const items = () => docOf(scratch).items
@@ -192,19 +190,6 @@ export function applyBoardTurnActions({ base, actions, view, newId = freshId, no
         if (!room(1)) return skip('The board already holds as many things as it can.')
         if (!run([{ type: 'add_connector', id: newId(), from: { item: from.id }, to: { item: to.id }, ...(action.label ? { text: action.label } : {}) }])) return skip('That arrow could not be drawn.')
         used.arrows += 1
-        return
-      }
-
-      case 'write_summary': {
-        if (used.summaries >= 1) return skip('Only one summary can be written in a reply.')
-        const lines = action.decided.length + action.open.length + action.next.length
-        if (lines === 0) return skip('A summary needs at least one line. If the board has nothing on it to summarise, say so in the message and leave the actions out.')
-        const summary = { decided: action.decided, open: action.open, next: action.next, by: 'droplet' as const, edited: false, writtenAt: now() }
-        const steps: BoardAction[] = [{ type: 'set_summary', summary }]
-        // The window is brought onto the screen if it is off it, so the founder sees what was written.
-        if (docOf(scratch).hidden.includes('summary')) steps.push({ type: 'show', component: 'summary' })
-        if (!run(steps)) return skip('That summary could not be written.')
-        used.summaries += 1
         return
       }
 

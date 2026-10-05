@@ -234,13 +234,13 @@ export const TEST_REQUESTS: TestRequest[] = [
   },
   {
     id: 'board-summary',
-    why: 'Asked where they have got to: write the summary card from the board, deciding nothing that the board does not settle',
+    why: 'Asked where they have got to: answer in the message as a short list, deciding nothing that the board does not settle, and change nothing',
     request: { intent: 'Summarise where I have got to', view: 'board', board },
-    expect: { task: 'ideation', acts: true, firstAction: ['write_summary'] },
+    expect: { task: 'ideation', acts: false, list: true },
   },
   {
     id: 'board-summary-empty',
-    why: 'Nothing on the board: it should say there is nothing to summarise, and not invent a decision',
+    why: 'Nothing on the board: it should say there is nothing to summarise, and not invent a decision, and change nothing',
     request: { intent: 'Summarise what we have decided', view: 'board', board: emptyBoardSnapshot() },
     expect: { task: 'ideation', acts: false, asks: true },
   },

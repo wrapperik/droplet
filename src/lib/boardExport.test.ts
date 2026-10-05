@@ -1,55 +1,22 @@
 import { describe, expect, it, vi } from 'vitest'
-import { boardFileName, boardPng, exportBlockedReason, exportBoard, pdfSafe, pngScale, summarySheet } from './boardExport.ts'
-import type { BoardItem, BoardSummary, NoteItem } from './boardTypes.ts'
-import { emptyMemory, withIdea } from './projectMemory.ts'
+import { boardFileName, boardPng, exportBlockedReason, exportBoard, pdfSafe, pngScale } from './boardExport.ts'
+import type { BoardItem, NoteItem } from './boardTypes.ts'
 
 const note = (id: string): NoteItem => ({ id, kind: 'note', x: 100, y: 100, w: 200, h: 180, text: id, colour: 'yellow', author: 'you' })
-const summary = (extra: Partial<BoardSummary> = {}): BoardSummary => ({ decided: ['The name is Kindred'], open: ['The first offer'], next: [], by: 'droplet', edited: false, writtenAt: '2026-10-05T10:00:00', ...extra })
-
-describe('the summary page', () => {
-  it('has no page without a summary or anything remembered', () => {
-    expect(summarySheet(null, emptyMemory())).toBeNull()
-    expect(summarySheet({ ...summary(), decided: [], open: [] }, emptyMemory())).toBeNull()
-  })
-
-  it('lists the sections that have lines, in the order of the summary, and leaves the empty ones out', () => {
-    const sheet = summarySheet(summary(), emptyMemory())!
-    expect(sheet.sections).toEqual([{ label: 'Decided', lines: ['The name is Kindred'] }, { label: 'Still open', lines: ['The first offer'] }])
-  })
-
-  it('says who wrote it and when, and whether the founder changed it', () => {
-    expect(summarySheet(summary(), emptyMemory())!.by).toBe('Written by Droplet, 5 October 2026')
-    expect(summarySheet(summary({ edited: true }), emptyMemory())!.by).toBe('Written by Droplet, changed by the founder, 5 October 2026')
-    expect(summarySheet(summary({ by: 'you' }), emptyMemory())!.by).toBe('Written by the founder, 5 October 2026')
-  })
-
-  it('carries the name and offer the project remembers, even with no summary', () => {
-    const memory = withIdea(withIdea(emptyMemory(), 'name', 'Kindred Gifting', '2026-10-05T09:00:00'), 'offer', 'Gift boxes', '2026-10-05T09:01:00')
-    expect(summarySheet(null, memory)).toEqual({ by: '', sections: [], remembered: [{ label: 'Business name', value: 'Kindred Gifting' }, { label: 'Offer', value: 'Gift boxes' }] })
-  })
-})
 
 describe('when a file cannot be made yet', () => {
-  const none = { items: [] as BoardItem[], summary: null, memory: emptyMemory() }
-
-  it('blocks a PNG of an empty board, and a PDF of nothing at all, and says what to do', () => {
-    expect(exportBlockedReason('png', none)).toBe('Put something on the board first.')
-    expect(exportBlockedReason('pdf', none)).toBe('Put something on the board or write a summary first.')
-  })
-
-  it('lets the PDF carry a summary alone, but not the PNG', () => {
-    expect(exportBlockedReason('pdf', { ...none, summary: summary() })).toBeNull()
-    expect(exportBlockedReason('png', { ...none, summary: summary() })).not.toBeNull()
+  it('blocks both files for an empty board, and says what to do', () => {
+    expect(exportBlockedReason([])).toBe('Put something on the board first.')
   })
 
   it('lets both go once there is something on the board', () => {
-    expect(exportBlockedReason('png', { ...none, items: [note('a')] })).toBeNull()
-    expect(exportBlockedReason('pdf', { ...none, items: [note('a')] })).toBeNull()
+    expect(exportBlockedReason([note('a')])).toBeNull()
   })
 
   it('makes nothing when blocked, and says it did not work', async () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click')
-    expect(await exportBoard('png', { ...none, projectName: 'Kindred' })).toBe(false)
+    expect(await exportBoard('png', { items: [] as BoardItem[], projectName: 'Kindred' })).toBe(false)
+    expect(await exportBoard('pdf', { items: [] as BoardItem[], projectName: 'Kindred' })).toBe(false)
     expect(click).not.toHaveBeenCalled()
     click.mockRestore()
   })

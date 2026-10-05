@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { BOARD_H, BOARD_W } from './boardGeometry.ts'
-import { CONNECTOR_HEADS, CONNECTOR_STYLES, MAX_GROUP, MAX_HINT, MAX_ITEMS, MAX_LABEL, MAX_SUMMARY_LINE, MAX_SUMMARY_LINES, MAX_NOTE_TEXT, MAX_TEXT, MAX_TITLE, NOTE_COLOURS, SHAPE_COLOURS, SHAPE_KINDS, SIZE_LIMITS, TEXT_SIZES } from './boardTypes.ts'
+import { CONNECTOR_HEADS, CONNECTOR_STYLES, MAX_GROUP, MAX_HINT, MAX_ITEMS, MAX_LABEL, MAX_NOTE_TEXT, MAX_TEXT, MAX_TITLE, NOTE_COLOURS, SHAPE_COLOURS, SHAPE_KINDS, SIZE_LIMITS, TEXT_SIZES } from './boardTypes.ts'
 
 // What a saved board looks like. Everything read back is validated, because storage can hold anything. A save from before shapes, text, frames
 // and arrows existed holds only notes, and is still read.
@@ -64,21 +64,8 @@ const connectorSchema = z.object({
   text: z.string().max(MAX_LABEL),
 })
 
-// The summary: three short lists, who wrote them, and when.
-const summaryLine = z.string().min(1).max(MAX_SUMMARY_LINE)
-const summarySchema = z.object({
-  decided: z.array(summaryLine).max(MAX_SUMMARY_LINES),
-  open: z.array(summaryLine).max(MAX_SUMMARY_LINES),
-  next: z.array(summaryLine).max(MAX_SUMMARY_LINES),
-  by: z.enum(['droplet', 'you']),
-  edited: z.boolean(),
-  writtenAt: z.string().max(40),
-})
-
 export const boardSaveSchema = z.object({
   items: z.array(z.discriminatedUnion('kind', [noteSchema, shapeSchema, textSchema, frameSchema, connectorSchema])).max(MAX_ITEMS),
-  // Absent in a save from before there was a summary.
-  summary: summarySchema.nullable().optional(),
   layout: z.array(placementSchema),
   tools: z.array(z.string()).optional(),
   expanded: z.array(z.string()).optional(),

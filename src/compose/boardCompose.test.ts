@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { requestComposition } from '../lib/composeClient.ts'
 import { composeWorkspace, checkReply, type ModelCaller } from './compose.ts'
-import { openBoardSnapshot, openBoardState, templateBoardSnapshot, chatTurn } from './fixtures.ts'
-import { docOf, reduceBoard } from '../lib/boardState.ts'
-import { describeBoard, snapshotOfBoard, stateOfBoardSnapshot } from './boardSnapshot.ts'
+import { openBoardSnapshot, templateBoardSnapshot, chatTurn } from './fixtures.ts'
+import { describeBoard } from './boardSnapshot.ts'
 import { MAX_AI_NOTES, MAX_BOARD_ACTIONS, boardActionSchema, boardSnapshotSchema, boardTurnSchema } from './boardSpec.ts'
 import { BOARD_SYSTEM_PROMPT, INVOICE_SYSTEM_PROMPT, SYSTEM_PROMPT, buildUserContent, systemPromptFor } from './prompt.ts'
 import { checkBoardTurn, checkTurnFor } from './rules.ts'
@@ -286,39 +285,23 @@ describe('the answer, checked again in the browser', () => {
   })
 })
 
-describe('the summary the composer is shown, and told to write', () => {
-  it('is shown as none yet, or with who wrote it and whether the founder changed it', () => {
-    expect((describeBoard(openBoardSnapshot()) as { summary: unknown }).summary).toBe('none yet')
-    const written = { ...openBoardSnapshot(), summary: { decided: ['A name'], open: ['An offer'], next: ['Call someone'], by: 'droplet' as const, edited: true } }
-    expect(describeBoard(written)).toMatchObject({ summary: { writtenBy: 'Droplet', editedByTheFounder: true, decided: ['A name'], stillOpen: ['An offer'], next: ['Call someone'] } })
-    expect(describeBoard({ ...written, summary: { ...written.summary, by: 'you' as const, edited: false } })).toMatchObject({ summary: { writtenBy: 'the founder' } })
+describe('a summary, in the conversation', () => {
+  it('is not an action in the schema sent to the model, and not something the board snapshot carries', () => {
+    expect(JSON.stringify(turnJsonSchema('board'))).not.toContain('write_summary')
+    expect(isBoardAction({ type: 'write_summary' })).toBe(false)
+    expect(Object.keys(openBoardSnapshot())).not.toContain('summary')
+    expect(Object.keys(describeBoard(openBoardSnapshot()))).not.toContain('summary')
   })
 
-  it('goes in the snapshot, and comes back out of it, so the server checks against the same board', () => {
-    const state = reduceBoard(openBoardState(), { type: 'set_summary', summary: { decided: ['A name'], open: [], next: [], by: 'droplet', edited: false, writtenAt: '2026-10-05T10:00:00' } })
-    const snapshot = snapshotOfBoard(state, { x: 1, y: 1 }, 'none')
-    expect(snapshot.summary).toEqual({ decided: ['A name'], open: [], next: [], by: 'droplet', edited: false })
-    expect(boardSnapshotSchema.safeParse(snapshot).success).toBe(true)
-    expect(docOf(stateOfBoardSnapshot(snapshot)).summary).toMatchObject({ decided: ['A name'], by: 'droplet' })
+  it('is asked for in the prompt as a message, with the founder\'s own words kept out of it and nothing invented', () => {
+    for (const rule of [/A summary, a wrap-up or "where have I got to" is a message, not an action/, /\*\*Decided\*\*, \*\*Still open\*\* and \*\*Next\*\*/, /Never invent a decision, a figure or a fact/, /you cannot remember a name or an offer for the project/]) {
+      expect(BOARD_SYSTEM_PROMPT).toMatch(rule)
+    }
+    expect(BOARD_SYSTEM_PROMPT).not.toContain('write_summary')
   })
 
-  it('is written by an action the schema carries, and the prompt says when and how', () => {
-    expect(JSON.stringify(turnJsonSchema('board'))).toContain('write_summary')
-    expect(isBoardAction({ type: 'write_summary' })).toBe(true)
-    for (const rule of [
-      /write_summary writes the summary card/,
-      /only when the founder asks for a summary/,
-      /Never invent a decision, a figure or a fact/,
-      /editedByTheFounder/,
-      /replaces their changes/,
-      /you cannot remember a name or an offer for the project/,
-    ]) expect(BOARD_SYSTEM_PROMPT).toMatch(rule)
-  })
-
-  it('is checked against the board it was asked about, so an empty summary is sent back', () => {
-    const checked = checkReply(reply([{ type: 'write_summary', decided: [], open: [], next: [] }]), request('summarise'))
-    expect(checked.turn).toBeUndefined()
-    expect(checked.errors[0]).toContain('at least one line')
-    expect(checkReply(reply([{ type: 'write_summary', decided: ['A name'], open: [], next: [] }]), request('summarise')).errors).toEqual([])
+  it('is a reply with no actions, which the board accepts as it is', () => {
+    const checked = checkReply(reply([]), request('summarise'))
+    expect(checked.errors).toEqual([])
   })
 })

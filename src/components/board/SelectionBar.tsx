@@ -26,7 +26,7 @@ import { IDEA_LIMITS, ideaFits, ideaStatus, ideaText, type IdeaKind } from '../.
 
 // What lets a founder decide a name or an offer from the board: what the project remembers now, and a way to remember words. Nothing is
 // remembered until the founder presses the confirm that this bar shows.
-export type Decide = { memory: ProjectMemory; remember: (kind: IdeaKind, text: string) => void }
+export type Decide = { memory: ProjectMemory; remember: (kind: IdeaKind, text: string) => void; forget: (kind: IdeaKind) => void }
 
 const IDEA_WORDS: Record<IdeaKind, { button: string; what: string }> = {
   name: { button: 'Use as business name', what: 'the business name' },
@@ -142,23 +142,35 @@ export default function SelectionBar({ selected, held, dispatch, say, style, tem
         (deciding ? (
           <span className="board__ask" role="group" aria-label={`Remember this as ${IDEA_WORDS[deciding].what}?`}>
             <span>
-              Remember “{words}” as {IDEA_WORDS[deciding].what}?
-              {deciding === 'name' ? ' It is also the business name on invoices.' : ''}
+              {ideaStatus(decide.memory, deciding, words) === 'same' ? `“${words}” is already remembered as ${IDEA_WORDS[deciding].what}.` : `Remember “${words}” as ${IDEA_WORDS[deciding].what}?`}
+              {deciding === 'name' && ideaStatus(decide.memory, deciding, words) !== 'same' ? ' It is also the business name on invoices.' : ''}
               {ideaStatus(decide.memory, deciding, words) === 'updated' ? ` This replaces “${decide.memory.idea?.[deciding]}”.` : ''}
-              {ideaStatus(decide.memory, deciding, words) === 'same' ? ' It is already remembered.' : ''}
             </span>
-            <button
-              type="button"
-              className="board__small"
-              disabled={ideaStatus(decide.memory, deciding, words) === 'same'}
-              onClick={() => {
-                decide.remember(deciding, words)
-                say(`Remembered ${IDEA_WORDS[deciding].what}.`)
-                setDeciding(null)
-              }}
-            >
-              Remember
-            </button>
+            {ideaStatus(decide.memory, deciding, words) === 'same' ? (
+              <button
+                type="button"
+                className="board__small board__small--danger"
+                onClick={() => {
+                  decide.forget(deciding)
+                  say(`Forgot ${IDEA_WORDS[deciding].what}.`)
+                  setDeciding(null)
+                }}
+              >
+                Forget it
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="board__small"
+                onClick={() => {
+                  decide.remember(deciding, words)
+                  say(`Remembered ${IDEA_WORDS[deciding].what}.`)
+                  setDeciding(null)
+                }}
+              >
+                Remember
+              </button>
+            )}
             <button type="button" className="board__small" onClick={() => setDeciding(null)}>
               Cancel
             </button>

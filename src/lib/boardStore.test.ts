@@ -128,34 +128,25 @@ describe('boardStore with hints and groups', () => {
   })
 })
 
-describe('boardStore with a summary', () => {
-  const summary = { decided: ['The name is Kindred Gifting'], open: ['Who pays first'], next: ['Talk to two firms'], by: 'droplet' as const, edited: true, writtenAt: '2026-10-05T10:00:00' }
-
-  it('saves and loads it with the board, and opens a board with it, the same as it was saved', () => {
-    const doc = docOf(openBoard(data.items, null, summary))
-    saveBoard('duckstack', { items: doc.items, summary: doc.summary, layout: doc.layout, tools: doc.tools, expanded: doc.expanded, hidden: doc.hidden })
-    const loaded = loadBoard('duckstack')!
-    expect(loaded.summary).toEqual(summary)
+describe('a save from when the board had a summary', () => {
+  it('still opens: the summary and its window are ignored, and nothing else is lost', () => {
+    const doc = docOf(openBoard(data.items))
+    window.localStorage.setItem(
+      'droplet-project-duckstack-board',
+      JSON.stringify({
+        items: doc.items,
+        summary: { decided: ['A name'], open: [], next: [], by: 'droplet', edited: false, writtenAt: '2026-10-05T10:00:00' },
+        layout: [...doc.layout, { id: 'summary', col: 0, row: 22, w: 12 }],
+        tools: doc.tools,
+        expanded: [],
+        hidden: ['summary'],
+        savedAt: 'x',
+      }),
+    )
+    const loaded = loadBoard('duckstack')
+    expect(loaded).not.toBeNull()
     const reopened = docOf(openBoardForProject('duckstack'))
-    expect(reopened.summary).toEqual(summary)
-    expect(isBoardUnsaved(reopened, loaded)).toBe(false)
-  })
-
-  it('still reads a save from before there was a summary, and opens it with none', () => {
-    saveBoard('duckstack', data)
-    expect(loadBoard('duckstack')).not.toBeNull()
-    expect(docOf(openBoardForProject('duckstack')).summary).toBeNull()
-  })
-
-  it('refuses a summary with an empty line, too many lines, or a stranger as its author', () => {
-    const bad = (over: object) => {
-      window.localStorage.setItem('droplet-project-duckstack-board', JSON.stringify({ ...data, summary: { ...summary, ...over }, savedAt: 'x' }))
-      return loadBoard('duckstack')
-    }
-    expect(bad({ decided: [''] })).toBeNull()
-    expect(bad({ open: Array.from({ length: 9 }, () => 'x') })).toBeNull()
-    expect(bad({ next: ['x'.repeat(161)] })).toBeNull()
-    expect(bad({ by: 'someone' })).toBeNull()
-    expect(bad({})).not.toBeNull()
+    expect(reopened.items).toEqual(doc.items)
+    expect(reopened).not.toHaveProperty('summary')
   })
 })

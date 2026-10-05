@@ -41,7 +41,7 @@ describe('the export menu', () => {
   it('keeps a choice that is blocked pressable, makes nothing, and says what is missing, in the menu and aloud', async () => {
     const user = userEvent.setup()
     const onExport = vi.fn(async () => true)
-    render(<BoardExportMenu onExport={onExport} blockedReason={(format) => (format === 'png' ? 'Put something on the board first.' : null)} />)
+    render(<BoardExportMenu onExport={onExport} blockedReason={() => 'Put something on the board first.'} />)
     await open(user)
     const png = screen.getByRole('menuitem', { name: /^PNG\. Put something on the board first\./ })
     expect(png).toHaveAttribute('aria-disabled', 'true')
@@ -49,7 +49,7 @@ describe('the export menu', () => {
     expect(onExport).not.toHaveBeenCalled()
     expect(screen.getByRole('menu')).toHaveTextContent('Put something on the board first.')
     expect(screen.getByRole('status')).toHaveTextContent('Put something on the board first.')
-    // the other choice is still open
-    expect(screen.getByRole('menuitem', { name: /^PDF\./ })).not.toHaveAttribute('aria-disabled')
+    // both files are the board, so both are blocked
+    expect(screen.getByRole('menuitem', { name: /^PDF\. Put something on the board first\./ })).toHaveAttribute('aria-disabled', 'true')
   })
 })

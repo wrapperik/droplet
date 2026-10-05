@@ -8,14 +8,14 @@ type Props = {
   // Makes and downloads the file. Returns whether it worked, so the button can say so.
   onExport: (format: BoardFormat) => Promise<boolean>
   // Why a file cannot be made yet, or null when it can.
-  blockedReason: (format: BoardFormat) => string | null
+  blockedReason: () => string | null
 }
 
 type Phase = 'idle' | 'working' | 'done' | 'failed'
 const RESULT_MS = 1800
 
 const CHOICES: { format: BoardFormat; label: string; detail: string }[] = [
-  { format: 'pdf', label: 'PDF', detail: 'The board on one page, and the summary on the next.' },
+  { format: 'pdf', label: 'PDF', detail: 'The board on one landscape page, to print or share.' },
   { format: 'png', label: 'PNG', detail: 'A picture of the board, cut to what is on it.' },
 ]
 
@@ -38,7 +38,7 @@ export default function BoardExportMenu({ onExport, blockedReason }: Props) {
 
   const choose = async (format: BoardFormat) => {
     if (phase === 'working') return
-    const reason = blockedReason(format)
+    const reason = blockedReason()
     if (reason) {
       setNote(reason)
       return
@@ -71,7 +71,7 @@ export default function BoardExportMenu({ onExport, blockedReason }: Props) {
       {open && (
         <div className="board-export__menu glass glass--strong" id={menuId} role="menu" aria-label="Export the board as">
           {CHOICES.map((choice) => {
-            const blocked = blockedReason(choice.format)
+            const blocked = blockedReason()
             return (
               <button key={choice.format} type="button" role="menuitem" className="board-export__item" aria-disabled={blocked ? true : undefined} aria-label={`${choice.label}. ${blocked ?? choice.detail}`} onClick={() => choose(choice.format)}>
                 <span className="board-export__label">{choice.label}</span>

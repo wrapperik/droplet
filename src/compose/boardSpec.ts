@@ -25,9 +25,6 @@ export const MAX_BOARD_ACTIONS = 24
 export const MAX_AI_NOTES = 12
 export const MAX_AI_CLUSTERS = 4
 export const MAX_AI_ARROWS = 12
-// The most lines in each list of a summary the model writes, and the most each says.
-export const AI_SUMMARY_LINES = 6
-export const AI_SUMMARY_LINE = 140
 
 // A thing on the board, by the short name it is given in the board the model is shown: f for a frame, n for a note, s for a shape, t for text
 // and a for an arrow, counting from 1 in the order shown.
@@ -68,12 +65,6 @@ export const boardActionSchema = z.discriminatedUnion('type', [
     from: refSchema,
     to: refSchema,
     label: z.string().trim().max(60).optional().describe('A few words on the arrow, such as "leads to".'),
-  }),
-  z.object({
-    type: z.enum(['write_summary']),
-    decided: z.array(text(AI_SUMMARY_LINE)).max(AI_SUMMARY_LINES).describe(`What the board has settled, one short line each, up to ${AI_SUMMARY_LINES}.`),
-    open: z.array(text(AI_SUMMARY_LINE)).max(AI_SUMMARY_LINES).describe(`What is still undecided or unanswered, one short line each, up to ${AI_SUMMARY_LINES}.`),
-    next: z.array(text(AI_SUMMARY_LINE)).max(AI_SUMMARY_LINES).describe(`What the founder could do next, concrete and small, one short line each, up to ${AI_SUMMARY_LINES}.`),
   }),
   z.object({ type: z.enum(['undo']) }),
   z.object({ type: z.enum(['redo']) }),
@@ -128,17 +119,6 @@ export const boardSnapshotSchema = z.object({
   view: z.object({ x: z.number().finite().min(0).max(4800), y: z.number().finite().min(0).max(3200) }),
   // What is selected, by reference.
   selection: z.array(refSchema).max(MAX_SNAPSHOT_ITEMS),
-  // The summary the board has now, if there is one, so it can be written again rather than from nothing.
-  summary: z
-    .object({
-      decided: z.array(z.string().max(160)).max(8),
-      open: z.array(z.string().max(160)).max(8),
-      next: z.array(z.string().max(160)).max(8),
-      by: z.enum(['droplet', 'you']),
-      edited: z.boolean(),
-    })
-    .nullable()
-    .optional(),
   canUndo: z.boolean(),
   canRedo: z.boolean(),
   saved: z.enum(['none', 'saved', 'unsaved']),

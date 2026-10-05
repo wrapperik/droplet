@@ -40,5 +40,5 @@ export function clearBoard(projectId: string) {
 // The board workspace for a project: the saved board and arrangement if there is one, otherwise an empty board.
 export function openBoardForProject(projectId: string): BoardState {
   const saved = loadBoard(projectId)
-  return openBoard(saved?.items ?? [], saved, saved?.summary)
+  return openBoard(saved?.items ?? [], saved)
 }

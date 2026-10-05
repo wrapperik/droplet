@@ -1,5 +1,5 @@
 import type { BoardSave } from './boardSave.ts'
-import { docOf as boardDocOf, isBoardUnsaved, sameItems, sameSummary, type BoardState } from './boardState.ts'
+import { docOf as boardDocOf, isBoardUnsaved, sameItems, type BoardState } from './boardState.ts'
 import { isInvoiceUnsaved, invoiceDocOf, type InvoiceState } from './invoiceState.ts'
 import type { InvoiceSave } from './invoiceSave.ts'
 import type { ProjectMemory } from './memorySave.ts'
@@ -30,5 +30,5 @@ export function invoiceHasChanges(state: InvoiceState, memory: ProjectMemory, ar
 export function boardHasChanges(state: BoardState, saved: BoardSave | null): boolean {
   if (saved) return isBoardUnsaved(boardDocOf(state), saved)
   const began = state.history.past[0] ?? state.history.present
-  return !sameItems(began.items, state.history.present.items) || !sameSummary(began.summary, state.history.present.summary)
+  return !sameItems(began.items, state.history.present.items)
 }

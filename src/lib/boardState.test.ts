@@ -17,7 +17,6 @@ import {
   type BoardAction,
   type BoardItem,
   type BoardState,
-  type BoardSummary,
   type FrameItem,
   type NoteItem,
   type ShapeItem,
@@ -777,81 +776,3 @@ describe('fill_note', () => {
 })
 
 // ---- The summary ----
-
-describe('the summary', () => {
-  const at = '2026-10-05T10:00:00'
-  const droplet = (over: Partial<BoardSummary> = {}): BoardSummary => ({ decided: ['The name is Kindred Gifting'], open: ['Who pays first'], next: ['Talk to two firms'], by: 'droplet', edited: false, writtenAt: at, ...over })
-
-  it('is none on a new board, and the summary window is off the screen until it is wanted', () => {
-    const state = empty()
-    expect(docOf(state).summary).toBeNull()
-    expect(docOf(state).hidden).toContain('summary')
-  })
-
-  it('is set as a whole, as one step, and tidied: one line each, cut to length, empty ones dropped, no more than eight', () => {
-    const state = run(empty(), { type: 'set_summary', summary: droplet({ decided: ['  A   line\n  here ', '', 'x'.repeat(300), ...Array.from({ length: 10 }, (_, i) => `l${i}`)] }) })
-    const decided = docOf(state).summary!.decided
-    expect(decided[0]).toBe('A line here')
-    expect(decided[1]).toHaveLength(160)
-    expect(decided).toHaveLength(8)
-    expect(state.history.past).toHaveLength(1)
-    expect(docOf(run(state, { type: 'undo' })).summary).toBeNull()
-  })
-
-  it('is cleared with null, and setting what is already there is no step', () => {
-    const state = run(empty(), { type: 'set_summary', summary: droplet() })
-    expect(run(state, { type: 'set_summary', summary: droplet() })).toBe(state)
-    expect(docOf(run(state, { type: 'set_summary', summary: null })).summary).toBeNull()
-    expect(run(empty(), { type: 'set_summary', summary: null }).history.past).toHaveLength(0)
-  })
-
-  it('marks what Droplet wrote as edited once the founder changes a section, and not before', () => {
-    let state = run(empty(), { type: 'set_summary', summary: droplet() })
-    expect(docOf(state).summary).toMatchObject({ by: 'droplet', edited: false })
-    state = run(state, { type: 'edit_summary', section: 'open', lines: ['Who pays first', 'What it costs'], at })
-    expect(docOf(state).summary).toMatchObject({ by: 'droplet', edited: true, open: ['Who pays first', 'What it costs'], decided: ['The name is Kindred Gifting'] })
-  })
-
-  it('makes the founder\'s own summary when there is none, in the section being written', () => {
-    const state = run(empty(), { type: 'edit_summary', section: 'next', lines: ['Call Thandi'], at })
-    expect(docOf(state).summary).toEqual({ decided: [], open: [], next: ['Call Thandi'], by: 'you', edited: false, writtenAt: at })
-  })
-
-  it('does not call the founder\'s own summary edited when they keep writing it', () => {
-    let state = run(empty(), { type: 'edit_summary', section: 'next', lines: ['Call Thandi'], at })
-    state = run(state, { type: 'edit_summary', section: 'decided', lines: ['A name'], at: '2026-10-06T10:00:00' })
-    expect(docOf(state).summary).toMatchObject({ by: 'you', edited: false, writtenAt: at, decided: ['A name'] })
-  })
-
-  it('is one step for everything typed in one section, and no step when the lines do not change', () => {
-    let state = run(empty(), { type: 'set_summary', summary: droplet() })
-    const steps = state.history.past.length
-    state = run(state, { type: 'edit_summary', section: 'next', lines: ['T'], at }, { type: 'edit_summary', section: 'next', lines: ['Ta'], at }, { type: 'edit_summary', section: 'next', lines: ['Talk'], at })
-    expect(state.history.past.length).toBe(steps + 1)
-    expect(run(state, { type: 'edit_summary', section: 'next', lines: ['Talk'], at })).toBe(state)
-  })
-
-  it('is opened with a saved board, tidied', () => {
-    const state = openBoard([], null, droplet({ decided: ['  spaced   out  '] }))
-    expect(docOf(state).summary?.decided).toEqual(['spaced out'])
-  })
-
-  it('counts as unsaved when it differs from what was saved, and not when it is the same', () => {
-    const state = run(empty(), { type: 'set_summary', summary: droplet() })
-    const doc = docOf(state)
-    const saved = { items: doc.items, summary: doc.summary, layout: doc.layout, tools: doc.tools, expanded: doc.expanded, hidden: doc.hidden, savedAt: 'x' }
-    expect(isBoardUnsaved(doc, saved)).toBe(false)
-    expect(isBoardUnsaved(doc, { ...saved, summary: null })).toBe(true)
-    expect(isBoardUnsaved(docOf(run(state, { type: 'edit_summary', section: 'open', lines: ['New'], at })), saved)).toBe(true)
-    // a save from before there was a summary has none, and a board with none is the same as it
-    const before = docOf(empty())
-    const old = { items: [], layout: before.layout, tools: before.tools, expanded: [], hidden: before.hidden, savedAt: 'x' }
-    expect(isBoardUnsaved(before, old)).toBe(false)
-  })
-
-  it('can be shown from the Windows menu, which is how a founder opens it', () => {
-    const state = run(empty(), { type: 'show', component: 'summary' })
-    expect(docOf(state).hidden).not.toContain('summary')
-    expect(docOf(run(state, { type: 'hide', component: 'summary' })).hidden).toContain('summary')
-  })
-})

@@ -352,60 +352,10 @@ describe('a turn', () => {
   })
 })
 
-describe('write_summary', () => {
-  const now = () => '2026-10-05T10:00:00'
-  const write = (actions: BoardTurnAction[], base: BoardState = openBoardState()) => applyBoardTurnActions({ base, actions, view, newId: counter(), now })
-  const summary = { type: 'write_summary' as const, decided: ['The name is Kindred Gifting'], open: ['What the first offer is'], next: ['Write down one offer'] }
-
-  it('writes the summary as Droplet\'s, not edited, as of now, and brings the window onto the screen', () => {
-    const { state, skipped } = write([summary])
-    expect(skipped).toEqual([])
-    expect(docOf(state).summary).toEqual({ decided: ['The name is Kindred Gifting'], open: ['What the first offer is'], next: ['Write down one offer'], by: 'droplet', edited: false, writtenAt: '2026-10-05T10:00:00' })
-    expect(docOf(state).hidden).not.toContain('summary')
-  })
-
-  it('is one step, and undo takes the summary away again, and the window with it', () => {
-    const base = openBoardState()
-    const { state } = write([summary], base)
-    expect(state.history.past.length).toBe(base.history.past.length + 1)
-    const undone = reduceBoard(state, { type: 'undo' })
-    expect(docOf(undone).summary).toBeNull()
-    expect(docOf(undone).hidden).toContain('summary')
-  })
-
-  it('writes again over what is there, which is how it is updated, and says it is Droplet\'s again', () => {
-    const first = write([summary]).state
-    const edited = reduceBoard(first, { type: 'edit_summary', section: 'next', lines: ['My own next step'], at: now() })
-    expect(docOf(edited).summary?.edited).toBe(true)
-    const again = write([{ ...summary, next: ['A new next step'] }], edited).state
-    expect(docOf(again).summary).toMatchObject({ by: 'droplet', edited: false, next: ['A new next step'] })
-  })
-
-  it('does not touch a single note, frame or arrow on the board', () => {
-    const base = openBoardState()
-    const { state } = write([summary], base)
-    expect(JSON.stringify(items(state))).toBe(JSON.stringify(items(base)))
-  })
-
-  it('refuses a summary with nothing in it, and a second one in a reply', () => {
-    expect(reasons(write([{ type: 'write_summary', decided: [], open: [], next: [] }]))[0]).toContain('at least one line')
-    expect(reasons(write([summary, summary]))[0]).toContain('Only one summary')
-  })
-
-  it('takes a summary with only some of its sections', () => {
-    const { state, skipped } = write([{ type: 'write_summary', decided: [], open: ['Who pays first'], next: [] }])
-    expect(skipped).toEqual([])
-    expect(docOf(state).summary).toMatchObject({ decided: [], open: ['Who pays first'], next: [] })
-  })
-
-  it('has lines the schema holds to six, each to 140 characters', () => {
-    expect(boardActionSchema.safeParse({ ...summary, decided: Array.from({ length: 7 }, () => 'x') }).success).toBe(false)
-    expect(boardActionSchema.safeParse({ ...summary, next: ['x'.repeat(141)] }).success).toBe(false)
-    expect(boardActionSchema.safeParse({ ...summary, open: [''] }).success).toBe(false)
-    expect(boardActionSchema.safeParse({ type: 'write_summary', decided: ['x'] }).success).toBe(false)
-  })
-
-  it('cannot remember anything for the project: there is no such action', () => {
-    for (const bad of ['remember_name', 'set_business_name', 'save_offer', 'remember']) expect(boardActionSchema.safeParse({ type: bad, text: 'Kindred' }).success, bad).toBe(false)
+describe('a summary is not an action', () => {
+  it('is written in the message: there is no action for it, nor for remembering a name or an offer for the project', () => {
+    for (const bad of ['write_summary', 'remember_name', 'set_business_name', 'save_offer', 'remember']) {
+      expect(boardActionSchema.safeParse({ type: bad, text: 'Kindred', decided: ['x'], open: [], next: [] }).success, bad).toBe(false)
+    }
   })
 })

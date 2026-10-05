@@ -1173,7 +1173,7 @@ describe('deciding a name or an offer from a thing on the board', () => {
 
   it('offers it for one note, shape or text with words on it, and not for anything else', async () => {
     const user = userEvent.setup()
-    render(<Harness items={[note('a', 400, 400, { text: 'Kindred Gifting' }), note('blank', 800, 400, { text: '  ' }), frame('f', 1200, 400)]} decide={{ memory, remember: () => {} }} />)
+    render(<Harness items={[note('a', 400, 400, { text: 'Kindred Gifting' }), note('blank', 800, 400, { text: '  ' }), frame('f', 1200, 400)]} decide={{ memory, remember: () => {}, forget: () => {} }} />)
     await user.click(itemEl('a'))
     expect(screen.getByRole('button', { name: 'Use as business name' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Use as offer' })).toBeEnabled()
@@ -1194,7 +1194,7 @@ describe('deciding a name or an offer from a thing on the board', () => {
   it('remembers nothing until it is confirmed, and Cancel remembers nothing', async () => {
     const user = userEvent.setup()
     const remember = vi.fn()
-    render(<Harness items={[note('a', 400, 400, { text: 'Kindred   Gifting' })]} decide={{ memory, remember }} />)
+    render(<Harness items={[note('a', 400, 400, { text: 'Kindred   Gifting' })]} decide={{ memory, remember, forget: () => {} }} />)
     await user.click(itemEl('a'))
     await user.click(screen.getByRole('button', { name: 'Use as business name' }))
     expect(remember).not.toHaveBeenCalled()
@@ -1208,24 +1208,26 @@ describe('deciding a name or an offer from a thing on the board', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Remembered the offer.')
   })
 
-  it('says what it would replace, and does not offer to remember what is already remembered', async () => {
+  it('says what it would replace, and offers to forget, not to remember, what is already remembered', async () => {
     const user = userEvent.setup()
     const remembered = withIdea(memory, 'name', 'Old Name', '2026-10-05T09:00:00')
-    const { unmount } = render(<Harness items={[note('a', 400, 400, { text: 'New Name' })]} decide={{ memory: remembered, remember: () => {} }} />)
+    const { unmount } = render(<Harness items={[note('a', 400, 400, { text: 'New Name' })]} decide={{ memory: remembered, remember: () => {}, forget: () => {} }} />)
     await user.click(itemEl('a'))
     await user.click(screen.getByRole('button', { name: 'Use as business name' }))
     expect(screen.getByRole('group', { name: 'Remember this as the business name?' })).toHaveTextContent('This replaces “Old Name”.')
     unmount()
-    render(<Harness items={[note('a', 400, 400, { text: 'Old Name' })]} decide={{ memory: remembered, remember: () => {} }} />)
+    render(<Harness items={[note('a', 400, 400, { text: 'Old Name' })]} decide={{ memory: remembered, remember: () => {}, forget: () => {} }} />)
     await user.click(itemEl('a'))
     await user.click(screen.getByRole('button', { name: 'Use as business name' }))
     expect(screen.getByRole('group', { name: 'Remember this as the business name?' })).toHaveTextContent('already remembered')
-    expect(screen.getByRole('button', { name: 'Remember' })).toBeDisabled()
+    // there is nothing to remember again, so the way on is to forget it
+    expect(screen.queryByRole('button', { name: 'Remember' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Forget it' })).toBeInTheDocument()
   })
 
   it('does not offer a name that is too long to be one, but still offers an offer', async () => {
     const user = userEvent.setup()
-    render(<Harness items={[note('a', 400, 400, { text: 'x'.repeat(120) })]} decide={{ memory, remember: () => {} }} />)
+    render(<Harness items={[note('a', 400, 400, { text: 'x'.repeat(120) })]} decide={{ memory, remember: () => {}, forget: () => {} }} />)
     await user.click(itemEl('a'))
     expect(screen.getByRole('button', { name: 'Use as business name' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Use as offer' })).toBeEnabled()

@@ -1,44 +1,16 @@
 import { drawBoard, paintDrawing, type Drawing, type Surface } from './boardDrawing.ts'
-import { SUMMARY_LABELS, SUMMARY_SECTIONS, type BoardItem, type BoardSummary } from './boardTypes.ts'
-import type { ProjectMemory } from './memorySave.ts'
+import type { BoardItem } from './boardTypes.ts'
 
-// Taking the board out of Droplet as a file: a PNG of the board, or a PDF of the board with its summary. The pure parts are here; the PDF
+// Taking the board out of Droplet as a file: a PNG of the board, or a PDF of it. The pure parts are here; the PDF
 // itself is laid out in src/export/boardPdf.tsx, which is loaded only when it is wanted.
 
 export type BoardFormat = 'pdf' | 'png'
 
-export type BoardExportInput = { items: BoardItem[]; summary: BoardSummary | null; memory: ProjectMemory; projectName: string }
+export type BoardExportInput = { items: BoardItem[]; projectName: string }
 
-// What the summary page of the PDF says. The sections with nothing in them are left out, and with nothing at all there is no page.
-export type SummarySheet = {
-  by: string
-  sections: { label: string; lines: string[] }[]
-  remembered: { label: string; value: string }[]
-}
-
-const writtenOn = (iso: string) => {
-  const date = new Date(iso)
-  return Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).format(date)
-}
-
-export function summarySheet(summary: BoardSummary | null, memory: ProjectMemory): SummarySheet | null {
-  const sections = summary ? SUMMARY_SECTIONS.map((section) => ({ label: SUMMARY_LABELS[section], lines: summary[section] })).filter((section) => section.lines.length > 0) : []
-  const remembered = [
-    ...(memory.idea?.name ? [{ label: 'Business name', value: memory.idea.name }] : []),
-    ...(memory.idea?.offer ? [{ label: 'Offer', value: memory.idea.offer }] : []),
-  ]
-  if (sections.length === 0 && remembered.length === 0) return null
-  const date = summary ? writtenOn(summary.writtenAt) : ''
-  const by = !summary || sections.length === 0 ? '' : summary.by === 'droplet' ? (summary.edited ? 'Written by Droplet, changed by the founder' : 'Written by Droplet') : 'Written by the founder'
-  return { by: by && date ? `${by}, ${date}` : by, sections, remembered }
-}
-
-// Why a file cannot be made yet, in words, or null when it can. A PNG is the board, so it needs something on it. The PDF is the board and
-// its summary, so it needs either.
-export function exportBlockedReason(format: BoardFormat, input: Pick<BoardExportInput, 'items' | 'summary' | 'memory'>): string | null {
-  if (input.items.length > 0) return null
-  if (format === 'png') return 'Put something on the board first.'
-  return summarySheet(input.summary, input.memory) ? null : 'Put something on the board or write a summary first.'
+// Why a file cannot be made yet, in words, or null when it can. Both files are the board, so both need something on it.
+export function exportBlockedReason(items: BoardItem[]): string | null {
+  return items.length > 0 ? null : 'Put something on the board first.'
 }
 
 const printable = (text: string) => [...text].map((character) => (character.charCodeAt(0) < 32 ? ' ' : character)).join('')
@@ -103,12 +75,12 @@ export function saveBlob(blob: Blob, fileName: string) {
 
 // Makes the file and hands it to the browser as a download. Returns whether it worked. Nothing here changes the board or the memory.
 export async function exportBoard(format: BoardFormat, input: BoardExportInput): Promise<boolean> {
-  if (exportBlockedReason(format, input)) return false
+  if (exportBlockedReason(input.items)) return false
   try {
     const blob =
       format === 'png'
         ? await boardPng(input.items, pageCanvas)
-        : await (await import('../export/boardPdf.tsx')).buildBoardPdf(input.items, summarySheet(input.summary, input.memory), input.projectName, new Date())
+        : await (await import('../export/boardPdf.tsx')).buildBoardPdf(input.items, input.projectName, new Date())
     if (!blob) return false
     saveBlob(blob, boardFileName(input.projectName, format))
     return true
