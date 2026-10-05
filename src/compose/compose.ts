@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { fallbackTurn, FALLBACK_NOTE } from './fallback.ts'
 import type { Grounding } from './grounding.ts'
 import { buildUserContent, systemPromptFor } from './prompt.ts'
-import { checkTurnFor } from './rules.ts'
+import { checkTurnFor, withoutRepeatedQuestion } from './rules.ts'
 import { boardTurnSchema } from './boardSpec.ts'
 import { invoiceTurnSchema } from './invoiceSpec.ts'
 import { TASKS, isBoardAction, isInvoiceAction, turnJsonSchema, turnSchema, type AnyTurn, type ComposeRequest, type Outcome, type Task, type Turn } from './spec.ts'
@@ -72,7 +72,7 @@ export function checkReply(text: string, asked: Partial<Asked> = {}): { turn?: A
 
   const errors = checkTurnFor(parsed.data, { intent: '', ...asked })
   if (errors.length > 0) return { errors, task: parsed.data.task }
-  return { turn: normalise(parsed.data), errors: [], task: parsed.data.task }
+  return { turn: withoutRepeatedQuestion(normalise(parsed.data)), errors: [], task: parsed.data.task }
 }
 
 // Hex values are stored the same way everywhere: six digits, upper case.

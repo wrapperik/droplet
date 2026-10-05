@@ -81,6 +81,11 @@ const plain = (text: string) =>
     .replace(/[^\p{L}\p{N}']+/gu, ' ')
     .trim()
 
+// Words that make a quote a request for something to be made or opened, and words that make it a description of what the founder is doing.
+// A bare "Colour palette" is a request; "Working on branding" is not.
+const ACTIVITY = /\b(working on|working with|busy with|doing|building|started|starting|i am|i'm|im|we are|we're|i have|i've|we have|we've|got)\b/i
+const REQUEST_CUE = /\b(open|make|create|build|set ?up|start|generate|give|show|need|want|can you|could you|would you|will you|please|let'?s|invoice|bill|add|put|draw up|get me|help)\b/i
+
 // Opening a workspace is the founder's decision, never Droplet's. A reply that opens one must say the founder asked for it or agreed to it,
 // and quote their words, and the quote has to be in what they just wrote. A model that opens a palette because it thinks one would help has
 // nothing to quote, so it cannot.
@@ -110,10 +115,31 @@ export function checkOpening(turn: AnyTurn, request: Pick<ComposeRequest, 'inten
   if (!plain(request.intent).includes(plain(opens.quote))) {
     errors.push(`opens.quote: "${opens.quote}" is not in the founder's message. Quote their own words from <request> exactly. If they did not ask for the workspace or agree to it, do not open it: leave opens out and actions empty, and ask your question.`)
   }
+  // Said as a request. Someone saying what they are doing ("Working on branding", "I'm building a site") has not asked for anything to be opened,
+  // and a model that quotes that to open a workspace is refused.
+  if (ACTIVITY.test(opens.quote) && !REQUEST_CUE.test(opens.quote)) {
+    errors.push(`opens.quote: "${opens.quote}" is a statement, not a request or an agreement. Saying what they are working on or building is not asking for a workspace. Do not open one: leave opens out and actions empty, and ask your question.`)
+  }
   if (opens.because === 'agreed' && !request.history?.some((message) => message.role === 'droplet')) {
     errors.push('opens.because: "agreed" needs an earlier offer from you in <conversation>. If there is none, the founder has not agreed to anything yet.')
   }
   return errors
+}
+
+// The question is shown after the message, so a message that asks it too asks it twice. A small model does this out of habit, so it is mended
+// here and not refused (a refusal cost two attempts and fell back to "I changed nothing"): any trailing sentence of the message that asks
+// something is taken off, as long as something else is left and it is not an item of a list.
+export function withoutRepeatedQuestion<T extends { message: string; question?: string }>(turn: T): T {
+  if (!turn.question) return turn
+  let message = turn.message.trimEnd()
+  for (;;) {
+    const match = /(?:^|(?<=[.!?:])[ \t]+|\n+)([^.!?\n]*\?)$/.exec(message)
+    if (!match || /^\s*(?:[-*\u2022]|\d+[.)])\s/.test(match[1])) break
+    const rest = message.slice(0, match.index).trimEnd()
+    if (rest === '') break
+    message = rest
+  }
+  return message === turn.message.trimEnd() ? turn : { ...turn, message }
 }
 
 // The conversation part of a reply: a question is a question, replies belong to it, and on the invoice a reply never puts a price in the
@@ -125,10 +151,6 @@ export function checkConversation(turn: AnyTurn, request: Pick<ComposeRequest, '
   const placeholder = /\[(?:[A-Z][^\]\n]{14,}|(?:Plan|Checklist|Table)\b[^\]\n]*)\]/
   for (const [field, text] of [['message', turn.message], ['question', question ?? '']] as const) {
     if (placeholder.test(text)) errors.push(`${field}: write the actual words for this founder, not a description in square brackets. A plan or a table goes in blocks.`)
-  }
-  // The question is shown after the message, so asking it in both places asks it twice.
-  if (question && (plain(turn.message).includes(plain(question)) || turn.message.trim().endsWith('?'))) {
-    errors.push('message: do not put your question in the message, or end the message with one. It goes in question only, which is shown after the message.')
   }
   if (question && !question.endsWith('?')) errors.push('question: it must be a question and end with a question mark. Put statements in the message.')
   if (replies && replies.length > 0) {

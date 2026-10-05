@@ -119,6 +119,30 @@ describe('opening and asking whether to open', () => {
   })
 })
 
+describe('saying what you are doing is not asking', () => {
+  const open = (quote: string) => checkReply(reply({ task: 'brand', actions: [palette], opens: { because: 'asked', quote } }), { intent: quote }).errors
+
+  it('refuses a quote that only describes what the founder is working on, even though it is theirs', () => {
+    for (const quote of ['Working on branding', "I'm building the brand", 'we have a brand to do', 'Im busy with colours']) {
+      expect(open(quote)[0], quote).toMatch(/is a statement, not a request or an agreement/)
+    }
+  })
+
+  it('accepts a request, in any wording, including a bare thing asked for', () => {
+    for (const quote of ['Colour palette', 'Make me a palette', 'I am working on branding, can you make colours', 'Brand colours please', 'palette for my bakery']) {
+      expect(open(quote), quote).toEqual([])
+    }
+  })
+
+  it('holds an agreement to it too: a statement is not a yes, but a yes is', () => {
+    const agreed = (quote: string) => checkReply(reply({ task: 'brand', actions: [palette], opens: { because: 'agreed', quote } }), { intent: quote, history: [{ role: 'droplet', text: 'Shall we?' }] }).errors
+    expect(agreed('Working on branding')[0]).toMatch(/is a statement, not a request or an agreement/)
+    expect(agreed('Yes please')).toEqual([])
+    expect(agreed("Let's do it")).toEqual([])
+    expect(agreed('Go on then')).toEqual([])
+  })
+})
+
 describe('descriptions are never sent as words', () => {
   it('refuses a message or question that is a description in square brackets, or a written-out plan, and leaves ordinary brackets alone', () => {
     expect(checkReply(reply({ message: '[A warm reaction to the business and its name.]' }), { intent: 'hi' }).errors[0]).toMatch(/not a description in square brackets/)
@@ -129,15 +153,26 @@ describe('descriptions are never sent as words', () => {
 })
 
 describe('a question is asked once', () => {
-  it('is refused when the message asks it too, or ends on a question, since the question is shown after the message', () => {
-    const ask = (message: string) => checkReply(reply({ message, question: 'What do you already have?' }), { intent: 'hi' }).errors
-    expect(ask('Lovely. What do you already have?')[0]).toMatch(/do not put your question in the message/)
-    expect(ask('Lovely! Do you have a logo?')[0]).toMatch(/do not put your question in the message/)
-    expect(ask('Lovely, a good place to start.')).toEqual([])
+  const asked = (message: string, question = 'What do you already have?') => {
+    const checked = checkReply(reply({ message, question }), { intent: 'hi' })
+    expect(checked.errors).toEqual([])
+    return checked.turn!.message
+  }
+
+  it('is mended, not refused, when the message asks it too: a trailing question is taken off', () => {
+    expect(asked('Lovely. What do you already have?')).toBe('Lovely.')
+    expect(asked('Lovely! Do you have a logo? Or colours?')).toBe('Lovely!')
+    expect(asked('Good start.\n\nWhat do you already have?')).toBe('Good start.')
   })
 
-  it('leaves a message with no question beside it alone', () => {
-    expect(checkReply(reply({ message: 'Does that sound right? It should.' }), { intent: 'hi' }).errors).toEqual([])
+  it('leaves everything else alone: a message with no question, a list, and a message that is only a question', () => {
+    expect(asked('Lovely, a good place to start.')).toBe('Lovely, a good place to start.')
+    expect(asked('Options:\n- **One**: cheap\n- **Two**: is it better?')).toBe('Options:\n- **One**: cheap\n- **Two**: is it better?')
+    expect(asked('What do you already have?')).toBe('What do you already have?')
+  })
+
+  it('does nothing when there is no question beside the message', () => {
+    expect(checkReply(reply({ message: 'Does that sound right? It should.' }), { intent: 'hi' }).turn?.message).toBe('Does that sound right? It should.')
   })
 })
 
@@ -187,7 +222,7 @@ describe('what the prompts teach about Droplet and guiding', () => {
     expect(prompt).toMatch(/1\. name \(the board\)/)
     expect(prompt).toMatch(/do not open anything and do not list options/)
     expect(prompt).toMatch(/Never open one because you think it would help/)
-    expect(prompt).toMatch(/Telling you about their business or their plans is not asking for anything to be made/)
+    expect(prompt).toMatch(/Telling you about their business, their plans or what they are doing is not asking for anything to be made/)
     expect(prompt).toMatch(/Do not ask permission for what they just asked for/)
     expect(prompt).toMatch(/not to opening anything: begin with your context question/)
     expect(prompt).toMatch(/copied exactly/)
@@ -199,7 +234,9 @@ describe('what the prompts teach about Droplet and guiding', () => {
     expect(prompt).toMatch(/signing up/)
     expect(prompt).toMatch(/"blocks" puts up to two things under your message/)
     expect(prompt).toMatch(/Do not open anything yet/)
-    expect(prompt).toMatch(/warm, reassuring and expressive/)
+    expect(prompt).toMatch(/calm, capable friend, not a cheerleader/)
+    expect(prompt).toMatch(/never use "wonderful", "brilliant"/)
+    expect(prompt).toMatch(/"Working on branding"/)
     expect(prompt).not.toContain('—')
   })
 
