@@ -35,7 +35,7 @@
 }
 
 /* A board that fills the screen is drawn under the header and the toolbar. They are lit from below by a blur that grows towards the top and
-   fades to nothing a little way under the toolbar, and a soft tint of the canvas so the controls read over any note. Two layers of blur, a
+   fades to nothing a little way under the toolbar, and a faint tint of the canvas. Two layers of blur, a
    light one that reaches further and a stronger one that stays near the top, make it gradual instead of a hard band. */
 .home__screen[data-immersive] .home__top::before,
 .home__screen[data-immersive] .home__top::after {
@@ -48,7 +48,8 @@
 }
 
 .home__screen[data-immersive] .home__top::before {
-  background: linear-gradient(to bottom, color-mix(in srgb, var(--canvas) 78%, transparent), color-mix(in srgb, var(--canvas) 36%, transparent) 55%, transparent);
+  /* Only a breath of the canvas colour under the blur, so there is no visible slab: the controls get their own glass. */
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--canvas) 32%, transparent), transparent 80%);
   -webkit-backdrop-filter: blur(5px);
   backdrop-filter: blur(5px);
   -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 45%, transparent 100%);
@@ -127,7 +128,9 @@
   z-index: 20;
   display: flex;
   justify-content: center;
-  padding: 1rem 1.5rem 0;
+  /* The same space on the sides as the header has, and a little less above than below the header's buttons, so the bar sits under them
+     as part of the same row of controls. Every workspace's toolbar sits in here. */
+  padding: 0.75rem 1.5rem 0;
 }
 
 .home__shelf:empty {
