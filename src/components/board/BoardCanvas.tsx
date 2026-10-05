@@ -34,9 +34,9 @@ import {
   type RectItem,
 } from '../../lib/boardTypes.ts'
 import { newId } from '../../lib/ids.ts'
-import ToolWindow from '../ToolWindow.tsx'
 import { ConnectorsLayer, FrameView, NoteView, ShapeView, TextLabelView, type ViewProps } from './BoardItemViews.tsx'
 import SelectionBar, { type Decide } from './SelectionBar.tsx'
+import { ReasonTip } from '../Toolbar.tsx'
 import './BoardCanvas.css'
 
 // Space left around the board inside the scrolling view, so its edge can always be seen and reached.
@@ -68,6 +68,9 @@ type Props = {
   dispatch: (action: BoardAction) => void
   reason: string
   controlRef?: RefObject<BoardHandle | null>
+  // When the board fills the screen, how many pixels at the top are covered by the header and the toolbar. The board is drawn starting below
+  // that, so none of it is stuck behind them. Without it (0) the board is a box of its own.
+  topInset?: number
   // Lets a selected note, shape or text be remembered as the business name or the offer, after a confirm in the selection bar.
   decide?: Decide
 }
@@ -98,7 +101,7 @@ const CREATION: Tool[] = ['sticky', 'shape', 'text', 'frame']
 // The board: a fixed area with a clear edge that scrolls, pans and zooms. Notes, shapes, text and frames are placed on it, moved, resized,
 // written in and deleted, and joined with arrows, with the pointer or the keyboard. It never grows past its edge, and nothing can be moved
 // off it.
-export default function BoardCanvas({ state, dispatch, reason, controlRef, decide }: Props) {
+export default function BoardCanvas({ state, dispatch, reason, controlRef, decide, topInset = 0 }: Props) {
   const { selection, tool } = state
   const items = docOf(state).items
   const viewportRef = useRef<HTMLDivElement>(null)
@@ -117,10 +120,14 @@ export default function BoardCanvas({ state, dispatch, reason, controlRef, decid
   const [announcement, setAnnouncement] = useState('')
 
   // The latest values, readable from the listeners of a gesture without going stale.
-  const latest = useRef({ state, zoom, dispatch })
+  const latest = useRef({ state, zoom, dispatch, inset: topInset })
   useLayoutEffect(() => {
-    latest.current = { state, zoom, dispatch }
+    latest.current = { state, zoom, dispatch, inset: topInset }
   })
+  // The view fills the screen, and the header and the toolbar are over its top: that much is covered. The board starts below it, so its top
+  // edge can be scrolled clear of them. What can be seen is the rest, and what the middle of the view means is the middle of that.
+  const padTop = () => PAD + latest.current.inset
+  const visibleMiddleY = (viewport: HTMLElement) => (latest.current.inset + viewport.clientHeight) / 2
 
   const say = (text: string) => setAnnouncement(text)
 
@@ -140,9 +147,9 @@ export default function BoardCanvas({ state, dispatch, reason, controlRef, decid
     const to = clampZoom(next)
     if (!viewport || to === from) return
     const box = viewport.getBoundingClientRect()
-    const anchor = anchorClient ? { x: anchorClient.x - box.left, y: anchorClient.y - box.top } : { x: viewport.clientWidth / 2, y: viewport.clientHeight / 2 }
-    const scroll = scrollAfterZoom({ x: viewport.scrollLeft - PAD, y: viewport.scrollTop - PAD }, anchor, from, to)
-    pendingScroll.current = { x: scroll.x + PAD, y: scroll.y + PAD }
+    const anchor = anchorClient ? { x: anchorClient.x - box.left, y: anchorClient.y - box.top } : { x: viewport.clientWidth / 2, y: visibleMiddleY(viewport) }
+    const scroll = scrollAfterZoom({ x: viewport.scrollLeft - PAD, y: viewport.scrollTop - padTop() }, anchor, from, to)
+    pendingScroll.current = { x: scroll.x + PAD, y: scroll.y + padTop() }
     setZoom(to)
   }, [])
 
@@ -161,14 +168,15 @@ export default function BoardCanvas({ state, dispatch, reason, controlRef, decid
     const viewport = viewportRef.current
     if (!viewport) return
     viewport.scrollLeft = PAD + (BOARD_W * INITIAL_ZOOM) / 2 - viewport.clientWidth / 2
-    viewport.scrollTop = PAD + (BOARD_H * INITIAL_ZOOM) / 2 - viewport.clientHeight / 2
+    viewport.scrollTop = padTop() + (BOARD_H * INITIAL_ZOOM) / 2 - visibleMiddleY(viewport)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const fit = () => {
     const viewport = viewportRef.current
     if (!viewport) return
     pendingScroll.current = { x: 0, y: 0 }
-    setZoom(fitZoom({ w: viewport.clientWidth - PAD * 2, h: viewport.clientHeight - PAD * 2 }))
+    setZoom(fitZoom({ w: viewport.clientWidth - PAD * 2, h: viewport.clientHeight - latest.current.inset - PAD * 2 }))
   }
 
   // Moves the view to show a rectangle of the board, zooming out if it is bigger than the view. A view with no size (not measured) is left alone.
@@ -176,11 +184,11 @@ export default function BoardCanvas({ state, dispatch, reason, controlRef, decid
     const viewport = viewportRef.current
     if (!viewport || viewport.clientWidth === 0 || viewport.clientHeight === 0) return
     const from = latest.current.zoom
-    const fits = Math.min((viewport.clientWidth * 0.92) / rect.w, (viewport.clientHeight * 0.92) / rect.h)
+    const fits = Math.min((viewport.clientWidth * 0.92) / rect.w, ((viewport.clientHeight - latest.current.inset) * 0.92) / rect.h)
     const to = fits < from ? clampZoom(fits) : from
     pendingScroll.current = {
       x: PAD + (rect.x + rect.w / 2) * to - viewport.clientWidth / 2,
-      y: PAD + (rect.y + rect.h / 2) * to - viewport.clientHeight / 2,
+      y: padTop() + (rect.y + rect.h / 2) * to - visibleMiddleY(viewport),
     }
     if (to !== from) setZoom(to)
     else {
@@ -224,14 +232,14 @@ export default function BoardCanvas({ state, dispatch, reason, controlRef, decid
         const viewport = viewportRef.current
         const z = latest.current.zoom
         return viewport
-          ? { x: Math.round(Math.min(Math.max((viewport.scrollLeft + viewport.clientWidth / 2 - PAD) / z, 0), BOARD_W)), y: Math.round(Math.min(Math.max((viewport.scrollTop + viewport.clientHeight / 2 - PAD) / z, 0), BOARD_H)) }
+          ? { x: Math.round(Math.min(Math.max((viewport.scrollLeft + viewport.clientWidth / 2 - PAD) / z, 0), BOARD_W)), y: Math.round(Math.min(Math.max((viewport.scrollTop + visibleMiddleY(viewport) - padTop()) / z, 0), BOARD_H)) }
           : { x: BOARD_W / 2, y: BOARD_H / 2 }
       },
       add: (kind) => {
         const viewport = viewportRef.current
         const { zoom: z, state: current } = latest.current
         const middle: Point = viewport
-          ? { x: (viewport.scrollLeft + viewport.clientWidth / 2 - PAD) / z, y: (viewport.scrollTop + viewport.clientHeight / 2 - PAD) / z }
+          ? { x: (viewport.scrollLeft + viewport.clientWidth / 2 - PAD) / z, y: (viewport.scrollTop + visibleMiddleY(viewport) - padTop()) / z }
           : { x: BOARD_W / 2, y: BOARD_H / 2 }
         const size = SIZE_LIMITS[kind].start
         place(kind, { rect: freeSpotNear(middle, size, docOf(current).items.filter(isRectItem).map(rectOf)) })
@@ -242,7 +250,7 @@ export default function BoardCanvas({ state, dispatch, reason, controlRef, decid
         if (!template) return
         const { zoom: z, state: current } = latest.current
         const middle: Point = viewport
-          ? { x: (viewport.scrollLeft + viewport.clientWidth / 2 - PAD) / z, y: (viewport.scrollTop + viewport.clientHeight / 2 - PAD) / z }
+          ? { x: (viewport.scrollLeft + viewport.clientWidth / 2 - PAD) / z, y: (viewport.scrollTop + visibleMiddleY(viewport) - padTop()) / z }
           : { x: BOARD_W / 2, y: BOARD_H / 2 }
         const { origin, clear } = placeTemplate(template, docOf(current).items, middle)
         latest.current.dispatch({ type: 'add_items', items: instantiateTemplate(template, origin, newId, groupFor(template.id, newId())) })
@@ -583,20 +591,22 @@ export default function BoardCanvas({ state, dispatch, reason, controlRef, decid
   const selectionBox = boundsOf(selectionRects)
   const showBar = selectionBox && !live && !editing && !active
   const held = selectedViews.filter(isFrame).reduce((total, frame) => total + membersOf(items, items.find((item) => item.id === frame.id) as FrameItem).length, 0)
+  // Where the board starts in the scrolling view, from this render's inset (the ref above is for listeners).
+  const top0 = PAD + topInset
   const barStyle: CSSProperties | undefined =
     selectionBox && showBar
       ? (() => {
           const left = PAD + selectionBox.x * zoom
-          const above = PAD + selectionBox.y * zoom - 60
+          const above = top0 + selectionBox.y * zoom - 60
           // Above the selection, unless that is off the top of the board, and then below it.
-          const top = above < 8 ? PAD + (selectionBox.y + selectionBox.h) * zoom + 10 : above
+          const top = above < top0 + 8 ? top0 + (selectionBox.y + selectionBox.h) * zoom + 10 : above
           return { left, top }
         })()
       : undefined
 
   const surface: CSSProperties & { '--cell': string } = {
     left: PAD,
-    top: PAD,
+    top: top0,
     width: BOARD_W * zoom,
     height: BOARD_H * zoom,
     '--cell': `${GRID * 2 * zoom}px`,
@@ -718,7 +728,7 @@ export default function BoardCanvas({ state, dispatch, reason, controlRef, decid
   if (active) classes.push('board--busy')
 
   return (
-    <ToolWindow title="Board" reason={reason}>
+    <section className="board-stage" aria-label="Board">
       <div className={classes.join(' ')}>
         <div
           ref={viewportRef}
@@ -728,7 +738,7 @@ export default function BoardCanvas({ state, dispatch, reason, controlRef, decid
           tabIndex={0}
           onKeyDown={onViewportKeyDown}
         >
-          <div className="board__sizer" style={{ width: BOARD_W * zoom + PAD * 2, height: BOARD_H * zoom + PAD * 2 }}>
+          <div className="board__sizer" style={{ width: BOARD_W * zoom + PAD * 2, height: BOARD_H * zoom + top0 + PAD }}>
             <div
               ref={surfaceRef}
               className="board__surface"
@@ -800,7 +810,11 @@ export default function BoardCanvas({ state, dispatch, reason, controlRef, decid
         <div className="visually-hidden" role="status" aria-live="polite">
           {announcement}
         </div>
+        <div className="board__label glass glass--strong">
+          <span>Board</span>
+          <ReasonTip reason={reason} />
+        </div>
       </div>
-    </ToolWindow>
+    </section>
   )
 }

@@ -34,4 +34,19 @@ describe('the board stylesheet', () => {
     expect(css).toMatch(/\.shape__body--diamond polygon\s*\{[^}]*fill:\s*var\(--shape-fill\)/)
     expect(css).toMatch(/\.shape__body\s*\{[^}]*background:\s*var\(--shape-fill\)/)
   })
+
+  it('fills the screen with no box round it: the stage and the board are absolute and inset to the screen', () => {
+    for (const selector of ['.board-stage', '.board']) {
+      const rule = rules.find((r) => r.selector === selector)!
+      expect(rule.body, selector).toMatch(/position:\s*absolute/)
+      expect(rule.body, selector).toMatch(/inset:\s*0/)
+    }
+    expect(css).not.toMatch(/clamp\([^)]*dvh/)
+  })
+
+  it('opens its reason upwards from the label in the corner, since there is no room below it', () => {
+    const rule = rules.find((r) => r.selector === '.board__label .reason__tip')!
+    expect(rule.body).toMatch(/top:\s*auto/)
+    expect(rule.body).toMatch(/bottom:/)
+  })
 })

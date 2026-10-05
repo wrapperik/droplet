@@ -5,11 +5,9 @@ import { loadBoard, saveBoard } from '../../lib/boardStore.ts'
 import { loadMemory, saveMemory } from '../../lib/memoryStore.ts'
 import type { ProjectMemory } from '../../lib/memorySave.ts'
 import { forgetIdea, withIdea, type IdeaKind } from '../../lib/projectMemory.ts'
-import type { WorkspaceItem } from '../GridWorkspace.tsx'
 import type { ShelfTool } from '../ToolShelf.tsx'
 import WorkspaceShell, { type HeaderSlots } from '../WorkspaceShell.tsx'
 import BoardCanvas, { type BoardHandle } from './BoardCanvas.tsx'
-import SummaryWindow from './SummaryWindow.tsx'
 import BoardExportMenu from './BoardExportMenu.tsx'
 import { exportBlockedReason, exportBoard, type BoardFormat } from '../../lib/boardExport.ts'
 import { ArrowTool, FrameTool, SelectTool, ShapeTool, StickyTool, TemplatesTool, TextTool } from './BoardTools.tsx'
@@ -22,8 +20,8 @@ type Props = {
   // What the board can be asked of, for the parts of the app outside the workspace (such as where the founder is looking).
   handleRef?: RefObject<BoardHandle | null>
   headerSlots?: HeaderSlots
-  // Asks Droplet something in the conversation, as if the founder had typed it. The summary window uses it for "write one".
-  onAsk?: (text: string) => void
+  // How many pixels at the top of the screen are covered by the header and the toolbar, which the board is drawn under.
+  topInset?: number
 }
 
 // What each part is for, said once, shown as its tooltip and as the window's reason.
@@ -35,13 +33,12 @@ const REASONS = {
   frame: 'A labelled area that groups what is inside it, and moves with it. Drag to draw it to size. A frame never holds another frame.',
   connector: 'Pull an arrow from a thing to another, or to a point of its own, from this tool or from the dots on a selected thing. It follows them when they move.',
   templates: 'A starting layout for a kind of thinking, put near the middle of the view for you to fill in. Every part of it can be written in, moved, resized, recoloured and deleted.',
-  summary: 'What is decided, what is still open and what comes next, from the board. Droplet writes it when you ask and you can change any line. It is saved with the board.',
   board: 'Your thinking, laid out. The board has an edge, and nothing goes past it. Notes in pink were written by Droplet when you asked.',
 }
 
 // The board workspace: a toolbar of the tools in hand, and the board, on the shared workspace shell. "Save" saves the notes and how the
 // workspace is arranged. Nothing is saved until the founder saves.
-export default function BoardWorkspace({ projectId, projectName = 'Droplet', state, dispatch, handleRef, headerSlots, onAsk }: Props) {
+export default function BoardWorkspace({ projectId, projectName = 'Droplet', state, dispatch, handleRef, headerSlots, topInset = 0 }: Props) {
   const [saved, setSaved] = useState(() => loadBoard(projectId))
   const [saveFailed, setSaveFailed] = useState(false)
   const ownRef = useRef<BoardHandle | null>(null)
@@ -63,7 +60,7 @@ export default function BoardWorkspace({ projectId, projectName = 'Droplet', sta
   const saveStatus = saveFailed ? 'Could not save' : !saved ? 'Not saved yet' : unsaved ? 'Unsaved changes' : 'All changes saved'
 
   const save = () => {
-    const result = saveBoard(projectId, { items: doc.items, summary: doc.summary, layout: doc.layout, tools: doc.tools, expanded: doc.expanded, hidden: doc.hidden })
+    const result = saveBoard(projectId, { items: doc.items, layout: doc.layout, tools: doc.tools, expanded: doc.expanded, hidden: doc.hidden })
     setSaveFailed(result === null)
     if (result) setSaved(result)
   }
@@ -85,52 +82,14 @@ export default function BoardWorkspace({ projectId, projectName = 'Droplet', sta
     [state, dispatch, doc.reasons],
   )
 
-  const windows: Record<string, WorkspaceItem> = useMemo(
-    () => ({
-      board: {
-        id: 'board',
-        title: 'Board',
-        w: BOARD_SPEC.windowSizes.board.w,
-        minCols: 12,
-        node: (
-          <div className="workspace__card">
-            <BoardCanvas state={state} dispatch={dispatch} reason={reason('board')} controlRef={boardRef} decide={{ memory, remember }} />
-          </div>
-        ),
-        distance: 0.12,
-      },
-      summary: {
-        id: 'summary',
-        title: 'Summary',
-        w: BOARD_SPEC.windowSizes.summary.w,
-        minCols: 8,
-        node: (
-          <div className="workspace__card">
-            <SummaryWindow
-              summary={doc.summary}
-              memory={memory}
-              onEdit={(section, lines) => dispatch({ type: 'edit_summary', section, lines, at: new Date().toISOString() })}
-              onAsk={() => onAsk?.('Write a summary of the board: what is decided, what is still open and what comes next.')}
-              onForget={forget}
-              reason={reason('summary')}
-            />
-          </div>
-        ),
-        distance: 0.3,
-      },
-    }),
-    // reason() only reads doc.reasons; remember and forget only read the memory.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state, dispatch, doc.reasons, memory, onAsk],
-  )
-
   return (
+    <>
     <WorkspaceShell
       spec={BOARD_SPEC}
       arrangement={doc}
       dispatch={dispatch}
       tools={tools}
-      windows={windows}
+      windows={{}}
       canUndo={canUndoBoard(state)}
       canRedo={canRedoBoard(state)}
       onUndo={() => dispatch({ type: 'undo' })}
@@ -140,11 +99,13 @@ export default function BoardWorkspace({ projectId, projectName = 'Droplet', sta
       onSave={save}
       exportButton={
         <BoardExportMenu
-          onExport={(format: BoardFormat) => exportBoard(format, { items: doc.items, summary: doc.summary, memory, projectName })}
-          blockedReason={(format) => exportBlockedReason(format, { items: doc.items, summary: doc.summary, memory })}
+          onExport={(format: BoardFormat) => exportBoard(format, { items: doc.items, projectName })}
+          blockedReason={() => exportBlockedReason(doc.items)}
         />
       }
       headerSlots={headerSlots}
     />
+    <BoardCanvas state={state} dispatch={dispatch} reason={reason('board')} controlRef={boardRef} decide={{ memory, remember, forget }} topInset={topInset} />
+    </>
   )
 }

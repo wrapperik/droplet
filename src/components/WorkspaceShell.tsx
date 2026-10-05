@@ -158,13 +158,16 @@ export default function WorkspaceShell({
           <UndoRightIcon size={18} aria-hidden="true" />
         </button>
       </div>
-      <ComponentsMenu
-        components={spec.components}
-        kind="panel"
-        hidden={arrangement.hidden}
-        onShow={(component) => dispatch({ type: 'show', component })}
-        onHide={(component) => dispatch({ type: 'hide', component })}
-      />
+      {/* A workspace with no window that can be taken away (such as the board, which is the whole screen) has no windows menu. */}
+      {spec.components.some((component) => component.kind === 'panel' && component.hideable) && (
+        <ComponentsMenu
+          components={spec.components}
+          kind="panel"
+          hidden={arrangement.hidden}
+          onShow={(component) => dispatch({ type: 'show', component })}
+          onHide={(component) => dispatch({ type: 'hide', component })}
+        />
+      )}
       <button type="button" className="workspace__button" disabled={arrangementIsDefault(spec, arrangement)} onClick={() => dispatch({ type: 'reset_layout' })}>
         <RestartIcon size={18} aria-hidden="true" />
         <span className="workspace__label">Reset layout</span>
