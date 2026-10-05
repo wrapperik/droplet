@@ -6,7 +6,8 @@ import { localDocumentStorage, type DocumentStorage } from './storage.ts'
 // (email and password, or Google). Without Supabase set up there is a stand-in that is always signed in as the sample founder, so the app
 // still runs on this device alone, and the tests need no service.
 
-export type AuthUser = { id: string; email: string; name: string }
+// `onboarded` is whether they have been through the introduction (see src/pages/Welcome.tsx).
+export type AuthUser = { id: string; email: string; name: string; onboarded: boolean }
 
 export type AuthResult =
   | { ok: true; // The account was made but must be confirmed from the email that was sent before signing in.
@@ -24,6 +25,8 @@ export interface AuthBackend {
   signIn(input: { email: string; password: string }): Promise<AuthResult>
   signInWithGoogle(): Promise<AuthResult>
   signOut(): Promise<void>
+  // Remembers, in the account, that the founder has been through the introduction. False if it could not be saved.
+  completeOnboarding(): Promise<boolean>
 }
 
 // ---- What is checked before anything is sent ----
@@ -66,13 +69,17 @@ export function displayNameOf(metadata: Record<string, unknown> | undefined, ema
   return (email ?? '').split('@')[0] || 'You'
 }
 
+// Whether the account has been through the introduction. Kept in the account's own metadata, so it follows the founder to any device.
+export const ONBOARDED_KEY = 'onboarded'
+export const hasOnboarded = (metadata: Record<string, unknown> | undefined) => metadata?.[ONBOARDED_KEY] === true
+
 // ---- This device alone ----
 
 export const localAuthBackend: AuthBackend = {
   kind: 'local',
   storage: localDocumentStorage,
   async currentUser() {
-    return { id: 'local', email: '', name: mockUser.name }
+    return { id: 'local', email: '', name: mockUser.name, onboarded: true }
   },
   onChange() {
     return () => {}
@@ -87,6 +94,9 @@ export const localAuthBackend: AuthBackend = {
     return { ok: true }
   },
   async signOut() {},
+  async completeOnboarding() {
+    return true
+  },
 }
 
 // ---- Supabase ----
@@ -103,11 +113,12 @@ export type SupabaseAuthClient = DocumentsClient & {
     signInWithPassword(input: { email: string; password: string }): Promise<SupabaseAuthResponse>
     signInWithOAuth(input: { provider: 'google'; options: { redirectTo: string } }): Promise<{ error: { message: string } | null }>
     signOut(): Promise<{ error: { message: string } | null }>
+    updateUser(input: { data: Record<string, unknown> }): Promise<{ error: { message: string } | null }>
   }
 }
 
 const toUser = (user: SupabaseUser | null | undefined): AuthUser | null =>
-  user ? { id: user.id, email: user.email ?? '', name: displayNameOf(user.user_metadata, user.email) } : null
+  user ? { id: user.id, email: user.email ?? '', name: displayNameOf(user.user_metadata, user.email), onboarded: hasOnboarded(user.user_metadata) } : null
 
 // Where the founder is sent after confirming an email or coming back from Google.
 const backTo = () => `${window.location.origin}/home`
@@ -157,6 +168,14 @@ export function createSupabaseAuthBackend(client: SupabaseAuthClient): AuthBacke
     },
     async signOut() {
       await client.auth.signOut()
+    },
+    async completeOnboarding() {
+      try {
+        const { error } = await client.auth.updateUser({ data: { [ONBOARDED_KEY]: true } })
+        return !error
+      } catch {
+        return false
+      }
     },
   }
 }

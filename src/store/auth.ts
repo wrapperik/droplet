@@ -23,6 +23,8 @@ type AuthState = {
   signIn: (input: { email: string; password: string }) => Promise<void>
   signInWithGoogle: () => Promise<void>
   signOut: () => Promise<void>
+  // The founder has been through the introduction. Never holds them up: if it could not be saved they carry on, and see it again next time.
+  completeOnboarding: () => Promise<void>
   clearMessages: () => void
 }
 
@@ -42,10 +44,13 @@ export function setAuthBackend(next: AuthBackend | null) {
 }
 
 export const useAuth = create<AuthState>((set, get) => {
+  // Who has finished the introduction in this session, so a session event that still carries the old account cannot send them back to it.
+  const finished = new Set<string>()
+
   // The documents follow the founder: set before the state says who is signed in, so nothing is read from the wrong place.
   const follow = (user: AuthUser | null) => {
     setDocumentStorage(user ? authBackend().storage : localDocumentStorage)
-    set({ user, status: user ? 'signedIn' : 'signedOut' })
+    set({ user: user && finished.has(user.id) ? { ...user, onboarded: true } : user, status: user ? 'signedIn' : 'signedOut' })
   }
 
   let following: (() => void) | null = null
@@ -112,6 +117,14 @@ export const useAuth = create<AuthState>((set, get) => {
       // The backend tells the store when the session has ended, but it is set here too, so signing out is never left waiting on that.
       follow(null)
       set({ error: '', notice: '' })
+    },
+
+    completeOnboarding: async () => {
+      const user = get().user
+      if (!user || user.onboarded) return
+      finished.add(user.id)
+      set({ user: { ...user, onboarded: true } })
+      await authBackend().completeOnboarding()
     },
 
     clearMessages: () => set({ error: '', notice: '' }),

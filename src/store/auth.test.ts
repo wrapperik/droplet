@@ -4,10 +4,10 @@ import { documentStorage, localDocumentStorage, setDocumentStorage, type Documen
 import { slowMemoryStorage } from '../test/slowStorage.ts'
 import { setAuthBackend, useAuth } from './auth.ts'
 
-const megan: AuthUser = { id: 'u1', email: 'megan@example.com', name: 'Megan' }
+const megan: AuthUser = { id: 'u1', email: 'megan@example.com', name: 'Megan', onboarded: true }
 
 // A backend a test controls: who is signed in, what it answers, and who is listening.
-function fakeBackend(options: { user?: AuthUser | null; kind?: 'local' | 'supabase'; signUp?: AuthResult; signIn?: AuthResult; google?: AuthResult } = {}) {
+function fakeBackend(options: { user?: AuthUser | null; kind?: 'local' | 'supabase'; signUp?: AuthResult; signIn?: AuthResult; google?: AuthResult; onboardingSaved?: boolean } = {}) {
   const storage = slowMemoryStorage(1).driver
   const listeners = new Set<(user: AuthUser | null) => void>()
   let current: AuthUser | null = options.user ?? null
@@ -35,6 +35,10 @@ function fakeBackend(options: { user?: AuthUser | null; kind?: 'local' | 'supaba
     signOut: async () => {
       calls.push('signOut')
       current = null
+    },
+    completeOnboarding: async () => {
+      calls.push('completeOnboarding')
+      return options.onboardingSaved ?? true
     },
   }
   return { backend, storage, calls, emit: (user: AuthUser | null) => { current = user; listeners.forEach((listener) => listener(user)) }, listenerCount: () => listeners.size }
@@ -203,3 +207,39 @@ describe('signing out', () => {
     expect(useAuth.getState().status).toBe('signedIn')
   })
 })
+
+describe('finishing the introduction', () => {
+  const fresh: AuthUser = { ...megan, onboarded: false }
+
+  it('marks the founder as introduced at once, and asks the backend to remember it', async () => {
+    const { backend, calls } = fakeBackend({ user: fresh })
+    setAuthBackend(backend)
+    start()
+    await vi.waitFor(() => expect(useAuth.getState().user).toEqual(fresh))
+    await useAuth.getState().completeOnboarding()
+    expect(useAuth.getState().user?.onboarded).toBe(true)
+    expect(calls).toEqual(['completeOnboarding'])
+  })
+
+  it('does not hold them up when it could not be remembered: they carry on, and are not sent back by a session event that still has the old account', async () => {
+    const { backend, emit } = fakeBackend({ user: fresh, onboardingSaved: false })
+    setAuthBackend(backend)
+    start()
+    await vi.waitFor(() => expect(useAuth.getState().status).toBe('signedIn'))
+    await useAuth.getState().completeOnboarding()
+    emit(fresh)
+    expect(useAuth.getState().user?.onboarded).toBe(true)
+  })
+
+  it('asks nothing of the backend for someone who has been through it, or for nobody', async () => {
+    const { backend, calls } = fakeBackend({ user: megan })
+    setAuthBackend(backend)
+    start()
+    await vi.waitFor(() => expect(useAuth.getState().status).toBe('signedIn'))
+    await useAuth.getState().completeOnboarding()
+    useAuth.setState({ user: null })
+    await useAuth.getState().completeOnboarding()
+    expect(calls).toEqual([])
+  })
+})
+

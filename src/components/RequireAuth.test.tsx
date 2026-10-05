@@ -16,6 +16,7 @@ const backend = (user: AuthUser | null, delayMs = 0): AuthBackend => ({
   signUp: async () => ({ ok: true }),
   signInWithGoogle: async () => ({ ok: true }),
   signOut: async () => {},
+  completeOnboarding: async () => true,
 })
 
 let before: DocumentStorage
@@ -40,7 +41,7 @@ const renderGuarded = () =>
 
 describe('RequireAuth', () => {
   it('shows nothing, and nothing private, while it looks for the session', async () => {
-    setAuthBackend(backend({ id: 'u1', email: 'm@example.com', name: 'Megan' }, 30))
+    setAuthBackend(backend({ id: 'u1', email: 'm@example.com', name: 'Megan', onboarded: true }, 30))
     renderGuarded()
     expect(screen.getByRole('status', { name: 'Signing you in' })).toBeInTheDocument()
     expect(screen.queryByText('The private app')).not.toBeInTheDocument()
@@ -56,7 +57,7 @@ describe('RequireAuth', () => {
   })
 
   it('lets a signed-in founder through', async () => {
-    setAuthBackend(backend({ id: 'u1', email: 'm@example.com', name: 'Megan' }))
+    setAuthBackend(backend({ id: 'u1', email: 'm@example.com', name: 'Megan', onboarded: true }))
     renderGuarded()
     expect(await screen.findByText('The private app')).toBeInTheDocument()
   })

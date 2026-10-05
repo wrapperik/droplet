@@ -66,7 +66,7 @@ describe('the sign-in for this device alone', () => {
 })
 
 // A stand-in for the Supabase client: what it answers is what a test sets, and what it was asked is kept.
-function fakeClient(answers: Partial<{ signUp: unknown; signIn: unknown; oauth: unknown; session: unknown }> = {}) {
+function fakeClient(answers: Partial<{ signUp: unknown; signIn: unknown; oauth: unknown; session: unknown; update: unknown }> = {}) {
   const asked: { method: string; input?: unknown }[] = []
   let listener: ((event: string, session: unknown) => void) | null = null
   const unsubscribe = vi.fn()
@@ -94,6 +94,10 @@ function fakeClient(answers: Partial<{ signUp: unknown; signIn: unknown; oauth: 
         asked.push({ method: 'signOut' })
         return { error: null }
       },
+      updateUser: async (input: unknown) => {
+        asked.push({ method: 'updateUser', input })
+        return (answers.update ?? { error: null }) as never
+      },
     },
   } as unknown as SupabaseAuthClient
   return { client, asked, emit: (event: string, session: unknown) => listener?.(event, session), unsubscribe }
@@ -102,7 +106,7 @@ function fakeClient(answers: Partial<{ signUp: unknown; signIn: unknown; oauth: 
 describe('the sign-in with Supabase', () => {
   it('knows who is signed in from the session, by the name they gave', async () => {
     const { client } = fakeClient({ session: { user: { id: 'u1', email: 'm@example.com', user_metadata: { display_name: 'Megan' } } } })
-    expect(await createSupabaseAuthBackend(client).currentUser()).toEqual({ id: 'u1', email: 'm@example.com', name: 'Megan' })
+    expect(await createSupabaseAuthBackend(client).currentUser()).toEqual({ id: 'u1', email: 'm@example.com', name: 'Megan', onboarded: false })
   })
 
   it('knows nobody is signed in when there is no session, and when the service cannot be reached', async () => {
@@ -120,7 +124,7 @@ describe('the sign-in with Supabase', () => {
     const stop = createSupabaseAuthBackend(client).onChange((user) => seen.push(user))
     emit('SIGNED_IN', { user: { id: 'u1', email: 'm@example.com' } })
     emit('SIGNED_OUT', null)
-    expect(seen).toEqual([{ id: 'u1', email: 'm@example.com', name: 'm' }, null])
+    expect(seen).toEqual([{ id: 'u1', email: 'm@example.com', name: 'm', onboarded: false }, null])
     stop()
     expect(unsubscribe).toHaveBeenCalledTimes(1)
   })
@@ -177,3 +181,30 @@ describe('the sign-in with Supabase', () => {
     expect(asked.map((call) => call.method)).toEqual(['signOut'])
   })
 })
+
+describe('the introduction, kept in the account', () => {
+  it('is read from the account\'s own metadata: only a plain true counts', async () => {
+    for (const [metadata, expected] of [[{ onboarded: true }, true], [{ onboarded: 'true' }, false], [{}, false], [undefined, false]] as const) {
+      const { client } = fakeClient({ session: { user: { id: 'u1', email: 'm@example.com', user_metadata: metadata } } })
+      expect((await createSupabaseAuthBackend(client).currentUser())?.onboarded, JSON.stringify(metadata)).toBe(expected)
+    }
+  })
+
+  it('is written to the account\'s metadata, and says whether that worked', async () => {
+    const { client, asked } = fakeClient()
+    expect(await createSupabaseAuthBackend(client).completeOnboarding()).toBe(true)
+    expect(asked).toEqual([{ method: 'updateUser', input: { data: { onboarded: true } } }])
+    expect(await createSupabaseAuthBackend(fakeClient({ update: { error: { message: 'offline' } } }).client).completeOnboarding()).toBe(false)
+    const broken = fakeClient().client
+    broken.auth.updateUser = async () => {
+      throw new Error('offline')
+    }
+    expect(await createSupabaseAuthBackend(broken).completeOnboarding()).toBe(false)
+  })
+
+  it('is already done on this device alone, where there is no account to introduce', async () => {
+    expect(await localAuthBackend.currentUser()).toMatchObject({ onboarded: true })
+    expect(await localAuthBackend.completeOnboarding()).toBe(true)
+  })
+})
+

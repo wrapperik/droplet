@@ -28,7 +28,7 @@ beforeEach(() => {
   store.listProjects.mockReset()
   store.createProject.mockReset()
   signOut.mockClear()
-  useAuth.setState({ status: 'signedIn', user: { id: 'u1', email: 'm@example.com', name: 'Megan' }, signOut })
+  useAuth.setState({ status: 'signedIn', user: { id: 'u1', email: 'm@example.com', name: 'Megan', onboarded: true }, signOut })
 })
 afterEach(() => useAuth.setState({ status: 'loading', user: null }))
 
@@ -93,7 +93,7 @@ describe('HomeRoute', () => {
     expect(await screen.findByText('Projects: First founder project')).toBeInTheDocument()
     let finish!: (projects: ProjectSummary[]) => void
     store.listProjects.mockReturnValueOnce(new Promise((resolve) => (finish = resolve)))
-    useAuth.setState({ user: { id: 'u2', email: 'other@example.com', name: 'Other' } })
+    useAuth.setState({ user: { id: 'u2', email: 'other@example.com', name: 'Other', onboarded: true } })
     expect(await screen.findByRole('status', { name: 'Loading your projects' })).toBeInTheDocument()
     expect(screen.queryByText(/First founder project/)).not.toBeInTheDocument()
     finish([{ id: 'p9', name: 'Second founder project' }])

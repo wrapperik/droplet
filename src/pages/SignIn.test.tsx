@@ -30,6 +30,7 @@ const backend = (): AuthBackend => ({
     return results.google ?? { ok: true }
   },
   signOut: async () => {},
+  completeOnboarding: async () => true,
 })
 
 let before: DocumentStorage
@@ -153,7 +154,7 @@ describe('the sign-in screen', () => {
   })
 
   it('sends someone who is already signed in on to the app, once the session has been found', async () => {
-    current = { id: 'u1', email: 'megan@example.com', name: 'Megan' }
+    current = { id: 'u1', email: 'megan@example.com', name: 'Megan', onboarded: true }
     renderSignIn()
     expect(await screen.findByText('The app')).toBeInTheDocument()
   })
