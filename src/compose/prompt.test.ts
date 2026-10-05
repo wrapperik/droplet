@@ -48,7 +48,7 @@ describe('buildUserContent', () => {
 
 describe('SYSTEM_PROMPT', () => {
   it('lets the model talk as a normal assistant and act only when asked', () => {
-    expect(SYSTEM_PROMPT).toMatch(/like any helpful assistant/)
+    expect(SYSTEM_PROMPT).toMatch(/like a friend who knows the subject/)
     expect(SYSTEM_PROMPT).toMatch(/Use actions only when the founder asks/)
   })
 

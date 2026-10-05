@@ -1,7 +1,8 @@
 import { z } from 'zod'
 import { boardSnapshotSchema, boardTurnSchema, type BoardTurn } from './boardSpec.ts'
-import { messageField, questionField, repliesField, titleField } from './conversationFields.ts'
+import { blocksField, messageField, opensField, questionField, repliesField, titleField } from './conversationFields.ts'
 import { invoiceSnapshotSchema, invoiceTurnSchema, type InvoiceTurn } from './invoiceSpec.ts'
+import { projectSnapshotSchema } from './journey.ts'
 import { TASKS, type Task } from './taskNames.ts'
 
 export { TASKS, type Task }
@@ -109,7 +110,10 @@ export const turnSchema = z.object({
   message: messageField,
   question: questionField,
   replies: repliesField,
+  blocks: blocksField,
   actions: z.array(actionSchema).max(MAX_ACTIONS).describe('What to do on the workspace. Empty when the founder only wants an answer.'),
+  // After the actions, so the model has decided what it is doing before it says whether that opens a workspace.
+  opens: opensField,
   memoryUsed: z.array(z.string().max(60)).max(6).describe('Which saved decisions you used, by key, such as brand.palette.'),
   title: titleField,
 })
@@ -187,6 +191,8 @@ export const composeRequestSchema = z.object({
   // The board, when it is the one on screen.
   board: boardSnapshotSchema.optional(),
   memory: paletteSnapshotSchema.optional(),
+  // What the project holds and so where the founder is on the journey: the name, whether there is a palette, how many invoices.
+  project: projectSnapshotSchema.optional(),
 })
 export type ComposeRequest = z.infer<typeof composeRequestSchema>
 
@@ -232,13 +238,12 @@ export const isInvoiceAction = (action: { type: string }) => INVOICE_ONLY.includ
 const BOARD_ONLY = ['add_note', 'fill_prompt', 'cluster', 'add_template', 'connect']
 export const isBoardAction = (action: { type: string }) => BOARD_ONLY.includes(action.type)
 
-// Where a reply asks to be taken. The composer names the task (that is what it is for), and when that task belongs to another workspace and
-// there is nothing to do yet, the app opens that workspace and asks again with it in front of the composer. Ideation is the board: a reply
-// that names it, does nothing and asks nothing is the composer saying it is opening the board. Advice about names or offers carries a question, or is "chat", and does not open it.
+// Where a reply asks to be taken. A workspace opens only when the founder asked for it or agreed to it, which the reply says in `opens` (and the
+// app checks, see rules.ts). The composer names the task, and when that task belongs to a workspace that is not on screen and there is
+// nothing to do yet, the app opens it and asks again with it in front of the composer. Without `opens` a reply is a conversation, whatever
+// task it names: Droplet offers a workspace in words and the founder decides.
 export function routedTo(turn: AnyTurn, view?: View): View | null {
-  if (turn.actions.length > 0) return null
-  if (turn.task === 'invoice' && view !== 'invoice') return 'invoice'
-  if (turn.task === 'brand' && (view === 'invoice' || view === 'board')) return 'brand'
-  if (turn.task === 'ideation' && view !== 'board' && !turn.question) return 'board'
-  return null
+  if (turn.actions.length > 0 || !turn.opens) return null
+  const target: View | null = turn.task === 'invoice' ? 'invoice' : turn.task === 'brand' ? 'brand' : turn.task === 'ideation' ? 'board' : null
+  return target && target !== view ? target : null
 }

@@ -186,7 +186,7 @@ describe('the compose function in Supabase', () => {
 
   it('records how it went with no words of the founder\'s, or the model\'s, in the row', async () => {
     const { fetchImpl, calls } = fakeSupabase()
-    const response = await withModel(() => createEdgeComposeHandler(env, fetchImpl)(post({ intent: 'invoice Pretoria Print Works for 12 boxes at R450' })))
+    const response = await withModel(() => createEdgeComposeHandler(env, fetchImpl)(post({ intent: 'a palette for Pretoria Print Works invoices at R450' })))
     expect(response.status).toBe(200)
     const insert = calls.find((call) => call.init?.method === 'POST' && call.url.endsWith('/rest/v1/compositions'))!
     const row = JSON.parse(String(insert.init?.body)) as Record<string, unknown>

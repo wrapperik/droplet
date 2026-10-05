@@ -1,6 +1,7 @@
 import { openWorkspace } from '../lib/workspaceState.ts'
 import { applyTurnActions } from './applyActions.ts'
 import { applyBoardTurnActions } from './boardActions.ts'
+import { checkBlocks } from './blocks.ts'
 import { stateOfBoardSnapshot } from './boardSnapshot.ts'
 import type { BoardSnapshot, BoardTurn } from './boardSpec.ts'
 import { stateOfSnapshot } from './snapshot.ts'
@@ -72,11 +73,58 @@ export function checkBoardTurn(turn: BoardTurn, board: BoardSnapshot | undefined
 // A rand amount written in a suggested reply, such as "R450" or "250 rand".
 const RAND_AMOUNT = /\bR\s?\d|\d\s?(?:rand|zar)\b/i
 
+// Words compared the way a person would: capitals, curly quotes, punctuation and spacing do not matter.
+const plain = (text: string) =>
+  text
+    .toLowerCase()
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[^\p{L}\p{N}']+/gu, ' ')
+    .trim()
+
+// Opening a workspace is the founder's decision, never Droplet's. A reply that opens one must say the founder asked for it or agreed to it,
+// and quote their words, and the quote has to be in what they just wrote. A model that opens a palette because it thinks one would help has
+// nothing to quote, so it cannot.
+export function checkOpening(turn: AnyTurn, request: Pick<ComposeRequest, 'intent' | 'history' | 'view'> & { workspace?: unknown }): string[] {
+  // With no workspace on screen, palette actions are what open the palette. A request that carries the palette's workspace has it on screen.
+  const opensPalette = request.view === undefined && request.workspace === undefined && turn.task === 'brand' && turn.actions.some((action) => action.type !== 'undo' && action.type !== 'redo')
+  const { opens } = turn
+  // A reply that names the task of a workspace that is not on screen, and does nothing and asks nothing, is a reply that says it is opening
+  // that workspace. Without `opens` the app does not open it, so the message would be untrue.
+  const here: ComposeRequest['view'] | undefined = request.view ?? (request.workspace === undefined ? undefined : 'brand')
+  const named = turn.task === 'invoice' ? 'invoice' : turn.task === 'brand' ? 'brand' : turn.task === 'ideation' ? 'board' : null
+  if (!opens && named && named !== here && turn.actions.length === 0 && !turn.question) {
+    return ['opens: this reply names a workspace\'s task but does nothing and asks nothing, and a workspace opens only with opens. If the founder asked for it or agreed to it, set opens with their exact words. If not, answer or ask your question, and use the task "chat" if you are only talking.']
+  }
+  if (!opens) {
+    return opensPalette
+      ? [
+          'opens: this reply opens the palette but has no opens. If the founder asked for a palette, or agreed to your offer of one, add opens: { because: "asked" or "agreed", quote: their exact words from <request> } and keep the actions. If they did not ask for one, remove the actions and ask your question instead.',
+        ]
+      : []
+  }
+  const errors: string[] = []
+  // A reply that opens a workspace and asks whether to open it says two things that cannot both be so.
+  if (turn.question && /\bopen\b/i.test(turn.question) && turn.actions.length > 0) {
+    errors.push('question: you are opening the workspace in this reply, so do not ask whether to open it. Ask about what you put in it.')
+  }
+  if (!plain(request.intent).includes(plain(opens.quote))) {
+    errors.push(`opens.quote: "${opens.quote}" is not in the founder's message. Quote their own words from <request> exactly. If they did not ask for the workspace or agree to it, do not open it: leave opens out and actions empty, and ask your question.`)
+  }
+  if (opens.because === 'agreed' && !request.history?.some((message) => message.role === 'droplet')) {
+    errors.push('opens.because: "agreed" needs an earlier offer from you in <conversation>. If there is none, the founder has not agreed to anything yet.')
+  }
+  return errors
+}
+
 // The conversation part of a reply: a question is a question, replies belong to it, and on the invoice a reply never puts a price in the
 // founder's mouth. A tapped reply is sent as the founder's own words, so a suggested figure would pass the check that prices come from them.
-export function checkConversation(turn: AnyTurn, request: Pick<ComposeRequest, 'intent' | 'history' | 'view'>): string[] {
-  const errors: string[] = []
+export function checkConversation(turn: AnyTurn, request: Pick<ComposeRequest, 'intent' | 'history' | 'view'> & { workspace?: unknown }): string[] {
+  const errors: string[] = [...checkBlocks(turn.blocks), ...checkOpening(turn, request)]
   const { question, replies } = turn
+  // The question is shown after the message, so asking it in both places asks it twice.
+  if (question && (plain(turn.message).includes(plain(question)) || turn.message.trim().endsWith('?'))) {
+    errors.push('message: do not put your question in the message, or end the message with one. It goes in question only, which is shown after the message.')
+  }
   if (question && !question.endsWith('?')) errors.push('question: it must be a question and end with a question mark. Put statements in the message.')
   if (replies && replies.length > 0) {
     if (!question) errors.push('replies: give replies only with a question. Add the question or leave the replies out.')

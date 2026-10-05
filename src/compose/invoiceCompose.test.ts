@@ -150,9 +150,8 @@ describe('what the composer is told', () => {
     expect(INVOICE_SYSTEM_PROMPT).not.toContain('set_palette')
   })
 
-  it('says where each prompt sends a request that belongs to the other workspace', () => {
-    expect(SYSTEM_PROMPT).toMatch(/answer with task "invoice", no actions/)
-    expect(INVOICE_SYSTEM_PROMPT).toMatch(/answer with task "brand", no actions/)
+  it('tells each prompt how a workspace that is not on screen is opened', () => {
+    for (const prompt of [SYSTEM_PROMPT, INVOICE_SYSTEM_PROMPT]) expect(prompt).toMatch(/name its task \(brand, invoice, or ideation for the board\), leave actions empty and set opens/)
   })
 })
 
@@ -243,20 +242,25 @@ describe('asking for the invoice, end to end', () => {
 })
 
 describe('being taken to the other workspace', () => {
-  const noActions = (task: string) => invoiceTurnSchema.parse(turn([], { task }))
+  const opens = { because: 'asked', quote: 'open it' }
+  const noActions = (task: string, over: Record<string, unknown> = {}) => invoiceTurnSchema.parse(turn([], { task, opens, ...over }))
 
-  it('happens for a reply that names the other workspace\'s task and does nothing yet', () => {
+  it('happens for a reply that names the other workspace\'s task, does nothing yet and says the founder asked', () => {
     expect(routedTo(noActions('invoice'), 'brand')).toBe('invoice')
     expect(routedTo(noActions('invoice'), undefined)).toBe('invoice')
     expect(routedTo(noActions('brand'), 'invoice')).toBe('brand')
   })
 
-  it('does not happen on the right workspace, for other tasks, or when there is something to do', () => {
+  it('does not happen without the founder asking: Droplet offers the workspace in words and the founder decides', () => {
+    expect(routedTo(noActions('invoice', { opens: undefined }), 'brand')).toBeNull()
+    expect(routedTo(noActions('invoice', { opens: undefined }), undefined)).toBeNull()
+  })
+
+  it('does not happen on the right workspace, for chat, or when there is something to do', () => {
     expect(routedTo(noActions('invoice'), 'invoice')).toBeNull()
     expect(routedTo(noActions('brand'), 'brand')).toBeNull()
-    expect(routedTo(noActions('brand'), undefined)).toBeNull()
     expect(routedTo(noActions('chat'), 'invoice')).toBeNull()
-    expect(routedTo(invoiceTurnSchema.parse(turn([{ type: 'undo' }])), 'brand')).toBeNull()
+    expect(routedTo(invoiceTurnSchema.parse(turn([{ type: 'undo' }], { opens })), 'brand')).toBeNull()
   })
 })
 

@@ -29,6 +29,7 @@ export const validOpenTurn: Turn = {
       businessName: 'Kindred Gifting',
     },
   ],
+  opens: { because: 'asked', quote: 'palette' },
   memoryUsed: [],
 }
 

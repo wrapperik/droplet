@@ -1,4 +1,7 @@
 import { z } from 'zod'
+import { blocksField } from './blocks.ts'
+
+export { blocksField }
 
 // The parts of a turn that are about the conversation rather than the workspace, shared by the palette's turn and the invoice's so
 // both talk the same way. The message is what was done or answered. The question is the one thing Droplet asks next, and the
@@ -42,3 +45,18 @@ export const titleField = z
   .describe(
     'A name for this chat in the founder\'s history: two to five words on its subject, such as "Pricing gift boxes". Give it when the chat has no name yet and has a subject, or when the subject has clearly changed. Otherwise leave it out. Sentence case, no quotation marks, no full stop, under 40 characters.',
   )
+
+export const MAX_QUOTE_LENGTH = 120
+
+// Droplet opens a workspace only when the founder asked for it outright or agreed to an offer. It says so here, and quotes the founder's own
+// words, which the app checks are really in their message: a reply that opens a workspace without a quote that is there is refused.
+export const opensSchema = z.object({
+  because: z.enum(['asked', 'agreed']).describe('"asked" if the founder asked for this workspace outright, "agreed" if they said yes to your offer of it (including a tap on an Open button).'),
+  quote: z.string().trim().min(3).max(MAX_QUOTE_LENGTH).describe('The founder\'s own words from <request> that ask for the workspace or agree to it, copied exactly. Not your words.'),
+})
+
+export type Opens = z.infer<typeof opensSchema>
+
+export const opensField = opensSchema
+  .optional()
+  .describe('Only when this reply opens a workspace that is not on screen. Leave it out otherwise, and never open one the founder did not ask for or agree to.')

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { SHAPE_KINDS, SHAPE_COLOURS, NOTE_COLOURS, TEXT_SIZES, CONNECTOR_STYLES, CONNECTOR_HEADS } from '../lib/boardTypes.ts'
 import { TEMPLATE_IDS } from '../lib/boardTemplates.ts'
-import { messageField, questionField, repliesField, titleField } from './conversationFields.ts'
+import { blocksField, messageField, opensField, questionField, repliesField, titleField } from './conversationFields.ts'
 import { TASKS } from './taskNames.ts'
 
 // What the composer may do on the business-idea board, and what it is told about it. The same rules as for the palette and the invoice: the
@@ -77,7 +77,10 @@ export const boardTurnSchema = z.object({
   message: messageField,
   question: questionField,
   replies: repliesField,
+  blocks: blocksField,
   actions: z.array(boardActionSchema).max(MAX_BOARD_ACTIONS).describe('What to do on the board. Empty when the founder only wants an answer.'),
+  // After the actions, so the model has decided what it is doing before it says whether that opens a workspace.
+  opens: opensField,
   memoryUsed: z.array(z.string().max(60)).max(6).describe('Which saved decisions you used, by key.'),
   title: titleField,
 })

@@ -1,6 +1,6 @@
 import { ComposeError, checkReply, composeWorkspace, type ModelCaller, type ModelRequest } from './compose.ts'
 import { checkTurnFor } from './rules.ts'
-import { fallbackTurn, FALLBACK_NOTE, starterTurn } from './fallback.ts'
+import { fallbackTurn, FALLBACK_NOTE } from './fallback.ts'
 import { chatTurn, openSnapshot, validOpenReply, validOpenTurn } from './fixtures.ts'
 
 const request = { intent: 'a colour palette for my gift box business' }
@@ -23,7 +23,7 @@ describe('checkReply', () => {
       ...validOpenTurn,
       actions: [{ ...validOpenTurn.actions[0], colours: (validOpenTurn.actions[0] as { colours: { hex: string }[] }).colours.map((c) => ({ ...c, hex: c.hex.toLowerCase() })) }],
     })
-    const checked = checkReply('```json\n' + lower + '\n```')
+    const checked = checkReply('```json\n' + lower + '\n```', { intent: 'a palette' })
     expect(checked.errors).toEqual([])
     const action = checked.turn!.actions[0]
     expect(action.type === 'set_palette' && action.colours[0].hex).toBe('#F7EFE6')
@@ -42,7 +42,7 @@ describe('checkReply', () => {
 
   it('checks the actions against the workspace it was asked about', () => {
     const turn = JSON.stringify({ task: 'brand', message: 'Done.', memoryUsed: [], actions: [{ type: 'set_colour', index: 8, hex: '#123456' }] })
-    expect(checkReply(turn, { workspace: openSnapshot() }).errors[0]).toMatch(/There is no colour 8/)
+    expect(checkReply(turn, { view: 'brand', workspace: openSnapshot() }).errors[0]).toMatch(/There is no colour 8/)
   })
 
   it('keeps the task it saw even when the reply is unusable', () => {
@@ -91,17 +91,18 @@ describe('composeWorkspace', () => {
   it('treats actions that cannot be done on this workspace as a bad reply, and sends the reason back', async () => {
     const impossible = JSON.stringify({ task: 'brand', message: 'Done.', memoryUsed: [], actions: [{ type: 'remove_colour', index: 7 }] })
     const { call, calls } = scripted([impossible, JSON.stringify(chatTurn)])
-    const result = await composeWorkspace({ intent: 'remove colour 7', workspace: openSnapshot() }, call)
+    const result = await composeWorkspace({ intent: 'remove colour 7', view: 'brand', workspace: openSnapshot() }, call)
     expect(result.outcome).toBe('retried')
     expect(calls[1].user).toContain('There is no colour 7')
   })
 
-  it('opens the starter palette after two bad answers when nothing is open, with a note', async () => {
+  it('opens nothing after two bad answers when nothing is open: it says so, with a note, and asks again', async () => {
     const { call } = scripted(['nope', '{"task":"brand"}'])
     const result = await composeWorkspace(request, call)
     expect(result.outcome).toBe('fallback')
     expect(result.note).toBe(FALLBACK_NOTE)
-    expect(result.turn.actions[0].type).toBe('set_palette')
+    expect(result.turn.actions).toEqual([])
+    expect(result.turn.opens).toBeUndefined()
     expect(checkTurnFor(result.turn, { intent: 'x' })).toEqual([])
   })
 
@@ -128,15 +129,17 @@ describe('composeWorkspace', () => {
 
 describe('fallbackTurn', () => {
   it('is a valid turn the app can apply', () => {
-    expect(checkTurnFor(starterTurn('x'), { intent: 'x' })).toEqual([])
     expect(checkTurnFor(fallbackTurn('brand', false), { intent: 'x' })).toEqual([])
     expect(checkTurnFor(fallbackTurn('chat', false), { intent: 'x' })).toEqual([])
     expect(checkTurnFor(fallbackTurn(undefined, true), { intent: 'x', workspace: openSnapshot() })).toEqual([])
   })
 
-  it('is honest for another task: no palette nobody asked for', () => {
-    const turn = fallbackTurn('invoice', false)
-    expect(turn.task).toBe('invoice')
-    expect(turn.actions).toEqual([])
+  it('never opens a workspace: with none open it asks again, whatever task it was for', () => {
+    for (const task of ['brand', 'invoice', 'ideation', 'chat', undefined] as const) {
+      const turn = fallbackTurn(task, false)
+      expect(turn.actions).toEqual([])
+      expect(turn.opens).toBeUndefined()
+      expect(turn.message).toMatch(/say it another way/)
+    }
   })
 })

@@ -135,12 +135,11 @@ describe('what the composer is told about the board', () => {
     expect(BOARD_SYSTEM_PROMPT).toContain('Describe one real person')
   })
 
-  it('says where each prompt sends a request that belongs to another workspace, and that only a board request opens the board', () => {
-    expect(SYSTEM_PROMPT).toMatch(/answer with task "ideation", no actions/)
-    expect(INVOICE_SYSTEM_PROMPT).toMatch(/answer with task "ideation", no actions/)
-    expect(BOARD_SYSTEM_PROMPT).toMatch(/answer with task "brand", no actions/)
-    expect(BOARD_SYSTEM_PROMPT).toMatch(/answer with task "invoice", no actions/)
-    expect(SYSTEM_PROMPT).toMatch(/ordinary advice about their business, such as how to price, is task chat/)
+  it('tells every prompt how a workspace that is not on screen is opened, and that advice is not a request for the board', () => {
+    for (const prompt of [SYSTEM_PROMPT, INVOICE_SYSTEM_PROMPT, BOARD_SYSTEM_PROMPT]) {
+      expect(prompt).toMatch(/name its task \(brand, invoice, or ideation for the board\), leave actions empty and set opens/)
+      expect(prompt).toMatch(/Ordinary advice, such as how to price, is "chat"/)
+    }
   })
 })
 
@@ -239,22 +238,27 @@ describe('asking for the board, end to end', () => {
 })
 
 describe('being taken to the board and away from it', () => {
-  const noActions = (task: string, over: Record<string, unknown> = {}) => boardTurnSchema.parse(turn([], { task, ...over }))
+  const opens = { because: 'asked', quote: 'open it' }
+  const noActions = (task: string, over: Record<string, unknown> = {}) => boardTurnSchema.parse(turn([], { task, opens, ...over }))
 
-  it('happens for a reply that names the board\'s task, does nothing and asks nothing', () => {
+  it('happens for a reply that names the board\'s task, does nothing and says the founder asked', () => {
     expect(routedTo(noActions('ideation'), 'brand')).toBe('board')
     expect(routedTo(noActions('ideation'), 'invoice')).toBe('board')
     expect(routedTo(noActions('ideation'), undefined)).toBe('board')
   })
 
-  it('does not happen for advice, which carries a question, or on the board, or when there is something to do', () => {
-    expect(routedTo(noActions('ideation', { question: 'Do you know what a box costs?' }), undefined)).toBeNull()
+  it('does not happen without the founder asking, however the reply names the task: it is a conversation, and Droplet offers', () => {
+    expect(routedTo(noActions('ideation', { opens: undefined }), undefined)).toBeNull()
+    expect(routedTo(noActions('ideation', { opens: undefined, question: 'Shall I open the board?' }), 'brand')).toBeNull()
+  })
+
+  it('does not happen on the board, for chat, or when there is something to do', () => {
     expect(routedTo(noActions('ideation'), 'board')).toBeNull()
-    expect(routedTo(boardTurnSchema.parse(turn([{ type: 'undo' }])), 'brand')).toBeNull()
+    expect(routedTo(boardTurnSchema.parse(turn([{ type: 'undo' }], { opens })), 'brand')).toBeNull()
     expect(routedTo(noActions('chat'), 'brand')).toBeNull()
   })
 
-  it('takes a founder who is on the board to the palette or the invoice when that is what the request is about', () => {
+  it('takes a founder who is on the board to the palette or the invoice when they ask for it', () => {
     expect(routedTo(noActions('brand'), 'board')).toBe('brand')
     expect(routedTo(noActions('invoice'), 'board')).toBe('invoice')
     expect(routedTo(noActions('brand'), 'brand')).toBeNull()
