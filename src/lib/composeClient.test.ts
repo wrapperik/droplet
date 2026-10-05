@@ -68,3 +68,45 @@ describe('requestComposition', () => {
     expect(await requestComposition(request, { fetchImpl: reply(abort) })).toMatchObject({ ok: false, kind: 'timeout' })
   })
 })
+
+describe('requestComposition against the deployed function', () => {
+  const target = { url: 'https://abc.supabase.co/functions/v1/compose', authenticated: true }
+  const headers = async () => ({ authorization: 'Bearer the-users-token', apikey: 'publishable' })
+
+  it('sends the request to the function with the founder\'s token', async () => {
+    let seen: { url: string; init?: RequestInit } | null = null
+    const impl = (async (url: string, init?: RequestInit) => {
+      seen = { url, init }
+      return json({ outcome: 'valid', turn: validOpenTurn })
+    }) as unknown as typeof fetch
+    const result = await requestComposition(request, { fetchImpl: impl, target, headers })
+    expect(result.ok).toBe(true)
+    expect(seen!.url).toBe('https://abc.supabase.co/functions/v1/compose')
+    expect(seen!.init?.headers).toMatchObject({ 'content-type': 'application/json', authorization: 'Bearer the-users-token', apikey: 'publishable' })
+  })
+
+  it('asks for headers for the target it is sending to', async () => {
+    let asked: unknown = null
+    await requestComposition(request, {
+      fetchImpl: reply(json({ outcome: 'valid', turn: validOpenTurn })),
+      target,
+      headers: async (given) => {
+        asked = given
+        return {}
+      },
+    })
+    expect(asked).toBe(target)
+  })
+
+  it('tells the founder to sign in again when the function says the session is not good', async () => {
+    const result = await requestComposition(request, { fetchImpl: reply(json({ error: 'unauthorised', message: 'Sign in to use Droplet.' }, 401)), target, headers })
+    expect(result).toEqual({ ok: false, kind: 'unauthorised', message: 'Sign in to use Droplet.' })
+  })
+
+  it('does not tell a founder of the deployed app to check a dev server', async () => {
+    const result = await requestComposition(request, { fetchImpl: reply(new Error('offline')), target, headers })
+    expect(result).toMatchObject({ ok: false, kind: 'network', message: expect.stringMatching(/Check your connection/) })
+    const dev = await requestComposition(request, { fetchImpl: reply(new Error('offline')) })
+    expect(dev).toMatchObject({ ok: false, kind: 'network', message: expect.stringMatching(/dev server/) })
+  })
+})
