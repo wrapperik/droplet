@@ -9,6 +9,9 @@ In the Supabase dashboard, open **SQL Editor**, make a new query, paste `supabas
 It makes the `compositions` table the function writes to and counts from. It keeps no words of anyone's: only who asked, the task, how it went, the
 model, and how long it took.
 
+To let the composer search the web (optional, see below), also run `supabase/migrations/20261006000000_compositions_searched.sql`. It adds one
+column, `searched`, which the function counts to hold each founder to a daily number of searches. Nothing of what was searched for is kept.
+
 ## 2. The function
 
 The function is generated from the app's own code, so it can never disagree with the app about what a valid turn is.
@@ -28,6 +31,18 @@ npx supabase secrets set GEMINI_API_KEY=your-gemini-key
 Optional secrets, the same names as in `.env.example`: `GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL`, `GEMINI_THINKING_LEVEL`, and
 `COMPOSE_LIMIT_PER_HOUR` (default 60 requests an hour for each founder). `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are given to the function
 by Supabase itself.
+
+**Web search** is off in the deployed function until you turn it on. Run the `searched` migration above first, then set how many requests a founder
+may have answered with a Google search in a day:
+
+```
+npx supabase secrets set COMPOSE_SEARCH_PER_DAY=10
+```
+
+Search only works on the main model (`gemini-3.8-flash`), which can search and answer in the app's JSON in one request. On the free tier that model
+allows only about 20 requests a day per key, and when they are used up the app answers with the fallback model, which does not search. Each search
+counts against the key's free 5,000 searches a month (shared by the Gemini 3 models), and past that it is billed. Google's terms require the search
+suggestions to be shown with any answer that used search, which the app does.
 
 **Deploy:**
 
