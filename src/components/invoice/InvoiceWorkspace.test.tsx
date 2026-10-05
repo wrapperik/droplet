@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { useDocumentStorage, type DocumentStorage } from '../../lib/storage.ts'
+import { setDocumentStorage, type DocumentStorage } from '../../lib/storage.ts'
 import { slowMemoryStorage } from '../../test/slowStorage.ts'
 import { newContent } from '../../lib/invoice.ts'
 import { invoiceDocOf, openInvoiceWorkspace, reduceInvoice, type InvoiceAction } from '../../lib/invoiceState.ts'
@@ -277,10 +277,10 @@ describe('the invoice workspace', () => {
 
 describe('the invoice workspace while the project\'s memory is still being read', () => {
   let before: DocumentStorage
-  afterEach(() => useDocumentStorage(before))
+  afterEach(() => setDocumentStorage(before))
 
   it('says nothing about saving until the memory has been read, so nothing is judged against what has not arrived', async () => {
-    before = useDocumentStorage(slowMemoryStorage(30).driver)
+    before = setDocumentStorage(slowMemoryStorage(30).driver)
     render(<Harness />)
     expect(screen.queryByText(/Not saved yet|Unsaved changes|All changes saved/)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Save/ })).toBeDisabled()
@@ -289,7 +289,7 @@ describe('the invoice workspace while the project\'s memory is still being read'
 
   it('remembers a confirmed invoice through the storage, and not in this browser\'s', async () => {
     const slow = slowMemoryStorage(5)
-    before = useDocumentStorage(slow.driver)
+    before = setDocumentStorage(slow.driver)
     const user = userEvent.setup()
     render(<Harness />)
     await screen.findByText('Not saved yet')
@@ -297,8 +297,8 @@ describe('the invoice workspace while the project\'s memory is still being read'
     await user.type(await clientName(user), 'Pretoria Print Works')
     await user.click(screen.getByRole('button', { name: 'Save' }))
     await user.click(screen.getByRole('button', { name: 'Confirm and save' }))
-    await waitFor(() => expect(slow.documents.has('duckstack/memory')).toBe(true))
-    expect(slow.documents.has('duckstack/invoice')).toBe(true)
+    // the memory is saved first and the arrangement after it, each taking its time
+    await waitFor(() => expect([...slow.documents.keys()].sort()).toEqual(['duckstack/invoice', 'duckstack/memory']))
     expect(window.localStorage.length).toBe(0)
   })
 })

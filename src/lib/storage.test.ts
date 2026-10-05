@@ -7,7 +7,7 @@ import { loadMemory, saveMemory } from './memoryStore.ts'
 import { emptyMemory, withIdea } from './projectMemory.ts'
 import { loadPalette, savePalette } from './projectStore.ts'
 import { slowMemoryStorage } from '../test/slowStorage.ts'
-import { localDocumentStorage, documentStorage, useDocumentStorage, type DocumentStorage } from './storage.ts'
+import { localDocumentStorage, documentStorage, setDocumentStorage, type DocumentStorage } from './storage.ts'
 
 beforeEach(() => window.localStorage.clear())
 
@@ -47,11 +47,11 @@ describe('the local document storage', () => {
 
 describe('swapping the storage', () => {
   let before: DocumentStorage
-  afterEach(() => useDocumentStorage(before))
+  afterEach(() => setDocumentStorage(before))
 
   it('is how a database goes in: every store reads and writes through it, and nothing touches this browser\'s storage', async () => {
     const { driver, documents } = slowMemoryStorage(1)
-    before = useDocumentStorage(driver)
+    before = setDocumentStorage(driver)
     expect(documentStorage()).toBe(driver)
 
     const palette = await savePalette('p', { blocks: [{ id: 1, hex: '#1F8FE0' }, { id: 2, hex: '#0B4F8A' }], layout: [] })
@@ -76,7 +76,7 @@ describe('swapping the storage', () => {
 
   it('still validates what comes back, whatever the storage holds', async () => {
     const { driver, documents } = slowMemoryStorage(1)
-    before = useDocumentStorage(driver)
+    before = setDocumentStorage(driver)
     documents.set('p/palette', { blocks: 'nonsense' })
     documents.set('p/memory', 42)
     documents.set('p/chats', [{ id: 'good', title: 'Fine', updatedAt: 'x', messages: [] }, { nope: true }])
@@ -87,7 +87,7 @@ describe('swapping the storage', () => {
 
   it('clears a document through it', async () => {
     const { driver, documents, calls } = slowMemoryStorage(1)
-    before = useDocumentStorage(driver)
+    before = setDocumentStorage(driver)
     await saveChats('p', [])
     await clearChats('p')
     await saveBoard('p', { ...docOf(openBoard([])), layout: [] })
@@ -99,7 +99,7 @@ describe('swapping the storage', () => {
 
   it('hands back the driver it replaced, so it can be put back', () => {
     const { driver } = slowMemoryStorage()
-    before = useDocumentStorage(driver)
+    before = setDocumentStorage(driver)
     expect(before).toBe(localDocumentStorage)
   })
 })

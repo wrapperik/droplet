@@ -6,7 +6,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { openBoard, reduceBoard, type BoardAction } from '../../lib/boardState.ts'
 import type { NoteItem } from '../../lib/boardTypes.ts'
 import { loadMemory } from '../../lib/memoryStore.ts'
-import { useDocumentStorage, type DocumentStorage } from '../../lib/storage.ts'
+import { setDocumentStorage, type DocumentStorage } from '../../lib/storage.ts'
 import { slowMemoryStorage } from '../../test/slowStorage.ts'
 import BoardWorkspace from './BoardWorkspace.tsx'
 
@@ -93,10 +93,10 @@ describe('the board workspace', () => {
 
 describe('the board workspace while what was saved is still being read', () => {
   let before: DocumentStorage
-  afterEach(() => useDocumentStorage(before))
+  afterEach(() => setDocumentStorage(before))
 
   it('says nothing about saving, and keeps Save waiting, until it has been read, then says where things stand', async () => {
-    before = useDocumentStorage(slowMemoryStorage(30).driver)
+    before = setDocumentStorage(slowMemoryStorage(30).driver)
     render(<Harness />)
     expect(screen.queryByText(/Not saved yet|Unsaved changes|All changes saved/)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Save/ })).toBeDisabled()
@@ -106,7 +106,7 @@ describe('the board workspace while what was saved is still being read', () => {
 
   it('is not told a board was saved that was, once it has read it', async () => {
     const slow = slowMemoryStorage(10)
-    before = useDocumentStorage(slow.driver)
+    before = setDocumentStorage(slow.driver)
     render(<Harness />)
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: /Save/ }))

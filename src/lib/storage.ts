@@ -49,7 +49,7 @@ let current: DocumentStorage = localDocumentStorage
 export const documentStorage = (): DocumentStorage => current
 
 // Swaps the driver (a database later, a stand-in in a test). Returns the one it replaced, so a test can put it back.
-export function useDocumentStorage(driver: DocumentStorage): DocumentStorage {
+export function setDocumentStorage(driver: DocumentStorage): DocumentStorage {
   const before = current
   current = driver
   return before
