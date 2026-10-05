@@ -1,0 +1,463 @@
+/* The pictures of the introduction. Everything sits on the wave of the stage (Welcome.css), so what is solid or glass here has to read on
+   deep blue in both themes: cards are glass, and what is drawn on the paper of the sample invoice is the palette's own colours. */
+
+.scene {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  width: min(24rem, 100%);
+  /* A short window shrinks the picture rather than cropping it. */
+  zoom: var(--scene-zoom, 1);
+}
+
+/* ---- 1. Say what you need ---- */
+
+.scene-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: min(23rem, 100%);
+  padding: 0.5rem 0.5rem 0.5rem 1.25rem;
+  border-radius: var(--radius-pill);
+  background: var(--intent-fill);
+  box-shadow: var(--shadow-lg);
+  color: var(--text);
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+.scene-bar__text {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* Typed out, once: the text is all there from the start (so it is never missing), and is revealed from the left. */
+  animation: scene-type 2.2s steps(46, end) 0.5s both;
+}
+
+.scene-bar__send {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--button);
+  color: var(--on-button);
+}
+
+@keyframes scene-type {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+.scene-steps {
+  display: flex;
+  gap: 1.25rem;
+  padding: 0.5rem 1.25rem;
+  border-radius: var(--radius-pill);
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.scene-steps__step {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.scene-steps__mark {
+  display: grid;
+  place-items: center;
+  width: 1rem;
+  height: 1rem;
+  border: 1.5px solid var(--text-muted);
+  border-radius: 50%;
+  color: var(--on-status);
+}
+
+.scene-steps__mark[data-done] {
+  border-color: transparent;
+  background: var(--status-resolved);
+}
+
+/* A page as the invoice prints: A4, in the palette's own colours (set on the element). Type is small, as it is on a page. */
+.scene-doc {
+  width: min(17rem, 100%);
+  padding: 1.25rem 1.25rem 1.125rem;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.scene-doc__head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9375rem;
+}
+
+.scene-doc__to {
+  margin: 0.125rem 0 1rem;
+  font-weight: 500;
+}
+
+.scene-doc__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.375rem 0;
+  border-top: 1px solid currentColor;
+  font-variant-numeric: tabular-nums;
+}
+
+.scene-doc__row--quiet {
+  border-top-color: transparent;
+  opacity: 0.8;
+}
+
+.scene-doc__row--total {
+  border-top-width: 2px;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+/* ---- 2. Not a chat, a workspace ---- */
+
+.scene--versus {
+  gap: 1.25rem;
+}
+
+.versus-chat,
+.versus-droplet {
+  margin: 0;
+  width: min(21rem, 100%);
+  color: var(--text);
+}
+
+.versus-chat figcaption,
+.versus-droplet figcaption {
+  margin-bottom: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* The chat: a paragraph of words, flat and quiet. */
+.versus-chat {
+  padding: 1rem 1.25rem;
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+
+.versus-chat p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9375rem;
+}
+
+/* Droplet: the same palette as something to use. */
+.versus-droplet {
+  padding: 1rem 1rem 0.875rem;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.versus-droplet figcaption {
+  padding-inline: 0.25rem;
+  color: var(--accent);
+}
+
+.versus-droplet__swatches {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.375rem;
+}
+
+.versus-droplet__swatch {
+  display: flex;
+  align-items: flex-end;
+  height: 5.5rem;
+  padding: 0.5rem;
+  border-radius: var(--radius-sm);
+  box-shadow: inset 0 0 0 1px var(--overlay-10);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.versus-droplet__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  padding-inline: 0.25rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+/* ---- 3. What it does ---- */
+
+.scene-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  width: 100%;
+}
+
+.scene-task {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 0.875rem 1rem;
+  border-radius: var(--radius-md);
+  color: var(--text);
+}
+
+.scene-task__icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+.scene-task__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.scene-task__text strong {
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.scene-task__text span {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+/* What is not built yet is said to be next, and drawn with a dashed edge: there is nothing to press. */
+.scene-next {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.scene-next__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  border: 1.5px dashed var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--glass-fill);
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.scene-next__item em {
+  padding: 0.0625rem 0.5rem;
+  border-radius: var(--radius-pill);
+  background: var(--overlay-10);
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+/* ---- 4. You decide ---- */
+
+.scene--decide {
+  gap: 0.75rem;
+}
+
+.scene-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.875rem;
+  border-radius: var(--radius-pill);
+  background: var(--intent-fill);
+  box-shadow: var(--shadow-md);
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.scene-chip--proposes {
+  align-self: flex-start;
+}
+
+.scene-chip--confirms {
+  align-self: flex-end;
+}
+
+.scene-chip__dot {
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 50%;
+  background: var(--status-resolved);
+}
+
+.scene-confirm {
+  width: 100%;
+  padding: 1.125rem 1.125rem 1rem;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  color: var(--text);
+}
+
+.scene-confirm__title {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.scene-confirm__row {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--overlay-10);
+  font-size: 0.875rem;
+}
+
+.scene-confirm__row span:nth-child(2) {
+  flex: 1;
+}
+
+.scene-confirm__row em {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.scene-confirm__tick {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 50%;
+  background: var(--status-resolved);
+  color: var(--on-status);
+}
+
+.scene-confirm__buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.scene-confirm__cancel,
+.scene-confirm__go {
+  padding: 0.4375rem 0.875rem;
+  border-radius: var(--radius-pill);
+}
+
+.scene-confirm__cancel {
+  background: var(--overlay-06);
+}
+
+.scene-confirm__go {
+  background: var(--button);
+  color: var(--on-button);
+}
+
+/* ---- 5. Name the project ---- */
+
+.scene-project {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  width: min(15rem, 100%);
+  padding: 1.75rem 1.5rem 1.25rem;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  color: var(--text);
+  text-align: center;
+}
+
+.scene-project__folder.folder-icon {
+  width: 6.5rem;
+  height: 6.5rem;
+  margin-bottom: 0.25rem;
+  animation: scene-float 5s ease-in-out infinite alternate;
+}
+
+.scene-project__name {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.scene-project__name[data-empty] {
+  color: var(--text-muted);
+}
+
+.scene-project__note {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+@keyframes scene-float {
+  from {
+    transform: translateY(3px);
+  }
+  to {
+    transform: translateY(-5px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scene-bar__text,
+  .scene-project__folder.folder-icon {
+    animation: none;
+  }
+}
+
+@media (max-height: 46rem) {
+  .scene {
+    --scene-zoom: 0.88;
+  }
+}
+
+@media (max-width: 52rem) {
+  .scene {
+    --scene-zoom: 0.92;
+  }
+
+  .scene-next {
+    display: none;
+  }
+}

@@ -2,11 +2,21 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import RequireAuth from './components/RequireAuth.tsx'
 import HomeRoute from './pages/HomeRoute.tsx'
 import SignIn from './pages/SignIn.tsx'
+import Welcome from './pages/Welcome.tsx'
 
 export default function App() {
   return (
     <Routes>
       <Route path="/sign-in" element={<SignIn />} />
+      {/* The introduction: once after making an account (Home sends a founder here until they have been through it). */}
+      <Route
+        path="/welcome"
+        element={
+          <RequireAuth>
+            <Welcome />
+          </RequireAuth>
+        }
+      />
       <Route
         path="/home"
         element={

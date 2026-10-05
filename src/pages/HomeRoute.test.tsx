@@ -38,6 +38,7 @@ const renderRoute = () =>
       <Routes>
         <Route path="/home" element={<HomeRoute />} />
         <Route path="/sign-in" element={<p>Sign in here</p>} />
+        <Route path="/welcome" element={<p>The introduction</p>} />
       </Routes>
     </MemoryRouter>,
   )
@@ -99,5 +100,14 @@ describe('HomeRoute', () => {
     finish([{ id: 'p9', name: 'Second founder project' }])
     expect(await screen.findByText('Projects: Second founder project')).toBeInTheDocument()
     expect(screen.getByText('User: Other')).toBeInTheDocument()
+  })
+
+  it('sends a founder who has not been through the introduction there first, and reads and makes nothing before it', async () => {
+    useAuth.setState({ user: { id: 'u1', email: 'm@example.com', name: 'Megan', onboarded: false } })
+    store.listProjects.mockResolvedValue([])
+    renderRoute()
+    expect(await screen.findByText('The introduction')).toBeInTheDocument()
+    expect(store.listProjects).not.toHaveBeenCalled()
+    expect(store.createProject).not.toHaveBeenCalled()
   })
 })

@@ -1,0 +1,363 @@
+/* The introduction. A rounded card inset in the page, as the app's working screen is: the words on the left, the picture on a stage of the
+   app's own wave on the right. */
+
+.welcome {
+  min-height: 100dvh;
+  padding: 0.75rem;
+}
+
+.welcome__card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr);
+  gap: 0.75rem;
+  min-height: calc(100dvh - 1.5rem);
+  padding: 0.75rem;
+  border-radius: var(--radius-xl);
+  background: var(--canvas);
+  box-shadow: var(--shadow-md);
+}
+
+/* ---- The words ---- */
+
+.welcome__copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0.5rem 1.5rem 0.75rem 2rem;
+}
+
+.welcome__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 2.75rem;
+}
+
+.welcome__skip,
+.welcome__later,
+.welcome__back {
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.welcome__skip {
+  padding: 0.5rem 0.875rem;
+}
+
+.welcome__skip:not(:disabled):hover,
+.welcome__later:not(:disabled):hover,
+.welcome__back:not(:disabled):hover {
+  background: var(--overlay-06);
+  color: var(--text);
+}
+
+.welcome__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  padding-block: 2rem;
+}
+
+.welcome__step {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  max-width: 30rem;
+}
+
+.welcome__label {
+  margin: 0 0 0.875rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius-pill);
+  background: var(--accent-tint-soft);
+  color: var(--accent);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.welcome__title {
+  margin: 0;
+  font-size: clamp(2.125rem, 1.35rem + 2.2vw, 3.25rem);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.08;
+  text-wrap: balance;
+}
+
+.welcome__title:focus {
+  outline: none;
+}
+
+.welcome__lead {
+  max-width: 26rem;
+  margin: 1.125rem 0 0;
+  color: var(--text-muted);
+  font-size: 1.125rem;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.welcome__points {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  margin: 1.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.welcome__points li {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  max-width: 27rem;
+  font-size: 1.0625rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.welcome__point-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+/* ---- Naming the first project ---- */
+
+.welcome__form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  width: min(24rem, 100%);
+  margin-top: 1.5rem;
+}
+
+.welcome__form label {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.welcome__form input {
+  width: 100%;
+  padding: 0.875rem 1.125rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--overlay-06);
+  color: var(--text);
+  font-size: 1.125rem;
+  font-weight: 500;
+}
+
+.welcome__form input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.75;
+}
+
+.welcome__form input:hover {
+  background: var(--accent-tint-soft);
+}
+
+.welcome__problem {
+  margin: 0.25rem 0 0;
+  padding: 0.625rem 0.875rem;
+  border-radius: var(--radius-md);
+  background: var(--overlay-06);
+  box-shadow: inset 3px 0 0 var(--status-outstanding);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.welcome__problem[hidden] {
+  display: none;
+}
+
+.welcome__later {
+  align-self: flex-start;
+  margin: 0.5rem 0 0 -0.875rem;
+  padding: 0.5rem 0.875rem;
+}
+
+/* ---- Dots and buttons ---- */
+
+.welcome__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.welcome__dots {
+  display: flex;
+  align-items: center;
+}
+
+/* Each dot is a 1.5rem target with a smaller mark inside it. The one you are on is longer. */
+.welcome__dot {
+  display: grid;
+  place-items: center;
+  height: 1.5rem;
+  padding: 0 0.1875rem;
+  border: 0;
+  background: transparent;
+}
+
+.welcome__dot::before {
+  content: '';
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--radius-pill);
+  background: var(--overlay-10);
+  transition:
+    width var(--duration-base) var(--ease-out),
+    background var(--duration-base) var(--ease-out);
+}
+
+.welcome__dot:hover::before {
+  background: var(--text-muted);
+}
+
+.welcome__dot[aria-current='step']::before {
+  width: 1.5rem;
+  background: var(--accent);
+}
+
+.welcome__buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.welcome__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.75rem 1rem 0.75rem 0.75rem;
+}
+
+.welcome__next {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-width: 7rem;
+  padding: 0.8125rem 1.5rem;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--button);
+  color: var(--on-button);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.welcome__next:not(:disabled):hover {
+  box-shadow: var(--shadow-md);
+}
+
+.welcome__skip:disabled,
+.welcome__later:disabled,
+.welcome__back:disabled,
+.welcome__next:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* ---- The stage: the wave of the chat screen, with the picture on it ---- */
+
+.welcome__stage {
+  position: relative;
+  /* Its own stacking context, so the wave and the grain sit behind the picture and in front of the stage's fill. */
+  isolation: isolate;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  padding: 2rem;
+  border-radius: var(--radius-lg);
+  background: var(--canvas);
+}
+
+.welcome__wave {
+  position: absolute;
+  inset: -12%;
+  z-index: -2;
+  background:
+    radial-gradient(70% 58% at 86% 104%, var(--wave-deep) 0%, transparent 72%),
+    radial-gradient(62% 46% at 24% 110%, var(--wave-light) 0%, transparent 72%),
+    radial-gradient(78% 40% at 56% 102%, var(--wave-mid) 0%, transparent 78%),
+    radial-gradient(34% 26% at 0% 44%, var(--wave-edge) 0%, transparent 72%),
+    linear-gradient(164deg, transparent 0%, transparent 30%, var(--wave-edge) 44%, var(--wave-mid) 62%, var(--wave-deep) 100%);
+  animation: welcome-wave 18s ease-in-out infinite alternate;
+}
+
+/* The grain of the chat screen, over the wave and holding still while it drifts. */
+.welcome__stage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image: var(--grain);
+  background-size: 240px 240px;
+  opacity: var(--grain-strength);
+  -webkit-mask-image: linear-gradient(164deg, transparent 34%, rgb(0 0 0 / 0.55) 50%, #000 72%);
+  mask-image: linear-gradient(164deg, transparent 34%, rgb(0 0 0 / 0.55) 50%, #000 72%);
+  pointer-events: none;
+}
+
+.welcome__scene {
+  display: grid;
+  place-items: center;
+  width: 100%;
+}
+
+@keyframes welcome-wave {
+  from {
+    transform: translate(-2.5%, 1.5%) rotate(-1.2deg) scale(1);
+  }
+  to {
+    transform: translate(2.5%, -2%) rotate(1.2deg) scale(1.06);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome__wave {
+    animation: none;
+  }
+}
+
+/* ---- Narrow screens: the picture goes above the words ---- */
+
+@media (max-width: 52rem) {
+  .welcome__card {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+  }
+
+  .welcome__stage {
+    grid-row: 1;
+    min-height: 22rem;
+    padding: 1.25rem 1rem;
+  }
+
+  .welcome__copy {
+    padding: 0.25rem 0.75rem 0.5rem;
+  }
+
+  .welcome__body {
+    padding-block: 1.25rem;
+  }
+
+  .welcome__skip {
+    padding-inline: 0.5rem;
+  }
+}
