@@ -15,7 +15,7 @@ import Wordmark from '../components/Wordmark.tsx'
 import { applyTurnActions } from '../compose/applyActions.ts'
 import { describeBlocks, type ChatBlock } from '../compose/blocks.ts'
 import type { Grounding } from '../compose/grounding.ts'
-import { doneSteps, OPEN_PHRASE, STEP_WORKSPACE, type JourneyStep, type ProjectSnapshot } from '../compose/journey.ts'
+import { doneSteps, OPEN_PHRASE, STEP_WORKSPACE, workspaceForPhrase, type JourneyStep, type ProjectSnapshot } from '../compose/journey.ts'
 import { snapshotOfProject } from '../compose/project.ts'
 import { starterBlocks } from '../compose/fallback.ts'
 import { applyBoardTurnActions } from '../compose/boardActions.ts'
@@ -26,7 +26,7 @@ import { snapshotOfInvoice } from '../compose/invoiceSnapshot.ts'
 import type { InvoiceTurnAction } from '../compose/invoiceSpec.ts'
 import { founderTextOf } from '../compose/rules.ts'
 import { paletteSnapshotOf, snapshotOfState } from '../compose/snapshot.ts'
-import { MAX_HISTORY_MESSAGES, isBoardAction, isInvoiceAction, routedTo, type Mode, type TurnAction, type View } from '../compose/spec.ts'
+import { MAX_HISTORY_MESSAGES, isBoardAction, isInvoiceAction, isScreenAction, routedTo, type Mode, type PaletteAction, type View } from '../compose/spec.ts'
 import { useRipple } from '../hooks/useRipple.ts'
 import { requestComposition } from '../lib/composeClient.ts'
 import { useAdvancedAllowance } from '../lib/advancedAllowance.ts'
@@ -78,9 +78,9 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   const [mobileOpen, setMobileOpen] = useState(false)
   // The palette workspace, once there is one. The AI and the person both change it through `reduce`.
   const [workspace, setWorkspace] = useState<WorkspaceState | null>(null)
-  // The invoice workspace, once it has been opened. For now it is filled in by hand; the AI does not touch it yet.
+  // The invoice workspace, once it has been opened. The founder and the composer both change it through `reduceInvoice`.
   const [invoice, setInvoice] = useState<InvoiceState | null>(null)
-  // The board for shaping the business idea, once it has been opened. For now the composer does not see it.
+  // The board for shaping the business idea, once it has been opened. The founder and the composer both change it through `reduceBoard`.
   const [board, setBoard] = useState<BoardState | null>(null)
   // Which workspace is on screen. Each keeps its own state while another is shown.
   const [view, setView] = useState<WorkspaceView>('brand')
@@ -178,6 +178,8 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   const boardHandleRef = useRef<BoardHandle | null>(null)
   const viewRef = useRef<WorkspaceView>('brand')
   const threadRef = useRef<ThreadMessage[]>([])
+  // The leave check, for a reply that closes the workspace. It is defined after the request that calls it.
+  const leaveWorkspacesRef = useRef<() => Promise<void>>(async () => undefined)
   // Where each component is drawn and how tall, reported by the grid, for moves relative to another component.
   const drawnRef = useRef<{ layout: Placement[]; heights: Heights }>({ layout: [], heights: {} })
   useEffect(() => {
@@ -186,6 +188,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
     boardRef.current = board
     viewRef.current = view
     threadRef.current = thread
+    leaveWorkspacesRef.current = leaveWorkspaces
   })
 
   useRipple(canvasRef, composing)
@@ -243,6 +246,9 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   // The workspace the composer works on is the one on screen: the palette, the invoice or the board.
   const onScreen = (): View | undefined => shownWorkspace({ brand: workspaceRef.current !== null, invoice: invoiceRef.current !== null, board: boardRef.current !== null }, viewRef.current) ?? undefined
 
+  // The workspaces that are open, one of which is on screen, so the composer can switch to one by name.
+  const openNow = (): View[] => [...(workspaceRef.current ? (['brand'] as const) : []), ...(invoiceRef.current ? (['invoice'] as const) : []), ...(boardRef.current ? (['board'] as const) : [])]
+
   // Opens a workspace and puts it on screen, for a reply that asks to be taken there. The refs are set at once, since the next
   // request is made before the screen has had a chance to catch up.
   const openWorkspaceFor = useCallback(
@@ -292,6 +298,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         ...(mode === 'advanced' ? { mode } : {}),
         ...(history.length > 0 ? { history } : {}),
         ...(view ? { view } : {}),
+        ...(openNow().length > 0 ? { open: openNow() } : {}),
         ...(chatNameRef.current ? { chatTitle: chatNameRef.current } : {}),
         ...(view === 'invoice' && invoiceOpen ? { invoice: snapshotOfInvoice(invoiceOpen, memory, todayIso()) } : {}),
         ...(view === 'brand' && open
@@ -382,7 +389,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         const applied = applyTurnActions({
           base: workspaceRef.current,
           open: (blocks) => openWorkspace(blocks, saved),
-          actions: result.turn.actions.filter((action): action is TurnAction => !isInvoiceAction(action) && !isBoardAction(action)),
+          actions: result.turn.actions.filter((action): action is PaletteAction => !isInvoiceAction(action) && !isBoardAction(action) && !isScreenAction(action)),
           env: drawnRef.current,
         })
         if (applied.state && applied.state !== workspaceRef.current) {
@@ -400,6 +407,17 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
           if (!exported) notes.push('I could not make the brand sheet.')
         }
       }
+      // The screen actions come last, after the workspace's own: go back to a workspace that is open, or close them all and return to the full chat.
+      const screen = result.turn.actions.find(isScreenAction)
+      if (screen?.type === 'switch_to') {
+        // Only to one that is open and not already shown. The check already made sure of it, and the refs are where the truth is.
+        const isOpen = { brand: workspaceRef.current, invoice: invoiceRef.current, board: boardRef.current }[screen.workspace] !== null
+        if (isOpen && screen.workspace !== onScreen()) {
+          viewRef.current = screen.workspace
+          spaceRef.current = screen.workspace === 'board' ? 'ideation' : screen.workspace
+          setView(screen.workspace)
+        }
+      }
       // An answer that searched the web is shown as the model gave it, with nothing of the app's mixed in (Google's terms), so the app's own
       // notes go in a message of their own after it.
       if (result.grounding) {
@@ -409,6 +427,8 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
       } else {
         finish(paragraphs(result.turn.message, ...notes), result.turn)
       }
+      // Closing is the same as the button's: it asks in the thread first if anything is unsaved, after the reply, so the founder reads it first.
+      if (screen?.type === 'close_workspace') await leaveWorkspacesRef.current()
     },
     // onScreen only reads refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -436,6 +456,10 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
       setThread((current) => [...current, ...(moved ? [message('divider', `Switched workspace to ${SPACE_NAMES[space]}`)] : []), message('you', text), pending])
       setComposing(true)
       try {
+        // A tap on an Open button is exactly one of the Open phrases. The workspace is opened here, in code, so the composer is asked once with it
+        // on screen, and does not have to answer first with a request to open it.
+        const phrase = workspaceForPhrase(text)
+        if (phrase) await openWorkspaceFor(phrase)
         await converse(text, history, pending.id, false, mode)
         // If the composer took the founder to another workspace, that is where they are now, and no divider is owed for it.
         sentInRef.current = spaceRef.current
@@ -444,7 +468,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         busyRef.current = false
       }
     },
-    [converse, doneSet, message],
+    [converse, doneSet, message, openWorkspaceFor],
   )
 
   // The familiar path: choosing a task opens its fixed layout without asking the model, the same layout the
@@ -595,8 +619,9 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   // Back to the conversation as the whole screen. Closing a workspace loses what was not saved, so if there is any, Droplet asks first,
   // in the thread, with a button for each way out. Nothing is saved without the founder's say: the palette saves when its button is
   // pressed, and the invoice opens its note of what would be remembered, which the founder confirms.
-  const backToChat = useCallback(async () => {
-    if (busyRef.current || leaveRef.current || checkingLeaveRef.current) return
+  // The check itself, which a reply that closes the workspace runs too, while the request is still being worked on.
+  const leaveWorkspaces = useCallback(async () => {
+    if (leaveRef.current || checkingLeaveRef.current) return
     // What was saved has to be read to know whether anything is unsaved, so a second press meanwhile is ignored.
     checkingLeaveRef.current = true
     let brand = false
@@ -620,6 +645,12 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
     leaveRef.current = { id: prompt.id, ...left }
     setThread((current) => [...current, prompt])
   }, [closeWorkspaces, currentProjectId, message])
+
+  // The button, which does nothing while a request is being worked on.
+  const backToChat = useCallback(async () => {
+    if (busyRef.current) return
+    await leaveWorkspaces()
+  }, [leaveWorkspaces])
 
   const onThreadAction = useCallback(
     async (messageId: number, actionId: string) => {

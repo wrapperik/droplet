@@ -3,19 +3,20 @@ import { applyTurnActions } from './applyActions.ts'
 import { applyBoardTurnActions } from './boardActions.ts'
 import { checkBlocks } from './blocks.ts'
 import { stateOfBoardSnapshot } from './boardSnapshot.ts'
-import type { BoardSnapshot, BoardTurn } from './boardSpec.ts'
+import type { BoardSnapshot, BoardTurn, BoardTurnAction } from './boardSpec.ts'
 import { stateOfSnapshot } from './snapshot.ts'
 import { amountsIn, applyInvoiceTurnActions, priceWasGiven } from './invoiceActions.ts'
-import type { InvoiceSnapshot } from './invoiceSpec.ts'
+import type { InvoiceSnapshot, InvoiceTurnAction } from './invoiceSpec.ts'
 import { stateOfInvoiceSnapshot } from './invoiceSnapshot.ts'
-import { isBoardAction, isInvoiceAction, type AnyTurn, type ComposeRequest, type InvoiceTurn, type Turn, type WorkspaceSnapshot } from './spec.ts'
+import { isScreenAction, WORKSPACE_NAMES } from './screenActions.ts'
+import { isBoardAction, isInvoiceAction, type AnyTurn, type ComposeRequest, type InvoiceTurn, type PaletteAction, type Turn, type WorkspaceSnapshot } from './spec.ts'
 
 // Business rules for a turn, checked in code after the shape is right. The actions are tried against the workspace
 // the founder is looking at, through the same code that will apply them, so anything that could not be done is
 // caught here, with a reason written to be sent back to the model if it has to try again.
 
 export function checkTurn(turn: Turn, workspace?: WorkspaceSnapshot): string[] {
-  if (turn.actions.length === 0) return []
+  if (turn.actions.every(isScreenAction)) return []
 
   // Only a brand turn touches the workspace. Anything else is a conversation.
   if (turn.task !== 'brand') {
@@ -25,7 +26,7 @@ export function checkTurn(turn: Turn, workspace?: WorkspaceSnapshot): string[] {
   const result = applyTurnActions({
     base: workspace ? stateOfSnapshot(workspace) : null,
     open: (blocks) => openWorkspace(blocks),
-    actions: turn.actions,
+    actions: turn.actions.filter((action): action is PaletteAction => !isScreenAction(action)),
     env: { layout: workspace?.layout ?? [], heights: {} },
   })
   return result.skipped.map((skipped) => `Action ${skipped.position + 1} (${skipped.action.type}): ${skipped.reason}`)
@@ -40,14 +41,14 @@ export const founderTextOf = (request: Pick<ComposeRequest, 'intent' | 'history'
 // The same checks for a reply about the invoice: the actions are tried against the invoice the founder is looking at, through the
 // same code that will apply them, including the rule that a price must be one the founder wrote.
 export function checkInvoiceTurn(turn: InvoiceTurn, invoice: InvoiceSnapshot | undefined, founderText: string[]): string[] {
-  if (turn.actions.length === 0) return []
+  if (turn.actions.every(isScreenAction)) return []
   if (turn.task !== 'invoice') {
     return [`Only an invoice task may include actions on the invoice. Leave actions empty for the task "${turn.task}", and put your answer in the message.`]
   }
   if (!invoice) return ['There is no invoice open to act on. Leave actions empty.']
   const result = applyInvoiceTurnActions({
     base: stateOfInvoiceSnapshot(invoice),
-    actions: turn.actions,
+    actions: turn.actions.filter((action): action is InvoiceTurnAction => !isScreenAction(action)),
     clients: invoice.savedClients.map((name) => ({ name })),
     founderText,
   })
@@ -57,7 +58,7 @@ export function checkInvoiceTurn(turn: InvoiceTurn, invoice: InvoiceSnapshot | u
 // The same checks for a reply about the board: the actions are tried against the board the founder is looking at, through the same code that
 // will apply them, including where things are to go, which that code finds and the model never gives.
 export function checkBoardTurn(turn: BoardTurn, board: BoardSnapshot | undefined): string[] {
-  if (turn.actions.length === 0) return []
+  if (turn.actions.every(isScreenAction)) return []
   if (turn.task !== 'ideation') {
     return [`Only an ideation task may include actions on the board. Leave actions empty for the task "${turn.task}", and put your answer in the message.`]
   }
@@ -66,7 +67,7 @@ export function checkBoardTurn(turn: BoardTurn, board: BoardSnapshot | undefined
     let n = 0
     return () => `check-${++n}`
   })()
-  const result = applyBoardTurnActions({ base: stateOfBoardSnapshot(board), actions: turn.actions, view: board.view, newId: counter })
+  const result = applyBoardTurnActions({ base: stateOfBoardSnapshot(board), actions: turn.actions.filter((action): action is BoardTurnAction => !isScreenAction(action)), view: board.view, newId: counter })
   return result.skipped.map((skipped) => `Action ${skipped.position + 1} (${skipped.action.type}): ${skipped.reason}`)
 }
 
@@ -91,7 +92,7 @@ const REQUEST_CUE = /\b(open|make|create|build|set ?up|start|generate|give|show|
 // nothing to quote, so it cannot.
 export function checkOpening(turn: AnyTurn, request: Pick<ComposeRequest, 'intent' | 'history' | 'view'> & { workspace?: unknown }): string[] {
   // With no workspace on screen, palette actions are what open the palette. A request that carries the palette's workspace has it on screen.
-  const opensPalette = request.view === undefined && request.workspace === undefined && turn.task === 'brand' && turn.actions.some((action) => action.type !== 'undo' && action.type !== 'redo')
+  const opensPalette = request.view === undefined && request.workspace === undefined && turn.task === 'brand' && turn.actions.some((action) => action.type !== 'undo' && action.type !== 'redo' && !isScreenAction(action))
   const { opens } = turn
   // A reply that names the task of a workspace that is not on screen, and does nothing and asks nothing, is a reply that says it is opening
   // that workspace. Without `opens` the app does not open it, so the message would be untrue.
@@ -165,14 +166,37 @@ export function checkConversation(turn: AnyTurn, request: Pick<ComposeRequest, '
   return errors
 }
 
-// A reply checked for whichever workspace the request was about: the invoice, or the palette.
+// The workspace on screen, from what the request carries.
+const viewOf = (request: Pick<ComposeRequest, 'view'> & { workspace?: unknown }): ComposeRequest['view'] | undefined => request.view ?? (request.workspace === undefined ? undefined : 'brand')
+
+// The screen actions of a reply, which go back to a workspace that is already open or close the workspaces. They need no `opens`, since nothing is
+// being opened, but they can only name what is open, and a reply carries at most one.
+export function checkScreenActions(turn: AnyTurn, request: Pick<ComposeRequest, 'view' | 'open'> & { workspace?: unknown }): string[] {
+  const screen = turn.actions.filter(isScreenAction)
+  if (screen.length === 0) return []
+  if (screen.length > 1) return ['Use at most one of switch_to and close_workspace in a reply.']
+  const here = viewOf(request)
+  const open = request.open ?? (here ? [here] : [])
+  const action = screen[0]
+  if (action.type === 'close_workspace') return open.length === 0 ? ['close_workspace: no workspace is open, so there is nothing to close. Leave the action out.'] : []
+  const name = WORKSPACE_NAMES[action.workspace]
+  if (action.workspace === here) return [`switch_to: the ${name} is already on screen. Leave the action out.`]
+  if (!open.includes(action.workspace)) {
+    return [`switch_to: the ${name} is not open, and an action cannot open it. If the founder asked for it or agreed to it, open it with opens (their exact words) and no actions. If not, leave the action out.`]
+  }
+  return []
+}
+
+// A reply checked for whichever workspace the request was about: the invoice, the board or the palette. Screen actions are checked on their own, and
+// the rest of the reply is checked as if they were not there.
 export function checkTurnFor(turn: AnyTurn, request: ComposeRequest): string[] {
-  const talk = checkConversation(turn, request)
-  if (request.view === 'board') return [...talk, ...checkBoardTurn(turn as BoardTurn, request.board)]
+  const talk = [...checkConversation(turn, request), ...checkScreenActions(turn, request)]
+  const rest = { ...turn, actions: turn.actions.filter((action) => !isScreenAction(action)) } as AnyTurn
+  if (request.view === 'board') return [...talk, ...checkBoardTurn(rest as BoardTurn, request.board)]
   // An action for the board has no place on another workspace, or when no workspace is open.
-  if (turn.actions.some(isBoardAction)) return [...talk, 'Those actions are for the board, which is not the workspace on screen. Leave them out.']
-  if (request.view === 'invoice') return [...talk, ...checkInvoiceTurn(turn as InvoiceTurn, request.invoice, founderTextOf(request))]
+  if (rest.actions.some(isBoardAction)) return [...talk, 'Those actions are for the board, which is not the workspace on screen. Leave them out.']
+  if (request.view === 'invoice') return [...talk, ...checkInvoiceTurn(rest as InvoiceTurn, request.invoice, founderTextOf(request))]
   // An action for the invoice has no place on the palette workspace, or when no workspace is open.
-  if (turn.actions.some(isInvoiceAction)) return [...talk, 'Those actions are for the invoice, which is not the workspace on screen. Leave them out.']
-  return [...talk, ...checkTurn(turn as Turn, request.workspace)]
+  if (rest.actions.some(isInvoiceAction)) return [...talk, 'Those actions are for the invoice, which is not the workspace on screen. Leave them out.']
+  return [...talk, ...checkTurn(rest as Turn, request.workspace)]
 }

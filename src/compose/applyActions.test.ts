@@ -1,7 +1,7 @@
 import { DEFAULT_LAYOUT, docOf, openWorkspace, shownWindows, toolbarTools, type WorkspaceState } from '../lib/workspaceState.ts'
 import { applyTurnActions, type ApplyEnv } from './applyActions.ts'
 import { openSnapshot } from './fixtures.ts'
-import type { TurnAction } from './spec.ts'
+import type { PaletteAction as TurnAction } from './spec.ts'
 
 const blocks = () => [
   { id: 1, hex: '#1F8FE0' },

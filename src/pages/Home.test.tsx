@@ -1264,13 +1264,15 @@ describe('guiding the founder', () => {
 
   it('opens a workspace when the founder presses Open on a plan step: that is asking outright, in the words the composer expects', async () => {
     const user = userEvent.setup()
-    answers = [planReply, opening('ideation', 'Opening the board.', 'Open the business idea board'), reply('ideation', 'Here it is. What does DuckStack do?')]
+    answers = [planReply, reply('ideation', 'Here it is. What does DuckStack do?')]
     renderHome()
     await say(user, 'Not much yet')
     await user.click(await screen.findByRole('button', { name: 'Open Settle the name' }))
     expect(await screen.findByRole('region', { name: 'Board' })).toBeInTheDocument()
-    expect(asked[1].intent).toBe('Open the business idea board')
-    expect(asked[2]).toMatchObject({ view: 'board', intent: 'Open the business idea board' })
+    await screen.findByText(/Here it is\. What does DuckStack do\?/)
+    // opened in code before the composer is asked, so it is asked once, with the board on screen: no round trip to open it
+    expect(asked).toHaveLength(2)
+    expect(asked[1]).toMatchObject({ view: 'board', open: ['board'], intent: 'Open the business idea board' })
   })
 
   it('shows a table, with the first column naming the row', async () => {
@@ -1423,5 +1425,122 @@ describe('Quick and Advanced', () => {
     expect(asked.map((request) => request.mode)).toEqual(['advanced', 'advanced'])
     await say(user, 'thanks')
     expect(asked.at(-1)?.mode).toBeUndefined()
+  })
+})
+
+describe('opening, switching and closing workspaces', () => {
+  const toolbar = () => screen.queryByRole('toolbar', { name: 'Tools' })
+  const inBrand = () => screen.queryByRole('button', { name: /^Remove colour 1,/ })
+  const inInvoice = () => screen.queryByLabelText(/^Invoice INV-0001/)
+
+  it.each([
+    ['Open the invoice workspace', 'invoice'],
+    ['Open the brand workspace', 'brand'],
+    ['Open the business idea board', 'board'],
+  ])('opens a workspace in code when the message is exactly "%s", and asks the composer once', async (phrase, view) => {
+    const user = userEvent.setup()
+    answers = [reply('chat', 'Here it is.')]
+    renderHome()
+    await say(user, phrase)
+    await screen.findByText('Here it is.')
+    expect(asked).toHaveLength(1)
+    expect(asked[0]).toMatchObject({ view, open: [view] })
+    // no divider: the founder was not in another workspace
+    expect(screen.queryByText(/Switched workspace/)).not.toBeInTheDocument()
+  })
+
+  it('does not open a workspace in code for words that merely contain a phrase: those are the composer\'s to read', async () => {
+    const user = userEvent.setup()
+    answers = [reply('chat', 'Which invoice?')]
+    renderHome()
+    await say(user, 'Open the invoice workspace please')
+    await screen.findByText('Which invoice?')
+    expect(asked[0].view).toBeUndefined()
+    expect(asked[0]).not.toHaveProperty('open')
+    expect(toolbar()).not.toBeInTheDocument()
+  })
+
+  it('tells the composer which workspaces are open, and which is on screen', async () => {
+    const user = userEvent.setup()
+    answers = [reply('chat', 'Fine.')]
+    renderHome()
+    await pickTask(user, /Build the brand/)
+    await pickTask(user, /Make an invoice/)
+    await say(user, 'How does this look?')
+    await screen.findByText('Fine.')
+    expect(asked[0]).toMatchObject({ view: 'invoice', open: ['brand', 'invoice'] })
+  })
+
+  it('shows another workspace that is open when the reply says switch_to, and keeps both as they were', async () => {
+    const user = userEvent.setup()
+    answers = [reply('chat', 'Back to the palette.', [{ type: 'switch_to', workspace: 'brand' }])]
+    renderHome()
+    await pickTask(user, /Build the brand/)
+    await pickTask(user, /Make an invoice/)
+    await screen.findByLabelText(/^Invoice INV-0001/)
+    await say(user, 'lets go back to the palette')
+    await screen.findByText('Back to the palette.')
+    await waitFor(() => expect(inBrand()).toBeInTheDocument())
+    expect(inInvoice()).not.toBeInTheDocument()
+    // asked once, and it did not need the founder's words quoted
+    expect(asked).toHaveLength(1)
+    // the invoice is still open, and can be switched back to
+    answers = [reply('chat', 'And the invoice.', [{ type: 'switch_to', workspace: 'invoice' }])]
+    await say(user, 'now the invoice')
+    await screen.findByText('And the invoice.')
+    await waitFor(() => expect(inInvoice()).toBeInTheDocument())
+    expect(asked[1]).toMatchObject({ view: 'brand', open: ['brand', 'invoice'] })
+  })
+
+  it('refuses a switch to a workspace that is not open: the screen stays as it is, and the founder is told the answer could not be used', async () => {
+    const user = userEvent.setup()
+    answers = [reply('chat', 'To the invoice.', [{ type: 'switch_to', workspace: 'invoice' }])]
+    renderHome()
+    await pickTask(user, /Build the brand/)
+    await say(user, 'go to the invoice')
+    await screen.findByText(/I got an answer I could not use/)
+    expect(inBrand()).toBeInTheDocument()
+    expect(inInvoice()).not.toBeInTheDocument()
+  })
+
+  it('closes the workspaces when the reply says close_workspace, with nothing unsaved to ask about', async () => {
+    const user = userEvent.setup()
+    answers = [reply('chat', 'Taking you back to the full chat.', [{ type: 'close_workspace' }])]
+    renderHome()
+    await pickTask(user, /Build the brand/)
+    await say(user, 'close the workspace')
+    await screen.findByText('Taking you back to the full chat.')
+    await waitFor(() => expect(toolbar()).not.toBeInTheDocument())
+    expect(asked).toHaveLength(1)
+    expect(screen.queryByText(/unsaved changes/)).not.toBeInTheDocument()
+  })
+
+  it('asks in the thread first when there is unsaved work, after the reply, and closes nothing until the founder says', async () => {
+    const user = userEvent.setup()
+    answers = [reply('chat', 'Taking you back to the full chat.', [{ type: 'close_workspace' }])]
+    renderHome()
+    await pickTask(user, /Build the brand/)
+    await user.click(screen.getByRole('button', { name: /^Remove colour 1,/ }))
+    await say(user, 'close the workspace')
+    expect(await screen.findByText(/You have unsaved changes in the brand palette/)).toBeInTheDocument()
+    expect(screen.getByText('Taking you back to the full chat.')).toBeInTheDocument()
+    expect(toolbar()).toBeInTheDocument()
+    expect(await loadPalette('duckstack')).toBeNull()
+    // the same buttons as Back to the full chat, usable once the request is done
+    await user.click(screen.getByRole('button', { name: 'Keep working' }))
+    expect(toolbar()).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Back to the full chat' }))
+    await user.click(await screen.findByRole('button', { name: 'Leave without saving' }))
+    await waitFor(() => expect(toolbar()).not.toBeInTheDocument())
+    expect(screen.getByText('I closed the workspace without saving.')).toBeInTheDocument()
+  })
+
+  it('refuses close_workspace when nothing is open', async () => {
+    const user = userEvent.setup()
+    answers = [reply('chat', 'Closing.', [{ type: 'close_workspace' }])]
+    renderHome()
+    await say(user, 'close it')
+    await screen.findByText(/I got an answer I could not use/)
+    expect(asked).toHaveLength(1)
   })
 })

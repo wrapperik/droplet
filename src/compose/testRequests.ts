@@ -353,9 +353,33 @@ export const TEST_REQUESTS: TestRequest[] = [
   },
   {
     id: 'plan-open-tap',
-    why: 'A tap on an Open button arrives as an outright ask: it must open the board with no push back, quoting the tap',
-    request: { intent: 'Open the business idea board', chatTitle: 'Starting DuckStack', project: earlyProject, ...withHistory(firstExchange) },
-    expect: { task: 'ideation', acts: false, opens: true },
+    why: 'A tap on an Open button: the app has already opened the board, so the reply must not open it again (no opens), say what the board is for here, and ask where to start',
+    request: { intent: 'Open the business idea board', view: 'board', open: ['board'], board, chatTitle: 'Starting DuckStack', project: earlyProject, ...withHistory(firstExchange) },
+    expect: { task: ['ideation', 'chat'], acts: false, opens: false, asks: true },
+  },
+  {
+    id: 'screen-switch',
+    why: 'Going back to a workspace that is open: switch_to with its name, no opens, and nothing else done',
+    request: { intent: 'Lets go back to the palette', view: 'invoice', invoice, open: ['brand', 'invoice'], project: brandedProject },
+    expect: { task: ['chat', 'brand'], acts: true, opens: false, firstAction: ['switch_to'] },
+  },
+  {
+    id: 'screen-close',
+    why: 'Closing the workspace on request: close_workspace, and no claim that anything is lost or closed (the app checks for unsaved work)',
+    request: { intent: 'Close the workspace', workspace: open, view: 'brand', open: ['brand'], project: brandedProject },
+    expect: { task: ['chat', 'brand'], acts: true, opens: false, firstAction: ['close_workspace'] },
+  },
+  {
+    id: 'screen-go-back',
+    why: 'Lets go back, with one workspace open, means back to the full chat',
+    request: { intent: 'lets go back', view: 'invoice', invoice, open: ['invoice'], project: brandedProject },
+    expect: { task: ['chat', 'invoice'], acts: true, opens: false, firstAction: ['close_workspace'] },
+  },
+  {
+    id: 'screen-not-open',
+    why: 'Asked to go to a workspace that is not open: it cannot switch to it, so it opens it with the founder\'s words quoted, or asks, and does not switch',
+    request: { intent: 'Take me to the invoice', workspace: open, view: 'brand', open: ['brand'], project: brandedProject },
+    expect: { task: ['chat', 'invoice'], acts: false },
   },
   {
     id: 'invoice-logo-first',

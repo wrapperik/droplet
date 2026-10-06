@@ -4,6 +4,7 @@ import { blocksField, messageField, opensField, questionField, repliesField, tit
 import { invoiceSnapshotSchema, invoiceTurnSchema, type InvoiceTurn } from './invoiceSpec.ts'
 import { groundingSchema } from './grounding.ts'
 import { projectSnapshotSchema } from './journey.ts'
+import { isScreenAction, SCREEN_WORKSPACES, screenActionSchemas, type ScreenAction } from './screenActions.ts'
 import { TASKS, type Task } from './taskNames.ts'
 
 export { TASKS, type Task }
@@ -99,9 +100,13 @@ export const actionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.enum(['export_brand_sheet']) }),
   z.object({ type: z.enum(['undo']) }),
   z.object({ type: z.enum(['redo']) }),
+  ...screenActionSchemas,
 ])
 
+// Every action in a palette turn, including those on the screen. The palette's own are the ones that are not.
 export type TurnAction = z.infer<typeof actionSchema>
+export type PaletteAction = Exclude<TurnAction, ScreenAction>
+export { isScreenAction, type ScreenAction }
 export type PaletteColour = z.infer<typeof paletteColourSchema>
 
 export const MAX_ACTIONS = 12
@@ -191,6 +196,8 @@ export const composeRequestSchema = z.object({
     .optional(),
   // Which workspace is on screen. The composer works on that one: the palette (brand), the invoice, or the board. Absent when none is open.
   view: z.enum(['brand', 'invoice', 'board']).optional(),
+  // Which workspaces are open (one of them is on screen, named in `view`), so the composer can switch to one by name. Absent when none is open.
+  open: z.array(z.enum(SCREEN_WORKSPACES)).max(3).optional(),
   // What this chat is called in the founder's history, if it has been named, so the composer only renames it when the subject changes.
   chatTitle: z.string().trim().max(80).optional(),
   // The palette workspace, when it is the one on screen.

@@ -1,3 +1,4 @@
+import { screenActionSchemas, type ScreenAction } from './screenActions.ts'
 import { z } from 'zod'
 import { blocksField, messageField, opensField, questionField, repliesField, titleField } from './conversationFields.ts'
 import { TASKS } from './taskNames.ts'
@@ -65,9 +66,10 @@ export const invoiceActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.enum(['remove_line']), line }),
   z.object({ type: z.enum(['undo']) }),
   z.object({ type: z.enum(['redo']) }),
+  ...screenActionSchemas,
 ])
 
-export type InvoiceTurnAction = z.infer<typeof invoiceActionSchema>
+export type InvoiceTurnAction = Exclude<z.infer<typeof invoiceActionSchema>, ScreenAction>
 
 export const MAX_INVOICE_ACTIONS = 20
 

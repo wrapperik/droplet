@@ -18,7 +18,7 @@ import {
   type WorkspaceState,
 } from '../lib/workspaceState.ts'
 import { paletteErrors } from './paletteRules.ts'
-import type { TurnAction } from './spec.ts'
+import type { PaletteAction } from './spec.ts'
 
 // Turns the model's actions into workspace actions and applies them through the same reducer a person's clicks use.
 // The model counts colours from 1 in the order shown, so each number is resolved against the workspace as it is at
@@ -31,7 +31,7 @@ export type ApplyEnv = {
   heights: Heights
 }
 
-export type Skipped = { position: number; action: TurnAction; reason: string }
+export type Skipped = { position: number; action: PaletteAction; reason: string }
 export type Effect = 'export'
 
 export type ApplyResult = {
@@ -48,7 +48,7 @@ type Input = {
   base: WorkspaceState | null
   // Makes a new workspace from these colours (using the project's saved layout, if it has one).
   open: (blocks: PaletteBlock[]) => WorkspaceState
-  actions: TurnAction[]
+  actions: PaletteAction[]
   env: ApplyEnv
 }
 

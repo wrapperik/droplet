@@ -1,3 +1,4 @@
+import { screenActionSchemas, type ScreenAction } from './screenActions.ts'
 import { z } from 'zod'
 import { SHAPE_KINDS, SHAPE_COLOURS, NOTE_COLOURS, TEXT_SIZES, CONNECTOR_STYLES, CONNECTOR_HEADS } from '../lib/boardTypes.ts'
 import { TEMPLATE_IDS } from '../lib/boardTemplates.ts'
@@ -68,9 +69,10 @@ export const boardActionSchema = z.discriminatedUnion('type', [
   }),
   z.object({ type: z.enum(['undo']) }),
   z.object({ type: z.enum(['redo']) }),
+  ...screenActionSchemas,
 ])
 
-export type BoardTurnAction = z.infer<typeof boardActionSchema>
+export type BoardTurnAction = Exclude<z.infer<typeof boardActionSchema>, ScreenAction>
 
 export const boardTurnSchema = z.object({
   task: z.enum(TASKS).describe('The task the request belongs to, or chat for ordinary conversation.'),

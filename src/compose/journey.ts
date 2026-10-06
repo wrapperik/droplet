@@ -37,6 +37,13 @@ export const OPEN_PHRASE: Record<BuiltWorkspace, string> = {
   board: 'Open the business idea board',
 }
 
+// The workspace a message asks for when it is exactly one of the Open phrases (a tap on a plan's Open button, or on a suggested reply). The app opens
+// it in code before asking the composer anything, so it is one request and not two. Anything else the founder writes is the composer's to read.
+export function workspaceForPhrase(text: string): BuiltWorkspace | null {
+  const said = text.trim()
+  return (Object.keys(OPEN_PHRASE) as BuiltWorkspace[]).find((workspace) => OPEN_PHRASE[workspace] === said) ?? null
+}
+
 // What the project holds, as the composer is told it. Only what a task needs: the business name, the offer and counts, never a detail of a
 // client, an address, a contact or a bank account.
 export const projectSnapshotSchema = z.object({

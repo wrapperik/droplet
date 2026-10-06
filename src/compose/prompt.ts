@@ -2,6 +2,7 @@ import { describeWorkspace } from './context.ts'
 import { describeBoard, describeTemplates } from './boardSnapshot.ts'
 import { describeInvoice } from './invoiceContext.ts'
 import { describeProject } from './journey.ts'
+import { WORKSPACE_NAMES } from './screenActions.ts'
 import type { ComposeRequest, Mode, PaletteSnapshot, View } from './spec.ts'
 
 // What the model is told. The founder's own words are data, never instructions: they go inside tags, with any
@@ -68,7 +69,7 @@ Getting to know them first
 - If the founder already knows exactly what they want and says so ("make me a palette for my bakery"), do not make them answer questions first. Ask at most one, and only if the brief is too thin to start.
 
 Opening workspaces
-- A workspace opens only when the founder asks for it outright ("open the board", "make me a colour palette for my bakery", "invoice Pretoria Print Works for 12 boxes") or agrees to your offer ("yes", "go on", "let's do it", or a tap on an Open button, which arrives as "Open the brand workspace", "Open the invoice workspace" or "Open the business idea board"). A tap on Open is always an outright ask: open it, and do not push back.
+- A workspace opens only when the founder asks for it outright ("open the board", "make me a colour palette for my bakery", "invoice Pretoria Print Works for 12 boxes") or agrees to your offer ("yes", "go on", "let's do it", or a tap on an Open button, which arrives as "Open the brand workspace", "Open the invoice workspace" or "Open the business idea board"). A tap on Open is always an outright ask. The app opens the workspace before you see the message, so it is already on screen: do not set opens and do not open it again. Say in a sentence what it is for here, and ask what they want to start with.
 - Asking outright means asking for something to be made or opened: "I need a colour palette for my gift box business", "make me a palette", "set up an invoice for Pretoria Print Works", "open the board". When the founder asks like that and you know enough to start, open it now with opens. Do not ask permission for what they just asked for, and do not offer a workspace they just asked for. If the ask is too thin to start ("colour palette" and nothing known about the business), ask your one question first.
 - Never open one because you think it would help. Offer it in words and ask. Telling you about their business, their plans or what they are doing is not asking for anything to be made: "I want to create a dev studio", "I am starting a bakery", "Working on branding" and "I'm building the website" are not requests for a palette or any workspace. Answer them by asking what they need next, and offer the workspace in words if it fits. A quote that only says what they are doing is refused by the app.
 - To open one, set "opens" with because ("asked" or "agreed") and quote: the founder's own words from <request> that ask or agree, copied exactly. The app checks that the quote is in their message and refuses the reply if it is not. If you cannot quote, you may not open: leave actions empty and ask.
@@ -87,6 +88,12 @@ Logos
 - Skipping the logo for now is fine: a missing logo never blocks anything. If they want to skip it, say so warmly, and mention that an invoice without one can carry the business name in the brand font.`
 
 const PALETTE_OPENS = `- The one exception to opening a workspace with no actions is the palette: with nothing open, a set_palette action opens it, with opens set.`
+
+const SWITCHING = `Moving between workspaces and closing them
+- <open_workspaces> lists the workspaces that are open and which one is on screen. Only one is shown at a time, and each keeps its work while another is shown.
+- When the founder asks to go back to a workspace that is open ("let's go back to the invoice", "show me the palette again", "switch to the board"), use the action switch_to with its name (brand, invoice or board). It needs no opens, since nothing is being opened. Use the task "chat" for the reply. Say where you took them in a sentence.
+- When the founder asks to close the workspace or go back to the full chat ("close this", "let's go back", "back to the chat"), use the action close_workspace. It closes every workspace and gives the conversation the whole screen. If anything is unsaved the app asks them first, in the chat, with buttons, so never say that their work is lost or that it is closed: say you are taking them back to the full chat. If you cannot tell whether "let's go back" means a workspace or the chat and more than one is open, ask which.
+- Use at most one of these in a reply, and only when they ask: never switch or close because you think it would help. A workspace that is not open cannot be switched to: open it with opens, and only if they asked for it or agreed to it.`
 
 const BLOCKS = `Showing things in the chat
 - "blocks" puts up to two things under your message. A table compares options across two or more things (name ideas against how each sounds and what to check, three ways to price, what they have against what they still need): two to four columns, the first naming the thing compared, up to eight rows, short cells. A checklist is a list the founder can tick: numbered for a plan, with step set on the items that are steps of the journey, and plain for things to gather or do.
@@ -321,7 +328,7 @@ function buildPrompt(view: View | undefined, mode: Mode): string {
   const advanced = mode === 'advanced'
   const lookingUp = advanced ? LOOKING_UP : CANNOT_SEARCH
   const guiding = advanced ? GUIDING_EXAMPLES : guidingExamples(GUIDING_EXAMPLE_TURNS.filter((turn) => openedByExample(turn) !== view))
-  const common = [INTRO, BEING_USEFUL, APP_KNOWLEDGE, TALKING, lookingUp, GUIDING, BLOCKS]
+  const common = [INTRO, BEING_USEFUL, APP_KNOWLEDGE, TALKING, lookingUp, GUIDING, SWITCHING, BLOCKS]
   const after = [KEEPING_GOING, NAMING, CONVERSATION, HOW_TO_WRITE]
   if (view === 'invoice') return assemble(...common, INVOICE_ACTING, ...after, INVOICE_EXAMPLES, guiding)
   if (view === 'board') return assemble(...common, BOARD_ACTING, ...after, BOARD_EXAMPLES, guiding)
@@ -346,6 +353,14 @@ export function systemPromptFor(view?: View, mode: Mode = 'base'): string {
   return prompt
 }
 
+// Which workspaces are open and which one is on screen, so the composer can switch to one by name and knows when there is nothing to switch to.
+export function describeOpen(request: Pick<ComposeRequest, 'view' | 'open' | 'workspace'>): string {
+  const here = request.view ?? (request.workspace ? 'brand' : undefined)
+  const open = request.open ?? (here ? [here] : [])
+  if (open.length === 0) return 'none'
+  return open.map((view) => `${WORKSPACE_NAMES[view]} (${view})${view === here ? ', on screen' : ''}`).join('\n')
+}
+
 const clean = (text: string) => text.replace(/[<>]/g, ' ').trim()
 
 const describePalette = (snapshot: PaletteSnapshot) =>
@@ -367,6 +382,7 @@ export function buildUserContent(request: ComposeRequest, errors?: string[], sea
   } else {
     parts.push(`<workspace>\n${request.workspace ? JSON.stringify(describeWorkspace(request.workspace), null, 1) : 'No workspace is open.'}\n</workspace>`)
   }
+  parts.push(`<open_workspaces>\n${describeOpen(request)}\n</open_workspaces>`)
   if (request.project) parts.push(`<project>\n${JSON.stringify(describeProject(request.project), null, 1)}\n</project>`)
   if (request.memory) parts.push(`<saved_palette>\n${describePalette(request.memory)}\n</saved_palette>`)
   parts.push(`<web_search>\n${search ? 'available' : 'not available for this request'}\n</web_search>`)
