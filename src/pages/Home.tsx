@@ -325,12 +325,18 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
 
       const target = routedTo(result.turn, view)
       if (target && !routed) {
-        // Taking the founder to another workspace: the next answer will carry the question, so this one has none.
-        finish(result.grounding ? result.turn.message : paragraphs(result.turn.message, result.note), undefined, result.grounding)
+        // Taking the founder to another workspace: the next answer is asked with that workspace in front of the composer and says
+        // what it did, so it replaces this one. Showing both said the same thing twice ("Opening the invoice workspace" twice).
+        // A reply that searched the web is the exception: it carries sources the founder should see, so it stays and the next one follows it.
+        if (result.grounding) {
+          finish(result.turn.message, undefined, result.grounding)
+          await openWorkspaceFor(target)
+          const next = message('droplet', '', true)
+          setThread((current) => [...current, next])
+          return converse(text, history, next.id, true)
+        }
         await openWorkspaceFor(target)
-        const next = message('droplet', '', true)
-        setThread((current) => [...current, next])
-        return converse(text, history, next.id, true)
+        return converse(text, history, pendingId, true)
       }
 
       // What the app adds to the model's own words, each as a paragraph of its own.

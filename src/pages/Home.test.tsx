@@ -117,7 +117,8 @@ describe('asking Droplet to fill in the invoice', () => {
     expect(asked[0].view).toBeUndefined()
     expect(asked[1]).toMatchObject({ view: 'invoice', intent: 'Invoice them for 12 gift boxes at 450' })
     expect(asked[1].invoice?.lines).toHaveLength(1)
-    expect(screen.getByText('I am opening the invoice workspace.')).toBeInTheDocument()
+    // the first answer was only the way there: the second says what was done, so the founder is not told twice
+    expect(screen.queryByText('I am opening the invoice workspace.')).not.toBeInTheDocument()
     expect(screen.getByLabelText(/^Invoice INV-0001/)).toHaveTextContent('Gift box')
   })
 
