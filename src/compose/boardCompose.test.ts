@@ -109,7 +109,7 @@ describe('what the composer is told about the board', () => {
   })
 
   it('has a prompt for the board, which says what it may and may not do and when it may act', () => {
-    expect(systemPromptFor('board')).toBe(BOARD_SYSTEM_PROMPT)
+    expect(systemPromptFor('board', 'advanced')).toBe(BOARD_SYSTEM_PROMPT)
     for (const rule of [
       /You never choose where anything goes, how big it is or what colour it is/,
       /You can only add/,
@@ -206,7 +206,7 @@ describe('asking for the board, end to end', () => {
     const result = await composeWorkspace(request('more name ideas'), call)
     expect(result.outcome).toBe('valid')
     expect(result.turn.actions).toEqual([{ type: 'add_note', text: 'Pet Pals', near: 'n3' }])
-    expect(seen[0].system).toBe(BOARD_SYSTEM_PROMPT)
+    expect(seen[0].system).toBe(systemPromptFor('board'))
     expect(JSON.stringify(seen[0].schema)).toContain('fill_prompt')
     expect(JSON.stringify(seen[0].schema)).not.toContain('set_palette')
     expect(seen[0].user).toContain('<board>')
@@ -269,22 +269,22 @@ describe('the answer, checked again in the browser', () => {
   const okResponse = (body: unknown) => async () => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
 
   it('accepts a board reply that fits the board that was asked about', async () => {
-    const result = await requestComposition(request('x') as never, { fetchImpl: okResponse({ outcome: 'valid', turn: turn([{ type: 'add_note', text: 'Pet Pals', near: 'n3' }]) }) as never })
+    const result = await requestComposition(request('x') as never, { fetchImpl: okResponse({ outcome: 'valid', answeredBy: 'base', turn: turn([{ type: 'add_note', text: 'Pet Pals', near: 'n3' }]) }) as never })
     expect(result.ok).toBe(true)
   })
 
   it('refuses one that names a thing that is not on the board, even if the server let it through', async () => {
-    const result = await requestComposition(request('x') as never, { fetchImpl: okResponse({ outcome: 'valid', turn: turn([{ type: 'add_note', text: 'x', near: 'n99' }]) }) as never })
+    const result = await requestComposition(request('x') as never, { fetchImpl: okResponse({ outcome: 'valid', answeredBy: 'base', turn: turn([{ type: 'add_note', text: 'x', near: 'n99' }]) }) as never })
     expect(result).toMatchObject({ ok: false, kind: 'bad_response' })
   })
 
   it('refuses board actions when the board is not what was on screen', async () => {
-    const result = await requestComposition({ intent: 'x' }, { fetchImpl: okResponse({ outcome: 'valid', turn: turn([{ type: 'add_note', text: 'x' }]) }) as never })
+    const result = await requestComposition({ intent: 'x' }, { fetchImpl: okResponse({ outcome: 'valid', answeredBy: 'base', turn: turn([{ type: 'add_note', text: 'x' }]) }) as never })
     expect(result).toMatchObject({ ok: false, kind: 'bad_response' })
   })
 
   it('takes a reply with no actions as it is', async () => {
-    const result = await requestComposition(request('x') as never, { fetchImpl: okResponse({ outcome: 'valid', turn: chatTurn as AnyTurn }) as never })
+    const result = await requestComposition(request('x') as never, { fetchImpl: okResponse({ outcome: 'valid', answeredBy: 'base', turn: chatTurn as AnyTurn }) as never })
     expect(result.ok).toBe(true)
   })
 })

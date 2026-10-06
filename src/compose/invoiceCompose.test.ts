@@ -136,9 +136,9 @@ describe('what the composer is told', () => {
   })
 
   it('has one prompt for each workspace, with the rule about prices in the invoice\'s', () => {
-    expect(systemPromptFor('invoice')).toBe(INVOICE_SYSTEM_PROMPT)
-    expect(systemPromptFor('brand')).toBe(SYSTEM_PROMPT)
-    expect(systemPromptFor()).toBe(SYSTEM_PROMPT)
+    expect(systemPromptFor('invoice', 'advanced')).toBe(INVOICE_SYSTEM_PROMPT)
+    expect(systemPromptFor('brand', 'advanced')).toBe(SYSTEM_PROMPT)
+    expect(systemPromptFor(undefined, 'advanced')).toBe(SYSTEM_PROMPT)
     expect(INVOICE_SYSTEM_PROMPT).toMatch(/A price is only ever a figure the founder wrote/)
     expect(INVOICE_SYSTEM_PROMPT).toMatch(/Never calculate one/)
     expect(INVOICE_SYSTEM_PROMPT).toMatch(/use_saved_client/)
@@ -217,7 +217,7 @@ describe('asking for the invoice, end to end', () => {
     const result = await composeWorkspace(asked('make it due in 7 days'), call)
     expect(result.outcome).toBe('valid')
     expect(result.turn.actions).toEqual([{ type: 'set_terms', terms: '7' }])
-    expect(seen[0].system).toBe(INVOICE_SYSTEM_PROMPT)
+    expect(seen[0].system).toBe(systemPromptFor('invoice'))
     expect(JSON.stringify(seen[0].schema)).toContain('use_saved_client')
     expect(JSON.stringify(seen[0].schema)).not.toContain('set_palette')
     expect(seen[0].user).toContain('<invoice>')
@@ -268,19 +268,19 @@ describe('the answer, checked again in the browser', () => {
   const okResponse = (body: unknown) => async () => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
 
   it('accepts an invoice reply that fits the invoice that was asked about', async () => {
-    const body = { outcome: 'valid', turn: turn([{ type: 'set_terms', terms: '30' }]) }
+    const body = { outcome: 'valid', answeredBy: 'base', turn: turn([{ type: 'set_terms', terms: '30' }]) }
     const result = await requestComposition({ intent: 'x', view: 'invoice', invoice }, { fetchImpl: okResponse(body) as never })
     expect(result.ok).toBe(true)
   })
 
   it('refuses one with a price the founder never wrote, even if the server let it through', async () => {
-    const body = { outcome: 'valid', turn: turn([{ type: 'add_line', description: 'Box', unitPrice: '450' }]) }
+    const body = { outcome: 'valid', answeredBy: 'base', turn: turn([{ type: 'add_line', description: 'Box', unitPrice: '450' }]) }
     const result = await requestComposition({ intent: 'add a box', view: 'invoice', invoice }, { fetchImpl: okResponse(body) as never })
     expect(result).toMatchObject({ ok: false, kind: 'bad_response' })
   })
 
   it('refuses invoice actions when the invoice is not what was on screen', async () => {
-    const body = { outcome: 'valid', turn: turn([{ type: 'set_terms', terms: '30' }]) }
+    const body = { outcome: 'valid', answeredBy: 'base', turn: turn([{ type: 'set_terms', terms: '30' }]) }
     const result = await requestComposition({ intent: 'x' }, { fetchImpl: okResponse(body) as never })
     expect(result).toMatchObject({ ok: false, kind: 'bad_response' })
   })

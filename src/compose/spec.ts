@@ -174,7 +174,15 @@ export type PaletteSnapshot = z.infer<typeof paletteSnapshotSchema>
 
 export const MAX_HISTORY_MESSAGES = 10
 
+// Which model answers. Quick (`base`) is the default for every message. Advanced is the founder's own choice for the next message only: a
+// stronger model that can search the web, with a small daily allowance. The app never switches it on.
+export const MODES = ['base', 'advanced'] as const
+export type Mode = (typeof MODES)[number]
+export const modeOf = (request: { mode?: Mode }): Mode => request.mode ?? 'base'
+
 export const composeRequestSchema = z.object({
+  // Absent means base.
+  mode: z.enum(MODES).optional(),
   intent: z.string().trim().min(1).max(600),
   // The conversation so far, oldest first, so a follow-up such as "make it warmer" makes sense.
   history: z
@@ -200,12 +208,25 @@ export type ComposeRequest = z.infer<typeof composeRequestSchema>
 export const OUTCOMES = ['valid', 'retried', 'fallback'] as const
 export type Outcome = (typeof OUTCOMES)[number]
 
+// How many Advanced answers a founder has left in a sliding 24 hours. `resetsAt` is when the oldest one returns (an ISO time), or null when none
+// have been used. Counted by the server, never by the browser.
+export const allowanceSchema = z.object({
+  advancedLeft: z.number().int().min(0),
+  advancedLimit: z.number().int().min(0),
+  resetsAt: z.string().max(40).nullable(),
+})
+export type Allowance = z.infer<typeof allowanceSchema>
+
 export const composeResponseSchema = z.object({
   outcome: z.enum(OUTCOMES),
+  // Which mode really answered. An Advanced request is answered by Quick when Advanced is busy.
+  answeredBy: z.enum(MODES),
+  // Where the founder's Advanced allowance stands after this request. Left out only if the server could not count it.
+  allowance: allowanceSchema.optional(),
   // A reply for the palette workspace, the invoice or the board. A reply with no actions fits all of them.
   turn: z.union([turnSchema, invoiceTurnSchema, boardTurnSchema]),
   // Set when a simpler view was used, so the interface can say so.
-  note: z.string().max(200).optional(),
+  note: z.string().max(400).optional(),
   // What the reply searched for and drew on, from Google Search, when it searched the web.
   grounding: groundingSchema.optional(),
 })

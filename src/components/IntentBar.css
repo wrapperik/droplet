@@ -65,6 +65,7 @@
 }
 
 .intent__plus,
+.intent__mode,
 .intent__send {
   display: grid;
   place-items: center;
@@ -104,6 +105,39 @@
 .intent__input::placeholder {
   color: var(--text-muted);
   opacity: 1;
+}
+
+.intent__mode {
+  width: 2.5rem;
+  height: 2.5rem;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.intent__mode:hover,
+.intent__mode[aria-expanded='true'] {
+  background: var(--accent-tint);
+  color: var(--text);
+}
+
+/* Advanced is on for the next message: a small pill in the bar. Pressing it turns Advanced off. */
+.intent__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex: none;
+  padding: 0.375rem 0.5rem 0.375rem 0.75rem;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.intent__pill:hover {
+  background: var(--accent-tint-soft);
 }
 
 .intent__send {

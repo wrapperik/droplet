@@ -9,8 +9,13 @@ export type CompositionLogEntry = {
   intent: string
   outcome: 'valid' | 'retried' | 'fallback' | 'error'
   task?: string
-  // Which model answered (the main one, or the fallback).
+  // The mode the founder asked for, and the one that answered (Quick answers an Advanced request when Google's model is busy).
+  mode?: 'base' | 'advanced'
+  answeredBy?: 'base' | 'advanced'
+  // Which model answered.
   model?: string
+  // The tokens the request used, as the API counts them, all replies added up. Never shown to founders.
+  tokens?: { prompt: number; answer: number; thinking: number }
   // How many actions the turn carried.
   actions?: number
   // How many replies were not usable, and why, for the first few.
@@ -19,6 +24,8 @@ export type CompositionLogEntry = {
   error?: string
   // How many of the model's replies searched the web.
   searches?: number
+  // Search was asked for and the API refused it, so the model answered without.
+  searchRefused?: boolean
   ms: number
 }
 

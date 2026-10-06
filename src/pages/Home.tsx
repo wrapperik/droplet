@@ -26,9 +26,10 @@ import { snapshotOfInvoice } from '../compose/invoiceSnapshot.ts'
 import type { InvoiceTurnAction } from '../compose/invoiceSpec.ts'
 import { founderTextOf } from '../compose/rules.ts'
 import { paletteSnapshotOf, snapshotOfState } from '../compose/snapshot.ts'
-import { MAX_HISTORY_MESSAGES, isBoardAction, isInvoiceAction, routedTo, type TurnAction, type View } from '../compose/spec.ts'
+import { MAX_HISTORY_MESSAGES, isBoardAction, isInvoiceAction, routedTo, type Mode, type TurnAction, type View } from '../compose/spec.ts'
 import { useRipple } from '../hooks/useRipple.ts'
 import { requestComposition } from '../lib/composeClient.ts'
+import { useAdvancedAllowance } from '../lib/advancedAllowance.ts'
 import { chatTitle, cleanTitle, hasFounderMessage, loadChats, removeChat, saveChats, storableMessages, upsertChat, type StoredChat } from '../lib/chatStore.ts'
 import { loadBoard, openBoardForProject, saveBoard } from '../lib/boardStore.ts'
 import { docOf as boardDocOf, isBoardUnsaved, reduceBoard, type BoardAction, type BoardState } from '../lib/boardState.ts'
@@ -84,6 +85,8 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   // Which workspace is on screen. Each keeps its own state while another is shown.
   const [view, setView] = useState<WorkspaceView>('brand')
   const [composing, setComposing] = useState(false)
+  // Where the founder's Advanced allowance stands, as the server last said.
+  const [allowance, setAllowance] = useAdvancedAllowance()
   // The two ends of the header, where the workspace puts its controls beside the logo.
   const [headerStart, setHeaderStart] = useState<HTMLElement | null>(null)
   const [headerEnd, setHeaderEnd] = useState<HTMLElement | null>(null)
@@ -273,7 +276,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   // One question to the composer and what comes of it. If the composer says the request belongs to the other workspace, that one
   // is opened and the question is asked again, once, with it in front of the composer.
   const converse = useCallback(
-    async (text: string, history: { role: 'founder' | 'droplet'; text: string }[], pendingId: number, routed: boolean) => {
+    async (text: string, history: { role: 'founder' | 'droplet'; text: string }[], pendingId: number, routed: boolean, mode: Mode = 'base') => {
       const view = onScreen()
       const [saved, memory, savedBoard] = await Promise.all([loadPalette(currentProjectId), loadMemory(currentProjectId), loadBoard(currentProjectId)])
       // Where the founder is on the journey, so the composer can guide: only the business name, the offer and counts.
@@ -285,6 +288,8 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
       const boardStatus = view === 'board' && boardOpen ? await boardSaveStatus(boardOpen) : 'none'
       const result = await requestComposition({
         intent: text,
+        // Advanced is the founder's choice for this message. Quick is sent as no mode at all.
+        ...(mode === 'advanced' ? { mode } : {}),
         ...(history.length > 0 ? { history } : {}),
         ...(view ? { view } : {}),
         ...(chatNameRef.current ? { chatTitle: chatNameRef.current } : {}),
@@ -317,6 +322,8 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
           ),
         )
 
+      // The server counts the Advanced allowance and says where it stands with every answer, and with a refusal for having none left.
+      setAllowance(result.allowance)
       if (!result.ok) return finish(result.message)
 
       // The composer names the conversation once it has a subject, and may rename it if the subject changes.
@@ -333,10 +340,10 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
           await openWorkspaceFor(target)
           const next = message('droplet', '', true)
           setThread((current) => [...current, next])
-          return converse(text, history, next.id, true)
+          return converse(text, history, next.id, true, mode)
         }
         await openWorkspaceFor(target)
-        return converse(text, history, pendingId, true)
+        return converse(text, history, pendingId, true, mode)
       }
 
       // What the app adds to the model's own words, each as a paragraph of its own.
@@ -405,11 +412,11 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
     },
     // onScreen only reads refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentProjectId, message, nameChat, openWorkspaceFor, projectName, workspaceOpened],
+    [currentProjectId, message, nameChat, openWorkspaceFor, projectName, setAllowance, workspaceOpened],
   )
 
   const submitIntent = useCallback(
-    async (text: string) => {
+    async (text: string, mode: Mode = 'base') => {
       if (busyRef.current) return
       busyRef.current = true
       const pending = message('droplet', '', true)
@@ -429,7 +436,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
       setThread((current) => [...current, ...(moved ? [message('divider', `Switched workspace to ${SPACE_NAMES[space]}`)] : []), message('you', text), pending])
       setComposing(true)
       try {
-        await converse(text, history, pending.id, false)
+        await converse(text, history, pending.id, false, mode)
         // If the composer took the founder to another workspace, that is where they are now, and no divider is owed for it.
         sentInRef.current = spaceRef.current
       } finally {
@@ -689,7 +696,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
 
   // The tip that offers the workspace menu is for the very start, before the founder has said anything.
   const bar = (isDocked: boolean) => (
-    <IntentBar docked={isDocked} busy={composing} showTip={!hasFounderMessage(thread)} onSubmitIntent={submitIntent} onChooseTask={chooseTask} />
+    <IntentBar docked={isDocked} busy={composing} showTip={!hasFounderMessage(thread)} allowance={allowance} onSubmitIntent={submitIntent} onChooseTask={chooseTask} />
   )
   const chatBar = (isDocked: boolean) => (
     <ChatBar onFullScreen={isDocked ? backToChat : undefined} busy={composing} />

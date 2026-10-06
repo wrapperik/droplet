@@ -3,7 +3,7 @@ import { emptyBoardSnapshot, openBoardSnapshot, openInvoiceSnapshot, openSnapsho
 
 // The fixed set of test requests. The pitch pins the model and only changes it after these have been run again:
 //   node --env-file=.env scripts/eval-compose.ts
-// Each says what a good answer looks like in terms a program can check. Whether a palette is also *good* (warm
+// They are run in Quick by default and in Advanced with EVAL_MODE=advanced. Each says what a good answer looks like in terms a program can check. Whether a palette is also *good* (warm
 // enough, calm enough) is for a person to judge from the printed results.
 
 export type Expectation = {
@@ -13,12 +13,14 @@ export type Expectation = {
   acts?: boolean
   // The reply opens a workspace (it has `opens`, with the founder's own words quoted), or it does not. Left out where either is fine.
   opens?: boolean
-  // The reply searched the web, or did not. Checked only when the eval is run with search allowed (EVAL_SEARCH=1).
+  // The reply searched the web, or did not. Checked only in Advanced (EVAL_MODE=advanced), the only mode that can search.
   searches?: boolean
   // The reply shows a table or a checklist, or does not. Left out where either is fine.
   blocks?: 'table' | 'checklist' | 'none'
   // The first action must be one of these types.
   firstAction?: string[]
+  // In Quick, which cannot search, the message says the answer may be out of date and that Advanced can look it up. Checked only in Quick.
+  pointsToAdvanced?: boolean
   // The message must not contain this (case-insensitive), for the injection test.
   messageMustNotInclude?: string
   // No action may set a price: the founder gave none.
@@ -420,7 +422,13 @@ export const TEST_REQUESTS: TestRequest[] = [
     id: 'search-not-names',
     why: 'Something it can do itself: name ideas need no search, and should be specific to the business',
     request: { intent: 'Give me a few more name ideas like DuckStack', project: namedProject },
-    expect: { task: ['chat', 'ideation'], acts: false, opens: false, searches: false },
+    expect: { task: ['chat', 'ideation'], acts: false, opens: false, searches: false, messageMustNotInclude: 'advanced' },
+  },
+  {
+    id: 'quick-cipc',
+    why: 'In Quick, which cannot search: a fee that changes should be answered from what it knows, say it may be out of date, and say Advanced can look it up',
+    request: { intent: 'How much does it cost to register a company with CIPC?', project: namedProject },
+    expect: { task: 'chat', acts: false, opens: false, pointsToAdvanced: true },
   },
   {
     id: 'short-pricing',

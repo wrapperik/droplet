@@ -1,5 +1,5 @@
 import { chatTurn, openSnapshot, validOpenTurn } from './fixtures.ts'
-import { composeRequestSchema, turnJsonSchema, turnSchema, workspaceSnapshotSchema } from './spec.ts'
+import { allowanceSchema, composeRequestSchema, modeOf, turnJsonSchema, turnSchema, workspaceSnapshotSchema } from './spec.ts'
 
 describe('a turn that asks a question', () => {
   const ask = { ...chatTurn, question: 'Do you know what one box costs you?', replies: ['Yes', 'Not sure yet'] }
@@ -126,5 +126,22 @@ describe('composeRequestSchema', () => {
     expect(composeRequestSchema.safeParse({ intent: 'x', history: [{ role: 'robot', text: 'hi' }] }).success).toBe(false)
     expect(composeRequestSchema.safeParse({ intent: 'x', history: Array.from({ length: 11 }, () => history[0]) }).success).toBe(false)
     expect(composeRequestSchema.safeParse({ intent: 'x', memory: { colours: [{ hex: '#1F8FE0' }] } }).success).toBe(true)
+  })
+})
+
+describe('the mode of a request', () => {
+  it('is Quick unless it says Advanced, and is nothing else', () => {
+    expect(composeRequestSchema.parse({ intent: 'hi' }).mode).toBeUndefined()
+    expect(modeOf({})).toBe('base')
+    expect(modeOf(composeRequestSchema.parse({ intent: 'hi', mode: 'base' }))).toBe('base')
+    expect(modeOf(composeRequestSchema.parse({ intent: 'hi', mode: 'advanced' }))).toBe('advanced')
+    expect(composeRequestSchema.safeParse({ intent: 'hi', mode: 'turbo' }).success).toBe(false)
+  })
+
+  it('has an allowance that is a count and a time, never anything else', () => {
+    expect(allowanceSchema.safeParse({ advancedLeft: 3, advancedLimit: 10, resetsAt: null }).success).toBe(true)
+    expect(allowanceSchema.safeParse({ advancedLeft: 3.5, advancedLimit: 10, resetsAt: null }).success).toBe(false)
+    expect(allowanceSchema.safeParse({ advancedLeft: -1, advancedLimit: 10, resetsAt: null }).success).toBe(false)
+    expect(allowanceSchema.safeParse({ advancedLeft: 3, advancedLimit: 10 }).success).toBe(false)
   })
 })

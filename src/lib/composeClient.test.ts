@@ -1,5 +1,5 @@
 import { chatTurn, openSnapshot, validOpenTurn } from '../compose/fixtures.ts'
-import { requestComposition } from './composeClient.ts'
+import { fetchAllowance, requestComposition } from './composeClient.ts'
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 const reply = (response: Response | Error) => (async () => {
@@ -14,7 +14,7 @@ describe('requestComposition', () => {
     let seen: { url: string; init?: RequestInit } | null = null
     const impl = (async (url: string, init?: RequestInit) => {
       seen = { url, init }
-      return json({ outcome: 'valid', turn: validOpenTurn })
+      return json({ outcome: 'valid', answeredBy: 'base', turn: validOpenTurn })
     }) as unknown as typeof fetch
     await requestComposition(request, { fetchImpl: impl })
     expect(seen!.url).toBe('/api/compose')
@@ -23,28 +23,28 @@ describe('requestComposition', () => {
   })
 
   it('returns a valid answer with how it went', async () => {
-    const result = await requestComposition(request, { fetchImpl: reply(json({ outcome: 'retried', turn: validOpenTurn })) })
-    expect(result).toMatchObject({ ok: true, outcome: 'retried', turn: { task: 'brand' } })
+    const result = await requestComposition(request, { fetchImpl: reply(json({ outcome: 'retried', answeredBy: 'base', turn: validOpenTurn })) })
+    expect(result).toMatchObject({ ok: true, outcome: 'retried', answeredBy: 'base', turn: { task: 'brand' } })
   })
 
   it('returns an ordinary answer with no actions', async () => {
-    const result = await requestComposition({ intent: 'how do I price?' }, { fetchImpl: reply(json({ outcome: 'valid', turn: chatTurn })) })
+    const result = await requestComposition({ intent: 'how do I price?' }, { fetchImpl: reply(json({ outcome: 'valid', answeredBy: 'base', turn: chatTurn })) })
     expect(result).toMatchObject({ ok: true, turn: { task: 'chat', actions: [] } })
   })
 
   it('passes on the note when a simpler view was used', async () => {
-    const result = await requestComposition(request, { fetchImpl: reply(json({ outcome: 'fallback', turn: validOpenTurn, note: 'A simpler view was used.' })) })
-    expect(result).toMatchObject({ ok: true, outcome: 'fallback', note: 'A simpler view was used.' })
+    const result = await requestComposition(request, { fetchImpl: reply(json({ outcome: 'fallback', answeredBy: 'base', turn: validOpenTurn, note: 'A simpler view was used.' })) })
+    expect(result).toMatchObject({ ok: true, outcome: 'fallback', answeredBy: 'base', note: 'A simpler view was used.' })
   })
 
   it('re-checks the turn and refuses one that does not match the schema', async () => {
-    const result = await requestComposition(request, { fetchImpl: reply(json({ outcome: 'valid', turn: { ...validOpenTurn, task: 'weather' } })) })
+    const result = await requestComposition(request, { fetchImpl: reply(json({ outcome: 'valid', answeredBy: 'base', turn: { ...validOpenTurn, task: 'weather' } })) })
     expect(result).toMatchObject({ ok: false, kind: 'bad_response' })
   })
 
   it('re-checks the actions against the workspace the request was about, so a wrong server cannot slip a bad turn through', async () => {
     const impossible = { ...chatTurn, task: 'brand', actions: [{ type: 'set_colour', index: 7, hex: '#123456' }] }
-    const result = await requestComposition({ ...request, workspace: openSnapshot() }, { fetchImpl: reply(json({ outcome: 'valid', turn: impossible })) })
+    const result = await requestComposition({ ...request, workspace: openSnapshot() }, { fetchImpl: reply(json({ outcome: 'valid', answeredBy: 'base', turn: impossible })) })
     expect(result).toMatchObject({ ok: false, kind: 'bad_response' })
   })
 
@@ -77,7 +77,7 @@ describe('requestComposition against the deployed function', () => {
     let seen: { url: string; init?: RequestInit } | null = null
     const impl = (async (url: string, init?: RequestInit) => {
       seen = { url, init }
-      return json({ outcome: 'valid', turn: validOpenTurn })
+      return json({ outcome: 'valid', answeredBy: 'base', turn: validOpenTurn })
     }) as unknown as typeof fetch
     const result = await requestComposition(request, { fetchImpl: impl, target, headers })
     expect(result.ok).toBe(true)
@@ -88,7 +88,7 @@ describe('requestComposition against the deployed function', () => {
   it('asks for headers for the target it is sending to', async () => {
     let asked: unknown = null
     await requestComposition(request, {
-      fetchImpl: reply(json({ outcome: 'valid', turn: validOpenTurn })),
+      fetchImpl: reply(json({ outcome: 'valid', answeredBy: 'base', turn: validOpenTurn })),
       target,
       headers: async (given) => {
         asked = given
@@ -108,5 +108,68 @@ describe('requestComposition against the deployed function', () => {
     expect(result).toMatchObject({ ok: false, kind: 'network', message: expect.stringMatching(/Check your connection/) })
     const dev = await requestComposition(request, { fetchImpl: reply(new Error('offline')) })
     expect(dev).toMatchObject({ ok: false, kind: 'network', message: expect.stringMatching(/dev server/) })
+  })
+})
+
+describe('Quick and Advanced, from the browser', () => {
+  const allowance = { advancedLeft: 7, advancedLimit: 10, resetsAt: '2026-10-07T08:00:00.000Z' }
+
+  it('sends the mode with the request, and sends none for Quick', async () => {
+    const bodies: unknown[] = []
+    const impl = (async (_url: string, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)))
+      return json({ outcome: 'valid', answeredBy: 'advanced', turn: chatTurn })
+    }) as unknown as typeof fetch
+    await requestComposition({ intent: 'What does CIPC charge?', mode: 'advanced' }, { fetchImpl: impl })
+    await requestComposition({ intent: 'hi' }, { fetchImpl: impl })
+    expect(bodies).toEqual([{ intent: 'What does CIPC charge?', mode: 'advanced' }, { intent: 'hi' }])
+  })
+
+  it('returns which mode answered and where the allowance stands', async () => {
+    const result = await requestComposition({ intent: 'x', mode: 'advanced' }, { fetchImpl: reply(json({ outcome: 'valid', answeredBy: 'base', allowance, note: 'Advanced is busy today, so I answered with Quick.', turn: chatTurn })) })
+    expect(result).toMatchObject({ ok: true, answeredBy: 'base', allowance, note: 'Advanced is busy today, so I answered with Quick.' })
+  })
+
+  it('refuses a reply that does not say which mode answered, or an allowance that is not a count', async () => {
+    expect(await requestComposition(request, { fetchImpl: reply(json({ outcome: 'valid', turn: chatTurn })) })).toMatchObject({ ok: false, kind: 'bad_response' })
+    expect(await requestComposition(request, { fetchImpl: reply(json({ outcome: 'valid', answeredBy: 'base', allowance: { advancedLeft: -1, advancedLimit: 10, resetsAt: null }, turn: chatTurn })) })).toMatchObject({ ok: false, kind: 'bad_response' })
+    expect(await requestComposition(request, { fetchImpl: reply(json({ outcome: 'valid', answeredBy: 'turbo', turn: chatTurn })) })).toMatchObject({ ok: false, kind: 'bad_response' })
+  })
+
+  it('passes on the refusal for having no Advanced answers left, with the allowance that says so', async () => {
+    const none = { advancedLeft: 0, advancedLimit: 10, resetsAt: '2026-10-07T08:00:00.000Z' }
+    const result = await requestComposition({ intent: 'x', mode: 'advanced' }, { fetchImpl: reply(json({ error: 'advanced_limit', message: 'You have used your 10 Advanced answers for today.', allowance: none }, 429)) })
+    expect(result).toEqual({ ok: false, kind: 'advanced_limit', message: 'You have used your 10 Advanced answers for today.', allowance: none })
+  })
+
+  it('ignores an allowance in a failure that is not one', async () => {
+    const result = await requestComposition(request, { fetchImpl: reply(json({ error: 'timeout', message: 'Slow.', allowance: { advancedLeft: 'lots' } }, 504)) })
+    expect(result).toEqual({ ok: false, kind: 'timeout', message: 'Slow.' })
+  })
+})
+
+describe('fetchAllowance', () => {
+  const allowance = { advancedLeft: 7, advancedLimit: 10, resetsAt: null }
+
+  it('asks the server with a GET, with the founder\'s token for the deployed function, and returns the count', async () => {
+    let seen: { url: string; init?: RequestInit } | null = null
+    const impl = (async (url: string, init?: RequestInit) => {
+      seen = { url, init }
+      return json({ allowance })
+    }) as unknown as typeof fetch
+    const target = { url: 'https://abc.supabase.co/functions/v1/compose', authenticated: true }
+    const found = await fetchAllowance({ fetchImpl: impl, target, headers: async () => ({ authorization: 'Bearer token', apikey: 'publishable' }) })
+    expect(found).toEqual(allowance)
+    expect(seen!.url).toBe(target.url)
+    expect(seen!.init?.method).toBe('GET')
+    expect(seen!.init?.headers).toMatchObject({ authorization: 'Bearer token' })
+    expect(seen!.init?.body).toBeUndefined()
+  })
+
+  it('says nothing when it cannot find out: a refusal, a bad answer or no connection', async () => {
+    expect(await fetchAllowance({ fetchImpl: reply(json({ error: 'unavailable' }, 500)) })).toBeNull()
+    expect(await fetchAllowance({ fetchImpl: reply(json({ allowance: { advancedLeft: 'many' } })) })).toBeNull()
+    expect(await fetchAllowance({ fetchImpl: reply(json({})) })).toBeNull()
+    expect(await fetchAllowance({ fetchImpl: reply(new TypeError('offline')) })).toBeNull()
   })
 })

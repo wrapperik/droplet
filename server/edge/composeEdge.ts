@@ -1,7 +1,8 @@
 import type { ModelCaller } from '../../src/compose/compose.ts'
 import { callerFromEnv, type ComposeEnv } from '../composeEnv.ts'
-import { handleCompose } from '../composeService.ts'
+import { handleAllowance, handleCompose } from '../composeService.ts'
 import type { CompositionLogEntry } from '../compositionLog.ts'
+import { DAY_MS, type AdvancedUse } from '../rateLimit.ts'
 
 // The `compose` function as it runs in Supabase (an Edge Function, in Deno). It uses only what the web gives every runtime, `Request`,
 // `Response` and `fetch`, so it is tested here in Node and needs no Supabase library. In front of the same service the dev server uses it
@@ -9,15 +10,15 @@ import type { CompositionLogEntry } from '../compositionLog.ts'
 //
 //   1. The caller must be a signed-in founder. The bearer token is checked with Supabase Auth itself, not just decoded, so an expired,
 //      forged or anonymous (publishable key) token is turned away.
-//   2. A limit per founder, counted from the `compositions` table (the pitch's design), so it holds across every instance of the function.
+//   2. A limit per founder, counted from the `compositions` table (the pitch's design), so it holds across every instance of the function:
+//      so many requests an hour, and so many Advanced answers in a day (a request Quick answered for Google's busy model does not count).
 //   3. A record of how each request went (valid, retried, fallback or error), in `compositions`. **It never stores what the founder
-//      wrote**: only the task, the outcome, the model and the time (manifesto principle 6, and the interviewees who would not give AI
-//      their client details).
+//      wrote**: only the task, the outcome, the mode, the model, the tokens used and the time (manifesto principle 6, and the interviewees who would
+//      not give AI their client details).
 //
 // The Gemini key is a secret of the function and is read here and nowhere else.
 
 const HOUR_MS = 60 * 60 * 1000
-const DAY_MS = 24 * HOUR_MS
 // A board is sent with the request, up to 120 things with their words, so this is room for one.
 export const MAX_BODY_BYTES = 90_000
 
@@ -30,18 +31,17 @@ export type ComposeHandlerDeps = {
   recentCount: (userId: string, sinceIso: string) => Promise<number>
   record: (userId: string, entry: CompositionLogEntry) => Promise<void>
   limitPerHour: number
-  // Requests a founder may have answered with a web search in a day. 0 (the default) never searches.
-  searchPerDay?: number
-  // How many of this founder's requests since the given time searched the web. Throws if it cannot be found out.
-  recentSearches?: (userId: string, sinceIso: string) => Promise<number>
-  modelUsed?: () => string | undefined
+  // Advanced answers a founder may have in a day. 0 turns Advanced off.
+  advancedPerDay: number
+  // How many Advanced answers this founder has had since the given time, and when the oldest was given. Throws if it cannot be found out.
+  advancedUse: (userId: string, sinceIso: string) => Promise<AdvancedUse>
   now?: () => number
 }
 
 const CORS = {
   'access-control-allow-origin': '*',
   'access-control-allow-headers': 'authorization, apikey, content-type, x-client-info',
-  'access-control-allow-methods': 'POST, OPTIONS',
+  'access-control-allow-methods': 'GET, POST, OPTIONS',
   'access-control-max-age': '86400',
 }
 
@@ -61,12 +61,24 @@ export function createComposeHandler(deps: ComposeHandlerDeps): (request: Reques
 
   return async (request) => {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS })
-    if (request.method !== 'POST') return json(405, { error: 'bad_request', message: 'Use POST.' }, { allow: 'POST' })
+    if (request.method !== 'POST' && request.method !== 'GET') return json(405, { error: 'bad_request', message: 'Use POST.' }, { allow: 'GET, POST' })
 
     try {
       const token = /^Bearer\s+(.+)$/i.exec(request.headers.get('authorization') ?? '')?.[1]?.trim()
       const user = token ? await deps.authenticate(token) : null
       if (!user) return json(401, { error: 'unauthorised', message: 'Sign in to use Droplet.' })
+
+      // The founder's Advanced allowance and the Advanced answers behind it, over a sliding day.
+      const advanced = {
+        limit: deps.advancedPerDay,
+        status: () => deps.advancedUse(user.id, new Date(now() - DAY_MS).toISOString()),
+        // The row this request writes says which mode answered, so spending needs nothing more.
+        spend: () => undefined,
+      }
+      if (request.method === 'GET') {
+        const reply = await handleAllowance({ advanced })
+        return json(reply.status, reply.body)
+      }
 
       const declared = Number(request.headers.get('content-length'))
       if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) return json(413, { error: 'bad_request', message: 'That request is too large.' })
@@ -82,13 +94,9 @@ export function createComposeHandler(deps: ComposeHandlerDeps): (request: Reques
       const reply = await handleCompose(body, {
         call: deps.call,
         now,
-        modelUsed: deps.modelUsed,
         messages: MESSAGES,
         limiter: { take: async () => (await deps.recentCount(user.id, new Date(now() - HOUR_MS).toISOString())) < deps.limitPerHour },
-        // Off unless a daily allowance is set. The row this request writes says whether it searched, so spending needs nothing more.
-        ...(deps.searchPerDay && deps.searchPerDay > 0 && deps.recentSearches
-          ? { search: { allowed: async () => (await deps.recentSearches!(user.id, new Date(now() - DAY_MS).toISOString())) < deps.searchPerDay!, spend: () => undefined } }
-          : {}),
+        advanced,
         log: (entry) => deps.record(user.id, entry),
       })
       return json(reply.status, reply.body)
@@ -121,9 +129,7 @@ export function createEdgeComposeHandler(env: ComposeEnv, fetchImpl: Fetch = fet
   return createComposeHandler({
     call: configured.call,
     limitPerHour: configured.limitPerHour,
-    modelUsed: configured.modelUsed,
-    // Off unless COMPOSE_SEARCH_PER_DAY is set, which needs the migration that adds `searched` (see docs/deploy.md).
-    searchPerDay: configured.searchPerDay ?? 0,
+    advancedPerDay: configured.advancedPerDay,
 
     async authenticate(token) {
       const response = await fetchImpl(`${url}/auth/v1/user`, { headers: { apikey: serviceKey, authorization: `Bearer ${token}` } })
@@ -136,8 +142,18 @@ export function createEdgeComposeHandler(env: ComposeEnv, fetchImpl: Fetch = fet
       return count(`select=id&user_id=eq.${encodeURIComponent(userId)}&created_at=gte.${encodeURIComponent(sinceIso)}`)
     },
 
-    async recentSearches(userId, sinceIso) {
-      return count(`select=id&user_id=eq.${encodeURIComponent(userId)}&created_at=gte.${encodeURIComponent(sinceIso)}&searched=is.true`)
+    // The founder's Advanced answers, oldest first: only the first row is read, for when one comes back, and the count from the header.
+    async advancedUse(userId, sinceIso) {
+      const response = await fetchImpl(
+        `${url}/rest/v1/compositions?select=created_at&user_id=eq.${encodeURIComponent(userId)}&created_at=gte.${encodeURIComponent(sinceIso)}&answered_by=eq.advanced&order=created_at.asc`,
+        { headers: { ...service, prefer: 'count=exact', range: '0-0' } },
+      )
+      if (!response.ok) throw new Error(`could not count (${response.status})`)
+      const used = Number(response.headers.get('content-range')?.split('/')[1])
+      if (!Number.isFinite(used)) throw new Error('could not count')
+      const rows = (await response.json().catch(() => [])) as { created_at?: unknown }[]
+      const first = typeof rows[0]?.created_at === 'string' ? Date.parse(rows[0].created_at) : Number.NaN
+      return { used, oldestAt: used > 0 && Number.isFinite(first) ? first : null }
     },
 
     async record(userId, entry) {
@@ -146,13 +162,18 @@ export function createEdgeComposeHandler(env: ComposeEnv, fetchImpl: Fetch = fet
         user_id: userId,
         outcome: entry.outcome,
         task: entry.task ?? null,
+        mode: entry.mode ?? null,
+        answered_by: entry.answeredBy ?? null,
         model: entry.model ?? null,
+        prompt_tokens: entry.tokens?.prompt ?? null,
+        answer_tokens: entry.tokens?.answer ?? null,
+        thinking_tokens: entry.tokens?.thinking ?? null,
         error: entry.error ?? null,
         actions: entry.actions ?? null,
         bad_replies: entry.badReplies ?? null,
         ms: Math.round(entry.ms),
-        // Written only when it searched, which happens only once the column exists (search is off until then).
-        ...(entry.searches ? { searched: true } : {}),
+        searched: Boolean(entry.searches),
+        search_refused: Boolean(entry.searchRefused),
       }
       try {
         await fetchImpl(`${url}/rest/v1/compositions`, { method: 'POST', headers: { ...service, 'content-type': 'application/json', prefer: 'return=minimal' }, body: JSON.stringify(row) })

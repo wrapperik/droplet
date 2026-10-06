@@ -4,24 +4,30 @@
 //   node --env-file=.env scripts/eval-compose.ts            all requests
 //   node --env-file=.env scripts/eval-compose.ts act-hide   only the ones whose id contains "act-hide"
 //
+// EVAL_MODE picks the model, as the founder does in the app: "base" (the default) is Quick, "advanced" is the stronger model with Google Search.
+// The models are GEMINI_BASE_MODEL and GEMINI_ADVANCED_MODEL.
+//
 // The free tier is rate limited, so requests run one after another with a pause between them.
 
 import { mkdir, writeFile } from 'node:fs/promises'
 import { composeWorkspace, ComposeError } from '../src/compose/compose.ts'
-import { createGeminiCaller, DEFAULT_MODEL } from '../src/compose/gemini.ts'
+import type { ModelCaller } from '../src/compose/compose.ts'
+import type { Mode } from '../src/compose/spec.ts'
+import { callerFromEnv } from '../server/composeEnv.ts'
 import { TEST_REQUESTS, type TestRequest } from '../src/compose/testRequests.ts'
 
-const apiKey = process.env.GEMINI_API_KEY?.trim()
-if (!apiKey) {
+const configured = callerFromEnv(process.env)
+if (!configured.call) {
   console.error('No GEMINI_API_KEY. Run with: node --env-file=.env scripts/eval-compose.ts')
   process.exit(1)
 }
-const model = process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL
-const call = createGeminiCaller({ apiKey, model, thinkingLevel: process.env.GEMINI_THINKING_LEVEL?.trim() || undefined })
+const call: ModelCaller = configured.call
+const mode: Mode = process.env.EVAL_MODE?.trim() === 'advanced' ? 'advanced' : 'base'
+const model = mode === 'advanced' ? configured.advancedModel : configured.baseModel
 
 const filter = process.argv[2]
-// EVAL_SEARCH=1 lets the model search the web, as the dev server does. Each search counts against the key's free monthly searches.
-const search = process.env.EVAL_SEARCH === '1'
+// Advanced may search the web, as in the app. Each search counts against the key's monthly searches.
+const search = mode === 'advanced'
 const requests = filter ? TEST_REQUESTS.filter((test) => test.id.includes(filter)) : TEST_REQUESTS
 const PAUSE_MS = Number(process.env.EVAL_PAUSE_MS) || 4000
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -31,7 +37,7 @@ type Row = { id: string; outcome: string; task: string; actions: string; pass: b
 async function run(test: TestRequest): Promise<Row> {
   const started = Date.now()
   try {
-    const result = await composeWorkspace(test.request, call, { search })
+    const result = await composeWorkspace({ ...test.request, mode }, call)
     const { turn } = result
     const problems: string[] = []
     if (result.outcome === 'fallback') problems.push('fell back after two unusable replies')
@@ -54,6 +60,7 @@ async function run(test: TestRequest): Promise<Row> {
     if (test.expect.asks !== undefined && test.expect.asks !== Boolean(turn.question)) problems.push(test.expect.asks ? 'expected a follow-up question, got none' : 'expected no question, got one')
     if (test.expect.titles !== undefined && test.expect.titles !== Boolean(turn.title)) problems.push(test.expect.titles ? 'expected a title for the chat, got none' : 'expected no title, got one')
     if (test.expect.list && shown.length === 0 && !/^\s*(?:[-*•]|\d+[.)])\s/m.test(turn.message)) problems.push('expected the message to be laid out as a list, or a table or checklist')
+    if (mode === 'base' && test.expect.pointsToAdvanced && !(/advanced/i.test(turn.message) && /out of date|outdated|changed|change/i.test(turn.message))) problems.push('expected it to say the answer may be out of date and that Advanced can look it up')
     if (test.expect.messageMustNotInclude && turn.message.toLowerCase().includes(test.expect.messageMustNotInclude)) {
       problems.push(`the message includes "${test.expect.messageMustNotInclude}"`)
     }
@@ -81,7 +88,7 @@ async function run(test: TestRequest): Promise<Row> {
   }
 }
 
-console.log(`Model: ${model}   Requests: ${requests.length}   Web search: ${search ? 'allowed' : 'off'}\n`)
+console.log(`Mode: ${mode === 'advanced' ? 'Advanced' : 'Quick'}   Model: ${model}   Requests: ${requests.length}   Web search: ${search ? 'allowed' : 'off'}\n`)
 const rows: Row[] = []
 for (const [index, test] of requests.entries()) {
   const row = await run(test)
@@ -104,5 +111,5 @@ console.log(`Valid first time: ${count('valid')}   Retried: ${count('retried')} 
 
 await mkdir('.droplet', { recursive: true })
 const file = `.droplet/eval-${new Date().toISOString().replace(/[:.]/g, '-')}.json`
-await writeFile(file, JSON.stringify({ model, at: new Date().toISOString(), rows }, null, 2))
+await writeFile(file, JSON.stringify({ mode, model, at: new Date().toISOString(), rows }, null, 2))
 console.log(`Results saved to ${file}`)

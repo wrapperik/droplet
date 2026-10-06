@@ -5,16 +5,34 @@ import { buildUserContent, systemPromptFor } from './prompt.ts'
 import { checkTurnFor, withoutRepeatedQuestion } from './rules.ts'
 import { boardTurnSchema } from './boardSpec.ts'
 import { invoiceTurnSchema } from './invoiceSpec.ts'
-import { TASKS, isBoardAction, isInvoiceAction, turnJsonSchema, turnSchema, type AnyTurn, type ComposeRequest, type Outcome, type Task, type Turn } from './spec.ts'
+import { TASKS, isBoardAction, isInvoiceAction, modeOf, turnJsonSchema, turnSchema, type AnyTurn, type ComposeRequest, type Mode, type Outcome, type Task, type Turn } from './spec.ts'
 
 // The composition loop: ask the model, check the answer against the workspace, and if it is no good ask once more
 // with the reasons. A second failure uses the fixed fallback. Invalid output never reaches the screen.
 
-// `search` lets the model use Google Search for this request, if it can. It decides whether to. `userWithoutSearch` is the same request telling
-// the model it cannot search, for a model that cannot (the spare one, or one the API will not let search), so it never thinks it looked something up.
-export type ModelRequest = { system: string; user: string; schema: Record<string, unknown>; search?: boolean; userWithoutSearch?: string }
+// `mode` says which model to ask: Quick (base) or Advanced. `search` lets an Advanced request use Google Search, if its model can. The model decides
+// whether to. `userWithoutSearch` is the same request telling the model it cannot search, for a model that cannot (Quick, which Advanced falls back to,
+// or one the API will not let search), so it never thinks it looked something up.
+export type ModelRequest = { system: string; user: string; schema: Record<string, unknown>; mode?: Mode; search?: boolean; userWithoutSearch?: string }
+
+// How many tokens a reply used, as the API counts them. Logged, never shown to founders.
+export type Usage = { prompt: number; answer: number; thinking: number }
+
+// What a caller says about how it answered, for the log and for the allowance.
+export type ReplyMeta = {
+  // The model that answered.
+  model: string
+  // The mode that really answered. An Advanced request is answered by Quick when Advanced cannot answer.
+  answeredBy: Mode
+  // Set when an Advanced request was answered by Quick because Google's model had no quota left, or was overloaded. That is Google's doing, not the founder's.
+  spared?: boolean
+  // Search was asked for and the API refused it, so the model answered without.
+  searchRefused?: boolean
+  usage?: Usage
+}
+
 // The reply as text, and what it searched for and drew on, if it searched.
-export type ModelReply = { text: string; grounding?: Grounding }
+export type ModelReply = { text: string; grounding?: Grounding; meta?: ReplyMeta }
 // Sends one request to the model and returns its reply. The only place a model is called from. A plain string is a reply that searched nothing.
 export type ModelCaller = (request: ModelRequest) => Promise<string | ModelReply>
 
@@ -42,8 +60,10 @@ export type ComposeResult = {
   attempts: Attempt[]
   // What the accepted reply searched for and drew on, if it searched.
   grounding?: Grounding
-  // How many of the replies asked for searched the web (a retry can search too), for the founder's daily allowance.
+  // How many of the replies asked for searched the web (a retry can search too).
   searches: number
+  // How the model answered, when the caller says (the last reply's), with the tokens of every reply added up.
+  meta?: ReplyMeta
 }
 
 const FENCE = /^```(?:json)?\s*([\s\S]*?)\s*```$/i
@@ -90,19 +110,21 @@ function normalise(turn: AnyTurn): AnyTurn {
   }
 }
 
-export type ComposeOptions = {
-  // The model may use Google Search for this request. The server decides, from the founder's daily allowance.
-  search?: boolean
-}
-
-export async function composeWorkspace(request: ComposeRequest, call: ModelCaller, options: ComposeOptions = {}): Promise<ComposeResult> {
+export async function composeWorkspace(request: ComposeRequest, call: ModelCaller): Promise<ComposeResult> {
+  const mode = modeOf(request)
   const schema = turnJsonSchema(request.view)
-  const system = systemPromptFor(request.view)
-  const search = options.search === true
+  const system = systemPromptFor(request.view, mode)
+  // Quick never searches. Advanced may, and the model decides whether to.
+  const search = mode === 'advanced'
   const attempts: Attempt[] = []
   let errors: string[] = []
   let task: Task | undefined
   let searches = 0
+  let meta: ReplyMeta | undefined
+  const usage: Usage = { prompt: 0, answer: 0, thinking: 0 }
+  let counted = false
+
+  const resultMeta = (): ReplyMeta | undefined => (meta ? { ...meta, ...(counted ? { usage: { ...usage } } : {}) } : undefined)
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const sent = attempt === 0 ? undefined : errors
@@ -110,18 +132,28 @@ export async function composeWorkspace(request: ComposeRequest, call: ModelCalle
       system,
       user: buildUserContent(request, sent, search),
       schema,
+      mode,
       ...(search ? { search, userWithoutSearch: buildUserContent(request, sent, false) } : {}),
     })
     const reply: ModelReply = typeof raw === 'string' ? { text: raw } : raw
     if (reply.grounding) searches += 1
+    if (reply.meta) {
+      meta = { ...reply.meta, searchRefused: Boolean(meta?.searchRefused || reply.meta.searchRefused) || undefined }
+      if (reply.meta.usage) {
+        counted = true
+        usage.prompt += reply.meta.usage.prompt
+        usage.answer += reply.meta.usage.answer
+        usage.thinking += reply.meta.usage.thinking
+      }
+    }
     const checked = checkReply(reply.text, request)
     attempts.push({ errors: checked.errors })
     if (checked.turn) {
-      return { outcome: attempt === 0 ? 'valid' : 'retried', turn: checked.turn, attempts, searches, ...(reply.grounding ? { grounding: reply.grounding } : {}) }
+      return { outcome: attempt === 0 ? 'valid' : 'retried', turn: checked.turn, attempts, searches, ...(reply.grounding ? { grounding: reply.grounding } : {}), ...(meta ? { meta: resultMeta() } : {}) }
     }
     errors = checked.errors
     task = checked.task ?? task
   }
 
-  return { outcome: 'fallback', turn: fallbackTurn(task, Boolean(request.workspace ?? request.invoice ?? request.board)), note: FALLBACK_NOTE, attempts, searches }
+  return { outcome: 'fallback', turn: fallbackTurn(task, Boolean(request.workspace ?? request.invoice ?? request.board)), note: FALLBACK_NOTE, attempts, searches, ...(meta ? { meta: resultMeta() } : {}) }
 }

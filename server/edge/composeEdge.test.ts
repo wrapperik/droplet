@@ -3,15 +3,17 @@ import { describe, expect, it } from 'vitest'
 import { ComposeError, type ModelCaller } from '../../src/compose/compose.ts'
 import { validOpenReply } from '../../src/compose/fixtures.ts'
 import type { CompositionLogEntry } from '../compositionLog.ts'
+import type { AdvancedUse } from '../rateLimit.ts'
 import { createComposeHandler, createEdgeComposeHandler, MAX_BODY_BYTES, type ComposeHandlerDeps } from './composeEdge.ts'
 
 const good: ModelCaller = async () => validOpenReply
 const post = (body: unknown, headers: Record<string, string> = { authorization: 'Bearer good-token' }) =>
   new Request('https://f.example/compose', { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body) })
 
-function setup(over: Partial<ComposeHandlerDeps> = {}, recent = 0) {
+function setup(over: Partial<ComposeHandlerDeps> = {}, recent = 0, advancedUsed: AdvancedUse = { used: 0, oldestAt: null }) {
   const recorded: { userId: string; entry: CompositionLogEntry }[] = []
   const counted: { userId: string; since: string }[] = []
+  const countedAdvanced: { userId: string; since: string }[] = []
   const deps: ComposeHandlerDeps = {
     call: good,
     limitPerHour: 3,
@@ -21,10 +23,15 @@ function setup(over: Partial<ComposeHandlerDeps> = {}, recent = 0) {
       counted.push({ userId, since })
       return recent
     },
+    advancedPerDay: 10,
+    advancedUse: async (userId, since) => {
+      countedAdvanced.push({ userId, since })
+      return advancedUsed
+    },
     record: async (userId, entry) => void recorded.push({ userId, entry }),
     ...over,
   }
-  return { handle: createComposeHandler(deps), recorded, counted }
+  return { handle: createComposeHandler(deps), recorded, counted, countedAdvanced }
 }
 
 describe('the compose function', () => {
@@ -32,7 +39,7 @@ describe('the compose function', () => {
     const { handle, recorded } = setup()
     const response = await handle(post({ intent: 'a colour palette for my gift box business' }))
     expect(response.status).toBe(200)
-    expect(await response.json()).toMatchObject({ outcome: 'valid', turn: { task: 'brand' } })
+    expect(await response.json()).toMatchObject({ outcome: 'valid', answeredBy: 'base', turn: { task: 'brand' } })
     expect(recorded).toHaveLength(1)
     expect(recorded[0]).toMatchObject({ userId: 'user-1', entry: { outcome: 'valid', task: 'brand' } })
   })
@@ -55,6 +62,7 @@ describe('the compose function', () => {
     expect(response.status).toBe(204)
     expect(response.headers.get('access-control-allow-headers')).toMatch(/authorization/)
     expect(response.headers.get('access-control-allow-methods')).toMatch(/POST/)
+    expect(response.headers.get('access-control-allow-methods')).toMatch(/GET/)
   })
 
   it('allows the browser to read every answer, including a refusal', async () => {
@@ -63,11 +71,47 @@ describe('the compose function', () => {
     expect((await handle(post({ intent: 'a palette' }, {}))).headers.get('access-control-allow-origin')).toBe('*')
   })
 
-  it('takes only POST, and says so', async () => {
+  it('takes only POST, and GET for the allowance, and says so', async () => {
     const { handle } = setup()
-    const response = await handle(new Request('https://f.example/compose', { method: 'GET' }))
+    const response = await handle(new Request('https://f.example/compose', { method: 'PUT', headers: { authorization: 'Bearer good-token' } }))
     expect(response.status).toBe(405)
-    expect(response.headers.get('allow')).toBe('POST')
+    expect(response.headers.get('allow')).toBe('GET, POST')
+  })
+
+  it('tells a signed-in founder where their Advanced allowance stands on a GET, and nobody else', async () => {
+    const { handle, countedAdvanced, recorded } = setup({}, 0, { used: 3, oldestAt: Date.parse('2026-10-05T08:00:00Z') })
+    const response = await handle(new Request('https://f.example/compose', { method: 'GET', headers: { authorization: 'Bearer good-token' } }))
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ allowance: { advancedLeft: 7, advancedLimit: 10, resetsAt: '2026-10-06T08:00:00.000Z' } })
+    expect(countedAdvanced).toEqual([{ userId: 'user-1', since: '2026-10-04T12:00:00.000Z' }])
+    // asking costs nothing: no row is written
+    expect(recorded).toEqual([])
+    const anonymous = await handle(new Request('https://f.example/compose', { method: 'GET' }))
+    expect(anonymous.status).toBe(401)
+  })
+
+  it('counts Advanced over the last day, refuses the one past the allowance before any model is called, and answers Quick all the same', async () => {
+    let asked = 0
+    const { handle, recorded } = setup({ call: async () => { asked += 1; return validOpenReply } }, 0, { used: 10, oldestAt: Date.parse('2026-10-05T09:00:00Z') })
+    const refused = await handle(post({ intent: 'a palette', mode: 'advanced' }))
+    expect(refused.status).toBe(429)
+    expect(await refused.json()).toMatchObject({ error: 'advanced_limit', allowance: { advancedLeft: 0, advancedLimit: 10, resetsAt: '2026-10-06T09:00:00.000Z' } })
+    expect(asked).toBe(0)
+    expect(recorded[0]).toMatchObject({ entry: { outcome: 'error', error: 'advanced_limit', mode: 'advanced' } })
+    expect((await handle(post({ intent: 'a palette' }))).status).toBe(200)
+    expect(asked).toBe(1)
+  })
+
+  it('says it cannot count Advanced rather than failing, when the count cannot be found out, and answers with Quick', async () => {
+    const { handle } = setup({ advancedUse: async () => { throw new Error('db-internal-host refused') } })
+    const response = await handle(post({ intent: 'a palette', mode: 'advanced' }))
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as { answeredBy: string; note: string; allowance?: unknown }
+    expect(body).toMatchObject({ answeredBy: 'base', note: 'Advanced is not available right now, so I answered with Quick.' })
+    expect(body.allowance).toBeUndefined()
+    const asking = await handle(new Request('https://f.example/compose', { method: 'GET', headers: { authorization: 'Bearer good-token' } }))
+    expect(asking.status).toBe(500)
+    expect(JSON.stringify(await asking.json())).not.toContain('db-internal-host')
   })
 
   it('holds a founder to a number of requests an hour, counted over the last hour, and says so with a 429', async () => {
@@ -128,7 +172,7 @@ describe('the compose function', () => {
 // The real thing's calls to Supabase, over HTTP, with a stand-in for fetch.
 describe('the compose function in Supabase', () => {
   type Call = { url: string; init?: RequestInit }
-  function fakeSupabase(over: { user?: Response | null; count?: Response; insert?: Response | Error } = {}) {
+  function fakeSupabase(over: { user?: Response | null; count?: Response; advanced?: Response; insert?: Response | Error } = {}) {
     const calls: Call[] = []
     const fetchImpl = (async (url: string, init?: RequestInit) => {
       calls.push({ url, init })
@@ -137,6 +181,7 @@ describe('the compose function in Supabase', () => {
         if (over.insert instanceof Error) throw over.insert
         return over.insert ?? new Response(null, { status: 201 })
       }
+      if (url.includes('answered_by=eq.advanced')) return over.advanced ?? new Response('[]', { status: 200, headers: { 'content-range': '*/0' } })
       if (url.includes('/rest/v1/compositions')) return over.count ?? new Response('[]', { status: 206, headers: { 'content-range': '0-0/1' } })
       throw new Error(`unexpected ${url}`)
     }) as unknown as typeof fetch
@@ -184,44 +229,99 @@ describe('the compose function in Supabase', () => {
     expect((await withModel(() => createEdgeComposeHandler(env, empty.fetchImpl)(post({ intent: 'a palette' })))).status).toBe(200)
   })
 
-  it('does not search, or count searches, unless a daily allowance is set', async () => {
-    const { fetchImpl, calls } = fakeSupabase()
-    const bodies: string[] = []
-    const before = globalThis.fetch
-    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
-      bodies.push(String(init?.body))
-      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: validOpenReply }] }, finishReason: 'STOP' }] }), { status: 200 })
-    }) as unknown as typeof fetch
-    try {
-      await createEdgeComposeHandler(env, fetchImpl)(post({ intent: 'a palette' }))
-    } finally {
-      globalThis.fetch = before
-    }
-    expect(calls.some((call) => call.url.includes('searched='))).toBe(false)
-    expect(JSON.parse(bodies[0]).tools).toBeUndefined()
+  const gemini = (extra: Record<string, unknown> = {}, candidate: Record<string, unknown> = {}) => ({
+    candidates: [{ content: { parts: [{ text: validOpenReply }] }, finishReason: 'STOP', ...candidate }],
+    ...extra,
   })
-
-  it('with an allowance, counts the founder\'s searched rows over the last day, lets the model search, and marks the row that searched', async () => {
-    const { fetchImpl, calls } = fakeSupabase()
-    const bodies: string[] = []
+  // Stands in for Google, and remembers what it was sent.
+  const withGoogle = async <T,>(reply: Record<string, unknown>, run: () => Promise<T>): Promise<{ result: T; sent: { url: string; body: Record<string, unknown> }[] }> => {
+    const sent: { url: string; body: Record<string, unknown> }[] = []
     const before = globalThis.fetch
-    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
-      bodies.push(String(init?.body))
-      const reply = { candidates: [{ content: { parts: [{ text: validOpenReply }] }, finishReason: 'STOP', groundingMetadata: { webSearchQueries: ['palette trends'] } }] }
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      sent.push({ url: String(url), body: JSON.parse(String(init?.body)) })
       return new Response(JSON.stringify(reply), { status: 200 })
     }) as unknown as typeof fetch
     try {
-      const response = await createEdgeComposeHandler({ ...env, COMPOSE_SEARCH_PER_DAY: '5' }, fetchImpl)(post({ intent: 'a palette' }))
-      expect(response.status).toBe(200)
-      expect(((await response.json()) as { grounding?: unknown }).grounding).toEqual({ queries: ['palette trends'], sources: [] })
+      return { result: await run(), sent }
     } finally {
       globalThis.fetch = before
     }
-    const counted = calls.find((call) => call.url.includes('searched=is.true'))!
+  }
+  const insertOf = (calls: Call[]) => JSON.parse(String(calls.find((call) => call.init?.method === 'POST' && call.url.endsWith('/rest/v1/compositions'))!.init?.body)) as Record<string, unknown>
+
+  it('answers Quick with the Quick model and no search, records the tokens it used, and says nothing of them to the founder', async () => {
+    const { fetchImpl, calls } = fakeSupabase()
+    const { result, sent } = await withGoogle(gemini({ usageMetadata: { promptTokenCount: 1500, candidatesTokenCount: 90, thoughtsTokenCount: 20 } }), () => createEdgeComposeHandler(env, fetchImpl)(post({ intent: 'a palette' })))
+    expect(sent[0].url).toContain('/models/gemini-3.5-flash-lite:')
+    expect(sent[0].body.tools).toBeUndefined()
+    expect(insertOf(calls)).toMatchObject({ mode: 'base', answered_by: 'base', model: 'gemini-3.5-flash-lite', prompt_tokens: 1500, answer_tokens: 90, thinking_tokens: 20, searched: false, search_refused: false })
+    const body = (await result.json()) as Record<string, unknown>
+    expect(body).toMatchObject({ answeredBy: 'base', allowance: { advancedLeft: 10, advancedLimit: 10, resetsAt: null } })
+    expect(JSON.stringify(body)).not.toMatch(/token|1500/i)
+  })
+
+  it('answers Advanced with the Advanced model and Google Search, counts the founder\'s Advanced rows over the last day, and marks the row that answered and searched', async () => {
+    const advanced = new Response(JSON.stringify([{ created_at: '2026-10-05T07:00:00.000Z' }]), { status: 206, headers: { 'content-range': '0-0/4' } })
+    const { fetchImpl, calls } = fakeSupabase({ advanced })
+    const { result, sent } = await withGoogle(gemini({}, { groundingMetadata: { webSearchQueries: ['palette trends'] } }), () => createEdgeComposeHandler(env, fetchImpl)(post({ intent: 'a palette', mode: 'advanced' })))
+    expect(result.status).toBe(200)
+    const body = (await result.json()) as { grounding?: unknown; answeredBy: string; allowance: unknown }
+    expect(body.grounding).toEqual({ queries: ['palette trends'], sources: [] })
+    // 4 used before, and this one makes 5; the oldest one returns a day after it was given
+    expect(body).toMatchObject({ answeredBy: 'advanced', allowance: { advancedLeft: 5, advancedLimit: 10, resetsAt: '2026-10-06T07:00:00.000Z' } })
+    expect(sent[0].url).toContain('/models/gemini-3.8-flash:')
+    expect(sent[0].body.tools).toEqual([{ googleSearch: {} }])
+    const counted = calls.find((call) => call.url.includes('answered_by=eq.advanced'))!
     expect(counted.url).toContain('user_id=eq.user-1')
-    expect(JSON.parse(bodies[0]).tools).toEqual([{ googleSearch: {} }])
-    const insert = calls.find((call) => call.init?.method === 'POST')!
-    expect(JSON.parse(String(insert.init?.body))).toMatchObject({ searched: true })
+    expect(counted.url).toMatch(/created_at=gte\.2026-10-0\d/)
+    expect(counted.url).toContain('order=created_at.asc')
+    expect(counted.init?.headers).toMatchObject({ prefer: 'count=exact', range: '0-0', apikey: 'service-key' })
+    expect(insertOf(calls)).toMatchObject({ mode: 'advanced', answered_by: 'advanced', model: 'gemini-3.8-flash', searched: true })
+  })
+
+  it('refuses an Advanced request the founder has no answers left for, without calling Google', async () => {
+    const used = new Response(JSON.stringify([{ created_at: '2026-10-05T07:00:00.000Z' }]), { status: 206, headers: { 'content-range': '0-0/10' } })
+    const { fetchImpl, calls } = fakeSupabase({ advanced: used })
+    const { result, sent } = await withGoogle(gemini(), () => createEdgeComposeHandler(env, fetchImpl)(post({ intent: 'a palette', mode: 'advanced' })))
+    expect(result.status).toBe(429)
+    expect(await result.json()).toMatchObject({ error: 'advanced_limit', allowance: { advancedLeft: 0 } })
+    expect(sent).toHaveLength(0)
+    expect(insertOf(calls)).toMatchObject({ mode: 'advanced', outcome: 'error', error: 'advanced_limit', answered_by: null })
+  })
+
+  it('counts Quick answered for Google\'s busy model as Quick: the row says base, so the founder keeps the Advanced answer', async () => {
+    const { fetchImpl, calls } = fakeSupabase()
+    const before = globalThis.fetch
+    let n = 0
+    globalThis.fetch = (async () => {
+      n += 1
+      // Advanced is out of quota; Quick answers
+      if (n === 1) return new Response(JSON.stringify({ error: { message: 'quota', details: [{ violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel' }], retryDelay: '3600s' }] } }), { status: 429 })
+      return new Response(JSON.stringify(gemini()), { status: 200 })
+    }) as unknown as typeof fetch
+    try {
+      const response = await createEdgeComposeHandler(env, fetchImpl)(post({ intent: 'a palette', mode: 'advanced' }))
+      expect(await response.json()).toMatchObject({ answeredBy: 'base', note: 'Advanced is busy today, so I answered with Quick.', allowance: { advancedLeft: 10 } })
+    } finally {
+      globalThis.fetch = before
+    }
+    expect(insertOf(calls)).toMatchObject({ mode: 'advanced', answered_by: 'base', model: 'gemini-3.5-flash-lite' })
+  })
+
+  it('answers a GET with the allowance and nothing else, and writes no row', async () => {
+    const { fetchImpl, calls } = fakeSupabase({ advanced: new Response('[]', { status: 200, headers: { 'content-range': '*/0' } }) })
+    const response = await createEdgeComposeHandler(env, fetchImpl)(new Request('https://f.example/compose', { headers: { authorization: 'Bearer good-token' } }))
+    expect(await response.json()).toEqual({ allowance: { advancedLeft: 10, advancedLimit: 10, resetsAt: null } })
+    expect(calls.some((call) => call.init?.method === 'POST')).toBe(false)
+  })
+
+  it('takes the daily number of Advanced answers from COMPOSE_ADVANCED_PER_DAY, and turns Advanced off with 0', async () => {
+    const { fetchImpl } = fakeSupabase()
+    const five = await createEdgeComposeHandler({ ...env, COMPOSE_ADVANCED_PER_DAY: '5' }, fetchImpl)(new Request('https://f.example/compose', { headers: { authorization: 'Bearer good-token' } }))
+    expect(await five.json()).toMatchObject({ allowance: { advancedLimit: 5 } })
+    const off = await createEdgeComposeHandler({ ...env, COMPOSE_ADVANCED_PER_DAY: '0' }, fetchImpl)(post({ intent: 'a palette', mode: 'advanced' }))
+    expect(off.status).toBe(429)
+    expect(await off.json()).toMatchObject({ error: 'advanced_limit', message: 'Advanced is not available.' })
   })
 
   it('records how it went with no words of the founder\'s, or the model\'s, in the row', async () => {
@@ -230,7 +330,7 @@ describe('the compose function in Supabase', () => {
     expect(response.status).toBe(200)
     const insert = calls.find((call) => call.init?.method === 'POST' && call.url.endsWith('/rest/v1/compositions'))!
     const row = JSON.parse(String(insert.init?.body)) as Record<string, unknown>
-    expect(Object.keys(row).sort()).toEqual(['actions', 'bad_replies', 'error', 'model', 'ms', 'outcome', 'task', 'user_id'])
+    expect(Object.keys(row).sort()).toEqual(['actions', 'answer_tokens', 'answered_by', 'bad_replies', 'error', 'mode', 'model', 'ms', 'outcome', 'prompt_tokens', 'search_refused', 'searched', 'task', 'thinking_tokens', 'user_id'])
     expect(row).toMatchObject({ user_id: 'user-1', outcome: 'valid', task: 'brand' })
     expect(JSON.stringify(row)).not.toMatch(/Pretoria|invoice|R450/i)
     expect(insert.init?.headers).toMatchObject({ prefer: 'return=minimal', apikey: 'service-key' })

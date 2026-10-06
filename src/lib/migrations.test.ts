@@ -80,10 +80,20 @@ describe('the database migrations', () => {
     expect(code).not.toMatch(/create policy "[^"]+" on public\.compositions\s+for (insert|update|delete)/)
   })
 
-  it('add to the record only whether a request searched the web, never what was searched for', () => {
+  it('add to the record only whether a request searched, which mode asked and answered, and how many tokens it used: never what was asked, answered or searched for', () => {
     const added = [...code.matchAll(/alter table public\.compositions add column (?:if not exists )?(\w+) ([^;]+);/g)].map((match) => [match[1], match[2].trim()])
-    expect(added).toEqual([['searched', 'boolean not null default false']])
+    expect(added).toEqual([
+      ['searched', 'boolean not null default false'],
+      ['search_refused', 'boolean not null default false'],
+      ['mode', "text check (mode in ('base', 'advanced'))"],
+      ['answered_by', "text check (answered_by in ('base', 'advanced'))"],
+      ['prompt_tokens', 'integer check (prompt_tokens >= 0)'],
+      ['answer_tokens', 'integer check (answer_tokens >= 0)'],
+      ['thinking_tokens', 'integer check (thinking_tokens >= 0)'],
+    ])
     expect(code).toMatch(/create index if not exists compositions_user_searched_idx on public\.compositions \(user_id, created_at desc\) where searched/)
+    // what the daily allowance counts: a founder's Advanced answers, oldest first
+    expect(code).toMatch(/create index if not exists compositions_user_advanced_idx on public\.compositions \(user_id, created_at asc\) where answered_by = 'advanced'/)
   })
 
   it('count a founder\'s recent requests from an index made for it', () => {

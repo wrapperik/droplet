@@ -16,21 +16,34 @@ export function createRateLimiter(max: number, windowMs: number, now: () => numb
   }
 }
 
-// How many requests may still search the web. `allowed` says whether this one may; `spend` records the searches it made. The Edge Function counts
-// rows in the database instead, so its `spend` does nothing and the row it writes says whether the request searched.
-export type SearchAllowance = { allowed: () => boolean | Promise<boolean>; spend: (searches: number) => void | Promise<void> }
+export const DAY_MS = 24 * 60 * 60 * 1000
 
-// For the dev server: so many searched requests in a sliding day, on this machine. A limit of 0 never searches.
-export function createSearchAllowance(perDay: number, windowMs = 24 * 60 * 60 * 1000, now: () => number = Date.now): SearchAllowance {
+// A founder's daily allowance of Advanced answers, over a sliding 24 hours. Only an answer the Advanced model gave counts: a request Quick answered
+// because Google's model was busy costs the founder nothing. `status` says how many have been used and when the oldest was given (so when one comes
+// back), and may be asynchronous: the Edge Function reads its `compositions` table, and records the use in the row it writes, so its `spend` does
+// nothing. The dev server counts requests to this server.
+export type AdvancedUse = { used: number; oldestAt: number | null }
+export type AdvancedAllowance = {
+  limit: number
+  status: () => AdvancedUse | Promise<AdvancedUse>
+  spend: () => void | Promise<void>
+}
+
+export function createAdvancedAllowance(limit: number, windowMs = DAY_MS, now: () => number = Date.now): AdvancedAllowance {
   let times: number[] = []
+  const recent = () => {
+    const current = now()
+    times = times.filter((time) => current - time < windowMs)
+    return times
+  }
   return {
-    allowed() {
-      const current = now()
-      times = times.filter((time) => current - time < windowMs)
-      return times.length < perDay
+    limit,
+    status() {
+      const live = recent()
+      return { used: live.length, oldestAt: live[0] ?? null }
     },
-    spend(searches) {
-      if (searches > 0) times.push(now())
+    spend() {
+      recent().push(now())
     },
   }
 }

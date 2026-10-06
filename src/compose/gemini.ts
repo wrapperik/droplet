@@ -1,4 +1,4 @@
-import { ComposeError, type ModelCaller, type ModelReply } from './compose.ts'
+import { ComposeError, type ModelCaller, type ModelReply, type Usage } from './compose.ts'
 import { groundingFromMetadata } from './grounding.ts'
 
 // Calls the Gemini API over REST. The key is passed in and sent only in a header; it is never put in a URL, a
@@ -7,10 +7,12 @@ import { groundingFromMetadata } from './grounding.ts'
 // The model ID is configuration, not code: the pitch pins it and only changes it after the fixed test requests
 // have been run again (see `npm run eval:compose`).
 
-export const DEFAULT_MODEL = 'gemini-3.8-flash'
-// Used only when the main model cannot answer because its quota is used up or it is overloaded. Each model has its
-// own free quota, so this keeps things working. The model that answered is logged with every request.
-export const DEFAULT_FALLBACK_MODEL = 'gemini-3.5-flash-lite'
+// Quick, the default for every message: a small, fast model that never searches and has no spare.
+export const DEFAULT_BASE_MODEL = 'gemini-3.5-flash-lite'
+export const DEFAULT_BASE_THINKING = 'low'
+// Advanced, which the founder chooses for one message: a stronger model that can search the web. When Google cannot answer with it (its quota is used
+// up, or it is overloaded) the request is answered by the Quick model instead.
+export const DEFAULT_ADVANCED_MODEL = 'gemini-3.8-flash'
 // The models that can use Google Search and answer in the JSON schema in the same request. Others are asked without search.
 export const SEARCH_MODELS = ['gemini-3.8-flash', 'gemini-3.1-pro-preview']
 export const canSearch = (model: string) => SEARCH_MODELS.includes(model)
@@ -20,28 +22,40 @@ const DEFAULT_TIMEOUT_MS = 45_000
 const OVERLOAD_RETRY_MS = 1500
 // If a used-up quota does not say when it resets, assume an hour before trying that model again.
 const DEFAULT_BLOCK_SECONDS = 3600
+// When the API refuses Google Search (a 400, or a 429 for the search quota), do not ask it for search again for this long.
+const SEARCH_BLOCK_MS = 60 * 60 * 1000
 
 export type GeminiOptions = {
   apiKey: string
-  model?: string
-  // Tried instead when the main model's quota is used up or it stays overloaded. None if unset.
-  fallbackModel?: string
+  // Answers every Quick request, and any Advanced request Google's stronger model cannot answer.
+  baseModel?: string
+  // Answers Advanced requests, with Google Search.
+  advancedModel?: string
+  // How hard each model thinks before answering (for Gemini 3 models: for example "low"). Unset leaves it to the API, which is the most careful and
+  // the slowest. Quick defaults to low.
+  baseThinking?: string
+  advancedThinking?: string
   timeoutMs?: number
   overloadRetryMs?: number
-  // How hard the model thinks before answering (for Gemini 3 models: for example "low"). Unset leaves it to the API,
-  // which is the most careful and the slowest.
-  thinkingLevel?: string
-  // Told which model gave each answer.
-  onModelUsed?: (model: string) => void
   now?: () => number
   // Replaceable so tests never touch the network.
   fetchImpl?: typeof fetch
 }
 
 type GeminiReply = {
+  usageMetadata?: { promptTokenCount?: unknown; candidatesTokenCount?: unknown; thoughtsTokenCount?: unknown }
   candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] }; finishReason?: string; groundingMetadata?: unknown }[]
   promptFeedback?: { blockReason?: string }
   error?: { message?: string; details?: { violations?: { quotaId?: string }[]; retryDelay?: string }[] }
+}
+
+const count = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value) : 0)
+
+// The tokens a reply used, if the API says. Logged, never shown to founders.
+function readUsage(reply: GeminiReply): Usage | undefined {
+  const raw = reply.usageMetadata
+  if (!raw) return undefined
+  return { prompt: count(raw.promptTokenCount), answer: count(raw.candidatesTokenCount), thinking: count(raw.thoughtsTokenCount) }
 }
 
 // A 429 is either "too many requests this minute" (wait a moment) or "the free quota for the day is used up" (wait
@@ -60,12 +74,15 @@ const hoursText = (seconds?: number) => {
   return hours >= 1 ? `in about ${hours} ${hours === 1 ? 'hour' : 'hours'}` : 'within the hour'
 }
 
-function createModelCaller(options: GeminiOptions, model: string): ModelCaller {
-  const { apiKey, timeoutMs = DEFAULT_TIMEOUT_MS, overloadRetryMs = OVERLOAD_RETRY_MS, thinkingLevel, fetchImpl = fetch } = options
+// One model, asked over REST. Always answers with a ModelReply whose meta says the model and the tokens used.
+type OneModel = (request: Parameters<ModelCaller>[0]) => Promise<ModelReply>
+
+function createModelCaller(options: GeminiOptions, model: string, thinkingLevel: string | undefined): OneModel {
+  const { apiKey, timeoutMs = DEFAULT_TIMEOUT_MS, overloadRetryMs = OVERLOAD_RETRY_MS, fetchImpl = fetch, now = Date.now } = options
   // If the API will not take the schema as a field, carry on with the schema written into the prompt.
   let schemaAccepted = true
-  // If the API will not take Google Search with this model, carry on without it.
-  let searchAccepted = canSearch(model)
+  // If the API will not take Google Search with this model (or this key), carry on without it for a while, and then try again.
+  let searchBlockedUntil = 0
   // The schema of the request in hand, so it can be written into the prompt if the API will not take it as a field.
   let schemaFallback: Record<string, unknown> = {}
 
@@ -99,7 +116,10 @@ function createModelCaller(options: GeminiOptions, model: string): ModelCaller {
 
   return async ({ system, user, schema, search = false, userWithoutSearch }) => {
     schemaFallback = schema
-    const searching = () => search && searchAccepted
+    // Whether search was asked for and the API refused it, for the log.
+    let searchRefused = search && !canSearch(model)
+    const searching = () => search && canSearch(model) && now() >= searchBlockedUntil
+    if (search && canSearch(model) && !searching()) searchRefused = true
     // Asked without search, the model is told it cannot search, so it never claims to have looked something up.
     const plainUser = userWithoutSearch ?? user
     let response = await send(system, searching() ? user : plainUser, schemaAccepted ? schema : null, searching())
@@ -109,10 +129,16 @@ function createModelCaller(options: GeminiOptions, model: string): ModelCaller {
       response = await send(system, searching() ? user : plainUser, schemaAccepted ? schema : null, searching())
     }
 
-    // A 400 with search on may be search, which a model or a key may not allow. Try once without it, and only remember that if it works.
-    if (response.status === 400 && searching()) {
+    // A 400 with search on may be search, which a model or a key may not allow, and a 429 may be search's own quota (the same request without search
+    // works). Try once without it on the same model, and only remember that if it works.
+    // A 429 for the model's own daily quota is not search's doing, and the same request without search would be refused the same way.
+    const searchWasRefused = async () => response.status === 400 || (response.status === 429 && !readQuota((await response.clone().json().catch(() => ({}))) as GeminiReply).daily)
+    if (searching() && (await searchWasRefused())) {
       const retry = await send(system, plainUser, schemaAccepted ? schema : null, false)
-      if (retry.ok) searchAccepted = false
+      if (retry.ok) {
+        searchBlockedUntil = now() + SEARCH_BLOCK_MS
+        searchRefused = true
+      }
       response = retry
     }
 
@@ -152,37 +178,45 @@ function createModelCaller(options: GeminiOptions, model: string): ModelCaller {
       .map((part) => part.text ?? '')
       .join('')
     const grounding = groundingFromMetadata(candidate?.groundingMetadata)
-    // A reply that searched nothing is plain text.
-    return grounding ? ({ text, grounding } satisfies ModelReply) : text
+    const usage = readUsage(reply)
+    return {
+      text,
+      ...(grounding ? { grounding } : {}),
+      // answeredBy is filled in by the caller that chose this model.
+      meta: { model, answeredBy: 'base', ...(searchRefused ? { searchRefused: true } : {}), ...(usage ? { usage } : {}) },
+    }
   }
 }
 
 export function createGeminiCaller(options: GeminiOptions): ModelCaller {
-  const model = options.model ?? DEFAULT_MODEL
-  const fallbackModel = options.fallbackModel && options.fallbackModel !== model ? options.fallbackModel : null
-  const main = createModelCaller(options, model)
-  const spare = fallbackModel ? createModelCaller(options, fallbackModel) : null
+  const baseModel = options.baseModel ?? DEFAULT_BASE_MODEL
+  const advancedModel = options.advancedModel ?? DEFAULT_ADVANCED_MODEL
+  const base = createModelCaller(options, baseModel, options.baseThinking ?? DEFAULT_BASE_THINKING)
+  const advanced = createModelCaller(options, advancedModel, options.advancedThinking)
   const now = options.now ?? Date.now
-  // When the main model's daily quota is used up there is no point asking it again until it resets.
-  let mainBlockedUntil = 0
+  // When Advanced's daily quota is used up there is no point asking it again until it resets.
+  let advancedBlockedUntil = 0
+
+  const answeredBy = (reply: ModelReply, mode: 'base' | 'advanced', spared = false): ModelReply => ({
+    ...reply,
+    meta: { ...(reply.meta ?? { model: mode === 'base' ? baseModel : advancedModel }), answeredBy: mode, ...(spared ? { spared: true } : {}) },
+  })
 
   return async (request) => {
-    // The spare model cannot search and answer in the schema at once, so it is asked without search.
-    const askSpare = async () => {
-      const reply = await spare!({ ...request, search: false })
-      options.onModelUsed?.(fallbackModel!)
-      return reply
-    }
-    if (spare && fallbackModel && now() < mainBlockedUntil) return askSpare()
+    // Quick never searches and has no other model to turn to.
+    if (request.mode !== 'advanced') return answeredBy(await base({ ...request, search: false }), 'base')
+
+    // Google's stronger model cannot answer, so Quick does, without search. The request is told it cannot search so it never claims to have looked.
+    const askQuick = async () => answeredBy(await base({ ...request, search: false }), 'base', true)
+    const canFallBack = advancedModel !== baseModel
+    if (canFallBack && now() < advancedBlockedUntil) return askQuick()
     try {
-      const reply = await main(request)
-      options.onModelUsed?.(model)
-      return reply
+      return answeredBy(await advanced(request), 'advanced')
     } catch (error) {
       const worthTrying = error instanceof ComposeError && (error.kind === 'quota' || error.kind === 'rate_limited' || error.kind === 'unavailable')
-      if (!spare || !fallbackModel || !worthTrying) throw error
-      if (error.kind === 'quota') mainBlockedUntil = now() + (error.retryAfterSeconds ?? DEFAULT_BLOCK_SECONDS) * 1000
-      return askSpare()
+      if (!canFallBack || !worthTrying) throw error
+      if (error.kind === 'quota') advancedBlockedUntil = now() + (error.retryAfterSeconds ?? DEFAULT_BLOCK_SECONDS) * 1000
+      return askQuick()
     }
   }
 }

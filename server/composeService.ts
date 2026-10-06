@@ -1,7 +1,7 @@
 import { ComposeError, composeWorkspace, type ModelCaller } from '../src/compose/compose.ts'
-import { composeRequestSchema } from '../src/compose/spec.ts'
+import { composeRequestSchema, modeOf, type Allowance } from '../src/compose/spec.ts'
 import type { CompositionLogEntry } from './compositionLog.ts'
-import type { RateLimiter, SearchAllowance } from './rateLimit.ts'
+import { DAY_MS, type AdvancedAllowance, type AdvancedUse, type RateLimiter } from './rateLimit.ts'
 
 // The `compose` function: validate the request, call the model, check the answer, log it. It knows nothing about
 // HTTP or Vite, so it can be tested directly and moved into a Supabase Edge Function as it is.
@@ -10,12 +10,10 @@ export type ComposeServiceDeps = {
   // Null when no API key is set.
   call: ModelCaller | null
   limiter: RateLimiter
-  // Whether this request may search the web, and where to record that it did. Without it the model never searches.
-  search?: SearchAllowance
+  // The founder's daily allowance of Advanced answers. Advanced is refused, before any model is called, when none is left.
+  advanced: AdvancedAllowance
   log: (entry: CompositionLogEntry) => void | Promise<void>
   now?: () => number
-  // Which model gave the last answer, for the log.
-  modelUsed?: () => string | undefined
   // Words to use in place of the standard ones for some failures. The dev server says what to do in .env.local, which means nothing to
   // anyone using the deployed app.
   messages?: Partial<Record<ComposeError['kind'], string>>
@@ -41,10 +39,39 @@ const MESSAGES: Record<ComposeError['kind'], string> = {
   bad_model: 'The Gemini model was not found. Check GEMINI_MODEL in .env.local.',
   bad_request: 'The model rejected the request.',
   rate_limited: 'The model is receiving too many requests. Try again in a minute.',
-  quota: 'The free daily limit for the model is used up. Try again later, or set GEMINI_MODEL in .env to another model.',
+  quota: 'The free daily limit for the model is used up. Try again later, or set GEMINI_BASE_MODEL in .env to another model.',
   timeout: 'The model took too long to answer. Try again.',
   unavailable: 'The model could not be reached. Try again.',
   blocked: 'The model declined that request. Try describing it differently.',
+}
+
+export const BUSY_NOTE = 'Advanced is busy today, so I answered with Quick.'
+const UNAVAILABLE_NOTE = 'Advanced is not available right now, so I answered with Quick.'
+
+const hoursText = (ms: number) => {
+  const hours = Math.round(ms / 3_600_000)
+  return hours >= 1 ? `in about ${hours} ${hours === 1 ? 'hour' : 'hours'}` : 'within the hour'
+}
+
+// Where the allowance stands, from how many have been used and when the oldest was given (it comes back a day after that).
+export function allowanceOf(use: AdvancedUse, limit: number): Allowance {
+  return { advancedLeft: Math.max(0, limit - use.used), advancedLimit: limit, resetsAt: use.oldestAt === null ? null : new Date(use.oldestAt + DAY_MS).toISOString() }
+}
+
+// Reading the allowance may fail (the Edge Function asks a database). That is never a failed request: it means Advanced is not offered this time.
+const readUse = async (deps: Pick<ComposeServiceDeps, 'advanced'>): Promise<AdvancedUse | null> => {
+  try {
+    return await deps.advanced.status()
+  } catch {
+    return null
+  }
+}
+
+// The allowance on its own, for the interface to show before anything has been asked.
+export async function handleAllowance(deps: Pick<ComposeServiceDeps, 'advanced'>): Promise<ServiceReply> {
+  const use = await readUse(deps)
+  if (!use) return { status: 500, body: { error: 'unavailable', message: 'I could not count your Advanced answers. Try again.' } }
+  return { status: 200, body: { allowance: allowanceOf(use, deps.advanced.limit) } }
 }
 
 export async function handleCompose(body: unknown, deps: ComposeServiceDeps): Promise<ServiceReply> {
@@ -56,38 +83,74 @@ export async function handleCompose(body: unknown, deps: ComposeServiceDeps): Pr
     return { status: 400, body: { error: 'bad_request', message: 'Send a request with an intent of up to 600 characters.' } }
   }
   const request = parsed.data
+  const asked = modeOf(request)
+  const limit = deps.advanced.limit
+  // Asked for at once and awaited only when needed, so a Quick answer does not wait for the count.
+  const usePromise = readUse(deps)
 
-  // A used-up quota says when it resets. That text is built from numbers only, so it is safe to show.
-  const fail = async (kind: ComposeError['kind'], message?: string): Promise<ServiceReply> => {
-    await deps.log({ at: new Date(started).toISOString(), intent: request.intent, outcome: 'error', error: kind, ms: now() - started })
-    return { status: STATUS[kind], body: { error: kind, message: message ?? deps.messages?.[kind] ?? MESSAGES[kind] } }
+  const failure = async (kind: string, status: number, message: string, error: string = kind): Promise<ServiceReply> => {
+    await deps.log({ at: new Date(started).toISOString(), intent: request.intent, outcome: 'error', mode: asked, error, ms: now() - started })
+    const use = await usePromise
+    return { status, body: { error: kind, message, ...(use ? { allowance: allowanceOf(use, limit) } : {}) } }
   }
+  // A used-up quota says when it resets. That text is built from numbers only, so it is safe to show.
+  const fail = (kind: ComposeError['kind'], message?: string) => failure(kind, STATUS[kind], message ?? deps.messages?.[kind] ?? MESSAGES[kind])
 
   if (!deps.call) return fail('no_key')
+
+  // Advanced is refused before any model is called when the founder has none left. When the count cannot be read, the founder gets Quick, and is told.
+  let mode = asked
+  let degraded: string | undefined
+  if (asked === 'advanced') {
+    const use = await usePromise
+    if (!use) {
+      mode = 'base'
+      degraded = UNAVAILABLE_NOTE
+    } else if (limit - use.used <= 0) {
+      const wait = use.oldestAt === null ? '' : ` One comes back ${hoursText(use.oldestAt + DAY_MS - now())}.`
+      return failure('advanced_limit', 429, limit === 0 ? 'Advanced is not available.' : `You have used your ${limit} Advanced ${limit === 1 ? 'answer' : 'answers'} for today.${wait} Quick is still here.`)
+    }
+  }
+
   if (!(await deps.limiter.take())) return fail('rate_limited')
 
   try {
-    // A search allowance that cannot be read means no search this time, never a failed request.
-    const search = deps.search ? await Promise.resolve(deps.search.allowed()).catch(() => false) : false
-    const result = await composeWorkspace(request, deps.call, { search })
-    if (result.searches > 0) await Promise.resolve(deps.search?.spend(result.searches)).catch(() => undefined)
+    const result = await composeWorkspace({ ...request, mode }, deps.call)
+    const meta = result.meta
+    const answeredBy = meta?.answeredBy ?? mode
+    // Only an answer Advanced itself gave counts against the founder. Quick answering for Google's busy model does not.
+    const spent = answeredBy === 'advanced'
+    if (spent) await Promise.resolve(deps.advanced.spend()).catch(() => undefined)
+    const busy = asked === 'advanced' && mode === 'advanced' && answeredBy === 'base' ? BUSY_NOTE : undefined
+    const note = [busy ?? degraded, result.note].filter(Boolean).join(' ') || undefined
+
+    const use = await usePromise
+    const allowance = use ? allowanceOf({ used: use.used + (spent ? 1 : 0), oldestAt: use.oldestAt ?? (spent ? now() : null) }, limit) : undefined
+
     const problems = result.attempts.flatMap((attempt) => attempt.errors).slice(0, 4)
     await deps.log({
       at: new Date(started).toISOString(),
       intent: request.intent,
       outcome: result.outcome,
       task: result.turn.task,
+      mode: asked,
+      answeredBy,
       actions: result.turn.actions.length,
       badReplies: result.attempts.filter((attempt) => attempt.errors.length > 0).length,
-      ...(deps.modelUsed?.() ? { model: deps.modelUsed() } : {}),
+      ...(meta?.model ? { model: meta.model } : {}),
+      ...(meta?.usage ? { tokens: meta.usage } : {}),
       ...(problems.length > 0 ? { problems } : {}),
       ...(result.searches > 0 ? { searches: result.searches } : {}),
+      ...(meta?.searchRefused ? { searchRefused: true } : {}),
       ms: now() - started,
     })
-    return { status: 200, body: { outcome: result.outcome, turn: result.turn, ...(result.note ? { note: result.note } : {}), ...(result.grounding ? { grounding: result.grounding } : {}) } }
+    return {
+      status: 200,
+      body: { outcome: result.outcome, answeredBy, ...(allowance ? { allowance } : {}), turn: result.turn, ...(note ? { note } : {}), ...(result.grounding ? { grounding: result.grounding } : {}) },
+    }
   } catch (error) {
     if (error instanceof ComposeError) return fail(error.kind, error.kind === 'quota' ? error.message : undefined)
-    await deps.log({ at: new Date(started).toISOString(), intent: request.intent, outcome: 'error', error: 'unexpected', ms: now() - started })
+    await deps.log({ at: new Date(started).toISOString(), intent: request.intent, outcome: 'error', mode: asked, error: 'unexpected', ms: now() - started })
     return { status: 500, body: { error: 'unavailable', message: 'Something went wrong while composing. Try again.' } }
   }
 }

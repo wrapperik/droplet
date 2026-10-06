@@ -1,7 +1,13 @@
-import { ComposeError } from './compose.ts'
-import { createGeminiCaller, DEFAULT_MODEL } from './gemini.ts'
+import { ComposeError, type ModelCaller } from './compose.ts'
+import { createGeminiCaller, DEFAULT_ADVANCED_MODEL, DEFAULT_BASE_MODEL } from './gemini.ts'
 
 const request = { system: 'You are the composer.', user: '<request>\nhi\n</request>', schema: { type: 'object' } }
+const advancedRequest = { ...request, mode: 'advanced' as const }
+// The words of a reply, whether the caller gave them bare or with what it knows about how it answered.
+const said = async (answer: ReturnType<ModelCaller>) => {
+  const reply = await answer
+  return typeof reply === 'string' ? reply : reply.text
+}
 const reply = (text: string, extra: object = {}) => ({ candidates: [{ content: { parts: [{ text }] }, finishReason: 'STOP' }], ...extra })
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 
@@ -20,11 +26,11 @@ const fakeFetch = (responses: (Response | Error)[]) => {
 describe('createGeminiCaller', () => {
   it('sends the key in a header only, with the instructions, the request and the schema', async () => {
     const { impl, calls } = fakeFetch([json(reply('{"ok":true}'))])
-    const text = await createGeminiCaller({ apiKey: 'SECRET-KEY', fetchImpl: impl })(request)
+    const text = await said(createGeminiCaller({ apiKey: 'SECRET-KEY', fetchImpl: impl })(request))
     expect(text).toBe('{"ok":true}')
 
     const { url, init } = calls[0]
-    expect(url).toBe(`https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_MODEL}:generateContent`)
+    expect(url).toBe(`https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_BASE_MODEL}:generateContent`)
     expect(url).not.toContain('SECRET-KEY')
     expect((init.headers as Record<string, string>)['x-goog-api-key']).toBe('SECRET-KEY')
     expect(String(init.body)).not.toContain('SECRET-KEY')
@@ -32,33 +38,58 @@ describe('createGeminiCaller', () => {
     const body = JSON.parse(String(init.body))
     expect(body.systemInstruction.parts[0].text).toBe(request.system)
     expect(body.contents[0].parts[0].text).toBe(request.user)
-    expect(body.generationConfig).toEqual({ responseMimeType: 'application/json', responseJsonSchema: request.schema })
+    expect(body.generationConfig).toEqual({ responseMimeType: 'application/json', responseJsonSchema: request.schema, thinkingConfig: { thinkingLevel: 'low' } })
   })
 
-  it('sends a thinking level only when one is set', async () => {
-    const withLevel = fakeFetch([json(reply('{}'))])
-    await createGeminiCaller({ apiKey: 'k', thinkingLevel: 'low', fetchImpl: withLevel.impl })(request)
-    expect(JSON.parse(String(withLevel.calls[0].init.body)).generationConfig.thinkingConfig).toEqual({ thinkingLevel: 'low' })
-    const without = fakeFetch([json(reply('{}'))])
-    await createGeminiCaller({ apiKey: 'k', fetchImpl: without.impl })(request)
-    expect(JSON.parse(String(without.calls[0].init.body)).generationConfig.thinkingConfig).toBeUndefined()
+  it('thinks briefly in Quick unless told otherwise, and in Advanced only when told to', async () => {
+    const quick = fakeFetch([json(reply('{}'))])
+    await createGeminiCaller({ apiKey: 'k', fetchImpl: quick.impl })(request)
+    expect(JSON.parse(String(quick.calls[0].init.body)).generationConfig.thinkingConfig).toEqual({ thinkingLevel: 'low' })
+    const quickHigher = fakeFetch([json(reply('{}'))])
+    await createGeminiCaller({ apiKey: 'k', baseThinking: 'medium', fetchImpl: quickHigher.impl })(request)
+    expect(JSON.parse(String(quickHigher.calls[0].init.body)).generationConfig.thinkingConfig).toEqual({ thinkingLevel: 'medium' })
+    const advanced = fakeFetch([json(reply('{}'))])
+    await createGeminiCaller({ apiKey: 'k', fetchImpl: advanced.impl })(advancedRequest)
+    expect(JSON.parse(String(advanced.calls[0].init.body)).generationConfig.thinkingConfig).toBeUndefined()
+    const advancedSet = fakeFetch([json(reply('{}'))])
+    await createGeminiCaller({ apiKey: 'k', advancedThinking: 'high', fetchImpl: advancedSet.impl })(advancedRequest)
+    expect(JSON.parse(String(advancedSet.calls[0].init.body)).generationConfig.thinkingConfig).toEqual({ thinkingLevel: 'high' })
   })
 
-  it('uses the model it was given', async () => {
-    const { impl, calls } = fakeFetch([json(reply('{}'))])
-    await createGeminiCaller({ apiKey: 'k', model: 'gemini-3.5-flash-lite', fetchImpl: impl })(request)
-    expect(calls[0].url).toContain('/models/gemini-3.5-flash-lite:generateContent')
+  it('asks the Quick model for a message that names no mode, and the Advanced model for an Advanced one, as the models it was given', async () => {
+    const { impl, calls } = fakeFetch([json(reply('{}')), json(reply('{}')), json(reply('{}'))])
+    const caller = createGeminiCaller({ apiKey: 'k', baseModel: 'quick-model', advancedModel: 'advanced-model', fetchImpl: impl })
+    await caller(request)
+    await caller({ ...request, mode: 'base' })
+    await caller(advancedRequest)
+    expect(calls.map((call) => /models\/([^:]+):/.exec(call.url)![1])).toEqual(['quick-model', 'quick-model', 'advanced-model'])
+  })
+
+  it('uses the Gemini 3.5 Flash Lite and 3.8 Flash models unless told otherwise', () => {
+    expect(DEFAULT_BASE_MODEL).toBe('gemini-3.5-flash-lite')
+    expect(DEFAULT_ADVANCED_MODEL).toBe('gemini-3.8-flash')
+  })
+
+  it('says which mode and model answered, and how many tokens it used', async () => {
+    const usage = { usageMetadata: { promptTokenCount: 1200, candidatesTokenCount: 80, thoughtsTokenCount: 30, totalTokenCount: 1310 } }
+    const { impl } = fakeFetch([json(reply('{}', usage)), json(reply('{}'))])
+    const caller = createGeminiCaller({ apiKey: 'k', fetchImpl: impl })
+    const answered = (await caller(request)) as { meta: unknown }
+    expect(answered.meta).toEqual({ model: DEFAULT_BASE_MODEL, answeredBy: 'base', usage: { prompt: 1200, answer: 80, thinking: 30 } })
+    // no usage metadata, no usage
+    const bare = (await caller(advancedRequest)) as { meta: Record<string, unknown> }
+    expect(bare.meta).toEqual({ model: DEFAULT_ADVANCED_MODEL, answeredBy: 'advanced' })
   })
 
   it('joins the answer parts and ignores reasoning parts', async () => {
     const body = { candidates: [{ content: { parts: [{ text: 'thinking...', thought: true }, { text: '{"a":' }, { text: '1}' }] }, finishReason: 'STOP' }] }
     const { impl } = fakeFetch([json(body)])
-    expect(await createGeminiCaller({ apiKey: 'k', fetchImpl: impl })(request)).toBe('{"a":1}')
+    expect(await said(createGeminiCaller({ apiKey: 'k', fetchImpl: impl })(request))).toBe('{"a":1}')
   })
 
   it('returns an empty answer as empty text, for the loop to treat as invalid', async () => {
     const { impl } = fakeFetch([json({ candidates: [{ finishReason: 'MAX_TOKENS' }] })])
-    expect(await createGeminiCaller({ apiKey: 'k', fetchImpl: impl })(request)).toBe('')
+    expect(await said(createGeminiCaller({ apiKey: 'k', fetchImpl: impl })(request))).toBe('')
   })
 
   it.each([
@@ -110,9 +141,9 @@ describe('createGeminiCaller', () => {
     const { impl, calls } = fakeFetch([refusal, json(reply('{"ok":1}')), json(reply('{"ok":2}'))])
     const caller = createGeminiCaller({ apiKey: 'k', fetchImpl: impl })
 
-    expect(await caller(request)).toBe('{"ok":1}')
+    expect(await said(caller(request))).toBe('{"ok":1}')
     const second = JSON.parse(String(calls[1].init.body))
-    expect(second.generationConfig).toEqual({ responseMimeType: 'application/json' })
+    expect(second.generationConfig).toEqual({ responseMimeType: 'application/json', thinkingConfig: { thinkingLevel: 'low' } })
     expect(second.systemInstruction.parts[0].text).toContain('"type":"object"')
 
     await caller(request)
@@ -123,7 +154,7 @@ describe('createGeminiCaller', () => {
   it('tries once more when the model is briefly overloaded, and gives up if it still is', async () => {
     const busy = () => json({ error: { message: 'high demand' } }, 503)
     const recovers = fakeFetch([busy(), json(reply('{"ok":1}'))])
-    expect(await createGeminiCaller({ apiKey: 'k', overloadRetryMs: 1, fetchImpl: recovers.impl })(request)).toBe('{"ok":1}')
+    expect(await said(createGeminiCaller({ apiKey: 'k', overloadRetryMs: 1, fetchImpl: recovers.impl })(request))).toBe('{"ok":1}')
     expect(recovers.calls).toHaveLength(2)
     const stays = fakeFetch([busy(), busy()])
     await expect(createGeminiCaller({ apiKey: 'k', overloadRetryMs: 1, fetchImpl: stays.impl })(request)).rejects.toMatchObject({ kind: 'unavailable' })
@@ -154,59 +185,63 @@ const minuteQuota = () =>
   json({ error: { message: 'Resource exhausted', details: [{ violations: [{ quotaId: 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier' }], retryDelay: '30s' }] } }, 429)
 
 describe('quota', () => {
+  const both = { baseModel: 'quick-model', advancedModel: 'main-model' }
+
   it('tells a used-up daily quota from a busy minute, and says how long it will be', async () => {
     const daily = await createGeminiCaller({ apiKey: 'k', fetchImpl: fakeFetch([dailyQuota()]).impl })(request).catch((e: unknown) => e)
     expect(daily).toMatchObject({ kind: 'quota', retryAfterSeconds: 18494 })
-    expect((daily as Error).message).toMatch(/free daily limit for gemini-3\.8-flash.*in about 5 hours/)
+    expect((daily as Error).message).toMatch(/free daily limit for gemini-3\.5-flash-lite.*in about 5 hours/)
     const minute = await createGeminiCaller({ apiKey: 'k', fetchImpl: fakeFetch([minuteQuota()]).impl })(request).catch((e: unknown) => e)
     expect(minute).toMatchObject({ kind: 'rate_limited', retryAfterSeconds: 30 })
   })
 
-  it('uses the fallback model when the main one\'s daily quota is used up, and says which answered', async () => {
-    const { impl, calls } = fakeFetch([dailyQuota(), json(reply('{"from":"fallback"}'))])
-    const used: string[] = []
-    const caller = createGeminiCaller({ apiKey: 'k', model: 'main-model', fallbackModel: 'spare-model', onModelUsed: (m) => used.push(m), fetchImpl: impl })
-    expect(await caller(request)).toBe('{"from":"fallback"}')
+  it('answers an Advanced request with Quick when Advanced\'s daily quota is used up, and says Quick answered, because Google\'s model could not', async () => {
+    const { impl, calls } = fakeFetch([dailyQuota(), json(reply('{"from":"quick"}'))])
+    const caller = createGeminiCaller({ apiKey: 'k', ...both, fetchImpl: impl })
+    const answered = (await caller(advancedRequest)) as { text: string; meta: Record<string, unknown> }
+    expect(answered.text).toBe('{"from":"quick"}')
     expect(calls[0].url).toContain('/models/main-model:')
-    expect(calls[1].url).toContain('/models/spare-model:')
-    expect(used).toEqual(['spare-model'])
+    expect(calls[1].url).toContain('/models/quick-model:')
+    expect(answered.meta).toMatchObject({ model: 'quick-model', answeredBy: 'base', spared: true })
   })
 
-  it('does not ask the main model again until its quota resets', async () => {
+  it('does not ask Advanced again until its quota resets', async () => {
     let time = 0
     const { impl, calls } = fakeFetch([dailyQuota(), json(reply('{"n":1}')), json(reply('{"n":2}')), json(reply('{"n":3}'))])
-    const caller = createGeminiCaller({ apiKey: 'k', model: 'main-model', fallbackModel: 'spare-model', now: () => time, fetchImpl: impl })
-    await caller(request)
-    await caller(request)
-    expect(calls.map((c) => (c.url.includes('main-model') ? 'main' : 'spare'))).toEqual(['main', 'spare', 'spare'])
-    time = 18_494_001 // the quota has reset, so the main model is tried again
-    await caller(request)
+    const caller = createGeminiCaller({ apiKey: 'k', ...both, now: () => time, fetchImpl: impl })
+    await caller(advancedRequest)
+    await caller(advancedRequest)
+    expect(calls.map((c) => (c.url.includes('main-model') ? 'advanced' : 'quick'))).toEqual(['advanced', 'quick', 'quick'])
+    time = 18_494_001 // the quota has reset, so Advanced is tried again
+    await caller(advancedRequest)
     expect(calls[3].url).toContain('/models/main-model:')
   })
 
-  it('falls back when the main model stays overloaded or cannot be reached, but not for a refused key or a declined request', async () => {
+  it('falls back to Quick when Advanced stays overloaded or cannot be reached, but not for a refused key or a declined request', async () => {
     const busy = () => json({ error: { message: 'high demand' } }, 503)
     const overloaded = fakeFetch([busy(), busy(), json(reply('{"ok":1}'))])
-    expect(await createGeminiCaller({ apiKey: 'k', fallbackModel: 'spare-model', overloadRetryMs: 1, fetchImpl: overloaded.impl })(request)).toBe('{"ok":1}')
+    expect(await said(createGeminiCaller({ apiKey: 'k', ...both, overloadRetryMs: 1, fetchImpl: overloaded.impl })(advancedRequest))).toBe('{"ok":1}')
 
     const refused = fakeFetch([json({ error: { message: 'bad key' } }, 403), json(reply('{"ok":1}'))])
-    await expect(createGeminiCaller({ apiKey: 'k', fallbackModel: 'spare-model', fetchImpl: refused.impl })(request)).rejects.toMatchObject({ kind: 'bad_key' })
+    await expect(createGeminiCaller({ apiKey: 'k', ...both, fetchImpl: refused.impl })(advancedRequest)).rejects.toMatchObject({ kind: 'bad_key' })
     expect(refused.calls).toHaveLength(1)
 
     const blocked = fakeFetch([json({ promptFeedback: { blockReason: 'SAFETY' } }), json(reply('{"ok":1}'))])
-    await expect(createGeminiCaller({ apiKey: 'k', fallbackModel: 'spare-model', fetchImpl: blocked.impl })(request)).rejects.toMatchObject({ kind: 'blocked' })
+    await expect(createGeminiCaller({ apiKey: 'k', ...both, fetchImpl: blocked.impl })(advancedRequest)).rejects.toMatchObject({ kind: 'blocked' })
   })
 
-  it('reports the quota when there is no fallback, or it is the same model', async () => {
-    await expect(createGeminiCaller({ apiKey: 'k', fetchImpl: fakeFetch([dailyQuota()]).impl })(request)).rejects.toMatchObject({ kind: 'quota' })
+  it('has no spare for Quick: when Quick cannot answer, that is reported, and Advanced is not asked in its place', async () => {
+    const quick = fakeFetch([dailyQuota(), json(reply('{"ok":1}'))])
+    await expect(createGeminiCaller({ apiKey: 'k', ...both, fetchImpl: quick.impl })(request)).rejects.toMatchObject({ kind: 'quota' })
+    expect(quick.calls).toHaveLength(1)
+    expect(quick.calls[0].url).toContain('/models/quick-model:')
+  })
+
+  it('reports the quota when both models are used up, or when they are the same model', async () => {
+    const { impl } = fakeFetch([dailyQuota(), dailyQuota()])
+    await expect(createGeminiCaller({ apiKey: 'k', ...both, fetchImpl: impl })(advancedRequest)).rejects.toMatchObject({ kind: 'quota' })
     const same = fakeFetch([dailyQuota()])
-    await expect(createGeminiCaller({ apiKey: 'k', model: 'a', fallbackModel: 'a', fetchImpl: same.impl })(request)).rejects.toMatchObject({ kind: 'quota' })
+    await expect(createGeminiCaller({ apiKey: 'k', baseModel: 'a', advancedModel: 'a', fetchImpl: same.impl })(advancedRequest)).rejects.toMatchObject({ kind: 'quota' })
     expect(same.calls).toHaveLength(1)
   })
-
-  it('reports the quota when the fallback is used up too', async () => {
-    const { impl } = fakeFetch([dailyQuota(), dailyQuota()])
-    await expect(createGeminiCaller({ apiKey: 'k', fallbackModel: 'spare-model', fetchImpl: impl })(request)).rejects.toMatchObject({ kind: 'quota' })
-  })
 })
-

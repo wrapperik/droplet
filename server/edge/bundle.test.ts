@@ -71,7 +71,7 @@ describe('the bundled Edge Function', () => {
       expect((await post({})).status).toBe(401)
       const ok = await post({ authorization: 'Bearer the-token' })
       expect(ok.status).toBe(200)
-      expect(await ok.json()).toMatchObject({ outcome: 'valid', turn: { task: 'brand' } })
+      expect(await ok.json()).toMatchObject({ outcome: 'valid', answeredBy: 'base', turn: { task: 'brand' } })
       expect(seenModelKeys).toEqual(['gemini-secret'])
     } finally {
       g.fetch = realFetch

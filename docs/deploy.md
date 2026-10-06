@@ -9,8 +9,10 @@ In the Supabase dashboard, open **SQL Editor**, make a new query, paste `supabas
 It makes the `compositions` table the function writes to and counts from. It keeps no words of anyone's: only who asked, the task, how it went, the
 model, and how long it took.
 
-To let the composer search the web (optional, see below), also run `supabase/migrations/20261006000000_compositions_searched.sql`. It adds one
-column, `searched`, which the function counts to hold each founder to a daily number of searches. Nothing of what was searched for is kept.
+Then run `supabase/migrations/20261006000000_compositions_searched.sql` and `supabase/migrations/20261006000100_compositions_modes.sql`, in that order.
+They add which mode a request asked for and which answered, whether it searched, and how many tokens it used. The function counts each founder's
+Advanced answers from them. The token counts are for working out what the composer costs and are never shown to founders. Nothing of what was asked,
+answered or searched for is kept. Run them before deploying the function: it writes these columns.
 
 ## 2. The function
 
@@ -28,21 +30,27 @@ npx supabase link --project-ref untyznmtxgacrkogigar
 npx supabase secrets set GEMINI_API_KEY=your-gemini-key
 ```
 
-Optional secrets, the same names as in `.env.example`: `GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL`, `GEMINI_THINKING_LEVEL`, and
-`COMPOSE_LIMIT_PER_HOUR` (default 60 requests an hour for each founder). `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are given to the function
-by Supabase itself.
+Optional secrets, the same names as in `.env.example`: `GEMINI_BASE_MODEL`, `GEMINI_ADVANCED_MODEL`, `GEMINI_BASE_THINKING`,
+`GEMINI_ADVANCED_THINKING`, `COMPOSE_ADVANCED_PER_DAY` and `COMPOSE_LIMIT_PER_HOUR` (default 60 requests an hour for each founder).
+`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are given to the function by Supabase itself. `GEMINI_MODEL` still works as another name for
+`GEMINI_ADVANCED_MODEL`, and `GEMINI_THINKING_LEVEL` for `GEMINI_ADVANCED_THINKING`.
 
-**Web search** is off in the deployed function until you turn it on. Run the `searched` migration above first, then set how many requests a founder
-may have answered with a Google search in a day:
+**Quick and Advanced.** Every message is answered by the Quick model (`GEMINI_BASE_MODEL`, default `gemini-3.5-flash-lite`, thinking `low`), which
+never searches and has no spare model. A founder can choose Advanced for the next message from the menu in the message bar: it uses
+`GEMINI_ADVANCED_MODEL` (default `gemini-3.8-flash`) with Google Search, and each founder has `COMPOSE_ADVANCED_PER_DAY` Advanced answers (default 10,
+`0` turns Advanced off) over a sliding 24 hours, counted from `compositions`. The app never switches Advanced on. When the allowance is used up the
+function refuses an Advanced request before calling Google, says when one comes back, and Quick still answers. When Google cannot answer with the
+Advanced model (its quota is used up, or it is overloaded) Quick answers instead, the reply says so, and it does not count against the founder.
 
 ```
-npx supabase secrets set COMPOSE_SEARCH_PER_DAY=10
+npx supabase secrets set COMPOSE_ADVANCED_PER_DAY=10
 ```
 
-Search only works on the main model (`gemini-3.8-flash`), which can search and answer in the app's JSON in one request. On the free tier that model
-allows only about 20 requests a day per key, and when they are used up the app answers with the fallback model, which does not search. Each search
-counts against the key's free 5,000 searches a month (shared by the Gemini 3 models), and past that it is billed. Google's terms require the search
-suggestions to be shown with any answer that used search, which the app does.
+Search only works on the Advanced model (`gemini-3.8-flash`), which can search and answer in the app's JSON in one request. On the free tier that
+model allows only about 20 requests a day per key, and Google can refuse a request that uses search ("check your plan and billing details") while
+the same request without search works: the app then answers that request without search and does not ask for search again for an hour. For
+search to be there reliably the key needs billing. Each search counts against the key's free 5,000 searches a month (shared by the Gemini 3 models),
+and past that it is billed. Google's terms require the search suggestions to be shown with any answer that used search, which the app does.
 
 **Deploy:**
 

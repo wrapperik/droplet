@@ -12,21 +12,27 @@ import { slowMemoryStorage } from '../test/slowStorage.ts'
 import Home from './Home.tsx'
 
 // Home with the composer's server standing in: what is asked of it is recorded, and what it says back is what the test decides.
-type Asked = { intent: string; view?: string; invoice?: { lines: { description: string }[] }; workspace?: unknown }
+type Asked = { intent: string; mode?: string; view?: string; invoice?: { lines: { description: string }[] }; workspace?: unknown }
 let asked: Asked[] = []
 let answers: unknown[] = []
+// What the server says on a GET: where the founder's Advanced allowance stands. Null is a server that cannot say.
+let allowanceNow: { advancedLeft: number; advancedLimit: number; resetsAt: string | null } | null = null
 
-const reply = (task: string, message: string, actions: unknown[] = []) => ({ outcome: 'valid', turn: { task, message, actions, memoryUsed: [] } })
+const reply = (task: string, message: string, actions: unknown[] = []) => ({ outcome: 'valid', answeredBy: 'base', turn: { task, message, actions, memoryUsed: [] } })
 // A reply that opens a workspace the founder asked for, quoting their own words as the composer must.
-const opening = (task: string, message: string, quote: string) => ({ outcome: 'valid', turn: { task, message, actions: [], opens: { because: 'asked', quote }, memoryUsed: [] } })
+const opening = (task: string, message: string, quote: string) => ({ outcome: 'valid', answeredBy: 'base', turn: { task, message, actions: [], opens: { because: 'asked', quote }, memoryUsed: [] } })
 
 beforeEach(() => {
   window.localStorage.clear()
   asked = []
   answers = []
+  allowanceNow = { advancedLeft: 10, advancedLimit: 10, resetsAt: null }
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (_url: string, init: { body: string }) => {
+    vi.fn(async (_url: string, init: { method?: string; body: string }) => {
+      if (init.method === 'GET') {
+        return allowanceNow ? new Response(JSON.stringify({ allowance: allowanceNow }), { status: 200 }) : new Response('{}', { status: 500 })
+      }
       asked.push(JSON.parse(init.body))
       const body = answers[Math.min(asked.length - 1, answers.length - 1)]
       return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
@@ -561,13 +567,13 @@ describe('the chat history', () => {
 })
 
 describe('a question and suggested replies', () => {
-  const asking = (message: string, question: string, replies: string[]) => ({ outcome: 'valid', turn: { task: 'chat', message, question, replies, actions: [], memoryUsed: [] } })
+  const asking = (message: string, question: string, replies: string[]) => ({ outcome: 'valid', answeredBy: 'base', turn: { task: 'chat', message, question, replies, actions: [], memoryUsed: [] } })
 
   it('shows the question after the answer, and sends a tapped reply as the founder\'s own message with the question in the history', async () => {
     const user = userEvent.setup()
     answers = [
       asking('Three ways to price:\n\n- **Cost plus**\n- **Value based**', 'Do you know your costs?', ['Yes, I know them', 'Not sure yet']),
-      { outcome: 'valid', turn: { task: 'chat', message: 'Then start with cost plus.', actions: [], memoryUsed: [] } },
+      { outcome: 'valid', answeredBy: 'base', turn: { task: 'chat', message: 'Then start with cost plus.', actions: [], memoryUsed: [] } },
     ]
     renderHome()
     await say(user, 'How should I price my boxes?')
@@ -585,7 +591,7 @@ describe('a question and suggested replies', () => {
 
   it('shows nothing of an answer it could not use, including its question', async () => {
     const user = userEvent.setup()
-    answers = [{ outcome: 'valid', turn: { task: 'brand', message: 'Done.', question: 'Does it feel right?', actions: [{ type: 'select_colour', index: 9 }], memoryUsed: [] } }]
+    answers = [{ outcome: 'valid', answeredBy: 'base', turn: { task: 'brand', message: 'Done.', question: 'Does it feel right?', actions: [{ type: 'select_colour', index: 9 }], memoryUsed: [] } }]
     renderHome()
     await pickTask(user, /Build the brand/)
     await say(user, 'Select colour 9')
@@ -637,7 +643,7 @@ describe('the wave behind the conversation', () => {
 })
 
 describe('the composer naming a chat', () => {
-  const named = (message: string, title?: string) => ({ outcome: 'valid', turn: { task: 'chat', message, actions: [], memoryUsed: [], ...(title ? { title } : {}) } })
+  const named = (message: string, title?: string) => ({ outcome: 'valid', answeredBy: 'base', turn: { task: 'chat', message, actions: [], memoryUsed: [], ...(title ? { title } : {}) } })
   const titles = () => within(screen.getByRole('navigation', { name: 'Chats' })).getAllByRole('listitem').map((item) => item.querySelector('.chatlist__title')?.textContent)
 
   it('lists the chat by the name the composer gave it, tidied, instead of the founder\'s first words', async () => {
@@ -1065,7 +1071,7 @@ describe('the AI on the board', () => {
   it('does not open the board for advice about names, which carries a question', async () => {
     const user = userEvent.setup()
     renderHome()
-    answers = [{ outcome: 'valid', turn: { task: 'ideation', message: 'Short names work best.', question: 'What do you sell?', actions: [], memoryUsed: [] } }]
+    answers = [{ outcome: 'valid', answeredBy: 'base', turn: { task: 'ideation', message: 'Short names work best.', question: 'What do you sell?', actions: [], memoryUsed: [] } }]
     await say(user, 'How should I think about naming my business?')
     await waitFor(() => expect(screen.getByText('Short names work best.')).toBeInTheDocument())
     expect(asked).toHaveLength(1)
@@ -1176,11 +1182,11 @@ describe('guiding the founder', () => {
       { label: 'Get a logo', step: 'logo' },
     ],
   }
-  const planReply = { outcome: 'valid', turn: { task: 'chat', message: 'Here is the order I would go in.', question: 'Shall we start with the name?', blocks: [plan], actions: [], memoryUsed: [] } }
+  const planReply = { outcome: 'valid', answeredBy: 'base', turn: { task: 'chat', message: 'Here is the order I would go in.', question: 'Shall we start with the name?', blocks: [plan], actions: [], memoryUsed: [] } }
 
   it('opens nothing for a founder who only says what they want to build: the reply is a conversation and a question', async () => {
     const user = userEvent.setup()
-    answers = [{ outcome: 'valid', turn: { task: 'chat', message: 'DuckStack! Lovely name.', question: 'How far along are you?', replies: ['Just an idea'], actions: [], memoryUsed: [] } }]
+    answers = [{ outcome: 'valid', answeredBy: 'base', turn: { task: 'chat', message: 'DuckStack! Lovely name.', question: 'How far along are you?', replies: ['Just an idea'], actions: [], memoryUsed: [] } }]
     renderHome()
     await say(user, 'I want to create a dev studio called DuckStack')
     await waitFor(() => expect(screen.getByText('How far along are you?')).toBeInTheDocument())
@@ -1192,7 +1198,7 @@ describe('guiding the founder', () => {
   it('refuses a reply that opens a palette without a quote from the founder, so no workspace opens and nothing odd reaches the thread', async () => {
     const user = userEvent.setup()
     const palette = { type: 'set_palette', colours: [{ hex: '#111111', name: 'A', rationale: 'x' }, { hex: '#EEEEEE', name: 'B', rationale: 'x' }, { hex: '#336699', name: 'C', rationale: 'x' }], reason: 'Colours.' }
-    answers = [{ outcome: 'valid', turn: { task: 'brand', message: 'Here are colours.', actions: [palette], memoryUsed: [] } }]
+    answers = [{ outcome: 'valid', answeredBy: 'base', turn: { task: 'brand', message: 'Here are colours.', actions: [palette], memoryUsed: [] } }]
     renderHome()
     await say(user, 'I want to create a dev studio called DuckStack')
     await waitFor(() => expect(screen.getByText(/I got an answer I could not use/)).toBeInTheDocument())
@@ -1269,7 +1275,7 @@ describe('guiding the founder', () => {
 
   it('shows a table, with the first column naming the row', async () => {
     const user = userEvent.setup()
-    answers = [{ outcome: 'valid', turn: { task: 'chat', message: 'Side by side:', blocks: [{ type: 'table', title: 'Name ideas', columns: ['Name', 'Feel'], rows: [['DuckStack', 'Playful'], ['Pond', 'Calm']] }], actions: [], memoryUsed: [] } }]
+    answers = [{ outcome: 'valid', answeredBy: 'base', turn: { task: 'chat', message: 'Side by side:', blocks: [{ type: 'table', title: 'Name ideas', columns: ['Name', 'Feel'], rows: [['DuckStack', 'Playful'], ['Pond', 'Calm']] }], actions: [], memoryUsed: [] } }]
     renderHome()
     await say(user, 'Compare some names')
     const table = await screen.findByRole('table', { name: 'Name ideas' })
@@ -1289,7 +1295,7 @@ describe('a reply that searched the web', () => {
 
   it('shows the sources as links that open in a new tab, and Google\'s suggestions in a sandboxed frame with no scripts', async () => {
     const user = userEvent.setup()
-    answers = [{ outcome: 'valid', grounding, turn: { task: 'chat', message: 'Registering a company with CIPC costs R175 at the moment.', question: 'Shall we look at what to register first?', actions: [], memoryUsed: [] } }]
+    answers = [{ outcome: 'valid', answeredBy: 'base', grounding, turn: { task: 'chat', message: 'Registering a company with CIPC costs R175 at the moment.', question: 'Shall we look at what to register first?', actions: [], memoryUsed: [] } }]
     renderHome()
     await say(user, 'What does it cost to register with CIPC?')
     const link = await screen.findByRole('link', { name: 'cipc.co.za' })
@@ -1306,7 +1312,7 @@ describe('a reply that searched the web', () => {
     const user = userEvent.setup()
     renderHome()
     await pickTask(user, /Shape the business idea/)
-    answers = [{ outcome: 'valid', grounding, turn: { task: 'ideation', message: 'I added a note with what I found.', actions: [{ type: 'add_note', text: 'CIPC fee is about R175' }], memoryUsed: [] } }]
+    answers = [{ outcome: 'valid', answeredBy: 'base', grounding, turn: { task: 'ideation', message: 'I added a note with what I found.', actions: [{ type: 'add_note', text: 'CIPC fee is about R175' }], memoryUsed: [] } }]
     await say(user, 'Add what CIPC charges to the board')
     const grounded = (await screen.findByText('I added a note with what I found.')).closest('li')!
     // the first pink note brings the app's note on what pink means: it is a message of its own, not mixed into the grounded answer
@@ -1316,10 +1322,106 @@ describe('a reply that searched the web', () => {
 
   it('keeps what it drew on with the saved chat, so the sources show again when the chat is opened', async () => {
     const user = userEvent.setup()
-    answers = [{ outcome: 'valid', grounding, turn: { task: 'chat', message: 'About R175.', actions: [], memoryUsed: [] } }]
+    answers = [{ outcome: 'valid', answeredBy: 'base', grounding, turn: { task: 'chat', message: 'About R175.', actions: [], memoryUsed: [] } }]
     renderHome()
     await say(user, 'What does CIPC charge?')
     await screen.findByRole('link', { name: 'cipc.co.za' })
     await waitFor(async () => expect((await loadChatsFor())[0].messages.find((item) => item.from === 'droplet')?.grounding).toEqual(grounding))
+  })
+})
+
+describe('Quick and Advanced', () => {
+  const chooseAdvanced = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getByRole('button', { name: 'Choose how I answer' }))
+    await user.click(screen.getByRole('menuitemradio', { name: /Advanced/ }))
+  }
+
+  it('asks the server how many Advanced answers are left before anything is said, and shows the count in the menu', async () => {
+    const user = userEvent.setup()
+    allowanceNow = { advancedLeft: 7, advancedLimit: 10, resetsAt: null }
+    renderHome()
+    await user.click(screen.getByRole('button', { name: 'Choose how I answer' }))
+    expect(await screen.findByText('Searches the web · 7 of 10 left today')).toBeInTheDocument()
+  })
+
+  it('sends Quick as no mode, sends Advanced for the message it was chosen for, and then goes back to Quick', async () => {
+    const user = userEvent.setup()
+    answers = [reply('chat', 'First.'), reply('chat', 'Second.'), reply('chat', 'Third.')]
+    renderHome()
+    await say(user, 'a quick one')
+    await screen.findByText('First.')
+    await chooseAdvanced(user)
+    await say(user, 'What does CIPC charge?')
+    await screen.findByText('Second.')
+    await say(user, 'and another quick one')
+    await screen.findByText('Third.')
+    expect(asked.map((request) => request.mode)).toEqual([undefined, 'advanced', undefined])
+    expect(screen.queryByRole('button', { name: /Advanced is on/ })).not.toBeInTheDocument()
+  })
+
+  it('takes the count from the answer: one fewer after an Advanced answer, and a disabled row when none are left', async () => {
+    const user = userEvent.setup()
+    answers = [{ ...reply('chat', 'About R175.'), answeredBy: 'advanced', allowance: { advancedLeft: 0, advancedLimit: 10, resetsAt: new Date(2099, 0, 1, 14, 20).toISOString() } }]
+    renderHome()
+    await chooseAdvanced(user)
+    await say(user, 'What does CIPC charge?')
+    await screen.findByText('About R175.')
+    await user.click(screen.getByRole('button', { name: 'Choose how I answer' }))
+    const row = screen.getByRole('menuitemradio', { name: /Advanced/ })
+    expect(row).toHaveAttribute('aria-disabled', 'true')
+    expect(row).toHaveTextContent(/None left today/)
+  })
+
+  it('shows the note that Quick answered, when Advanced was busy, and counts nothing against the founder', async () => {
+    const user = userEvent.setup()
+    answers = [{ ...reply('chat', 'It is about R175.'), answeredBy: 'base', note: 'Advanced is busy today, so I answered with Quick.', allowance: { advancedLeft: 10, advancedLimit: 10, resetsAt: null } }]
+    renderHome()
+    await chooseAdvanced(user)
+    await say(user, 'What does CIPC charge?')
+    expect(await screen.findByText(/Advanced is busy today, so I answered with Quick\./)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Choose how I answer' }))
+    expect(screen.getByRole('menuitemradio', { name: /Advanced/ })).toHaveTextContent('10 of 10 left today')
+  })
+
+  it('says plainly when none are left, takes the count from the refusal, and the message is not lost to a silent failure', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init: { method?: string }) => {
+        if (init.method === 'GET') return new Response(JSON.stringify({ allowance: { advancedLeft: 1, advancedLimit: 10, resetsAt: null } }), { status: 200 })
+        return new Response(
+          JSON.stringify({ error: 'advanced_limit', message: 'You have used your 10 Advanced answers for today. Quick is still here.', allowance: { advancedLeft: 0, advancedLimit: 10, resetsAt: null } }),
+          { status: 429 },
+        )
+      }),
+    )
+    renderHome()
+    await chooseAdvanced(user)
+    await say(user, 'What does CIPC charge?')
+    expect(await screen.findByText(/You have used your 10 Advanced answers for today/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Choose how I answer' }))
+    expect(screen.getByRole('menuitemradio', { name: /Advanced/ })).toHaveAttribute('aria-disabled', 'true')
+  })
+
+  it('still offers Advanced, without a count, when the server cannot say where the allowance stands', async () => {
+    const user = userEvent.setup()
+    allowanceNow = null
+    renderHome()
+    await user.click(screen.getByRole('button', { name: 'Choose how I answer' }))
+    const row = screen.getByRole('menuitemradio', { name: /Advanced/ })
+    expect(row).toHaveTextContent('Searches the web')
+    expect(row).not.toHaveAttribute('aria-disabled')
+  })
+
+  it('asks again in Advanced when the answer takes the founder to another workspace: both asks answer the one message they chose it for', async () => {
+    const user = userEvent.setup()
+    answers = [opening('invoice', 'Opening the invoice.', 'make an invoice'), reply('invoice', 'Here it is.')]
+    renderHome()
+    await chooseAdvanced(user)
+    await say(user, 'Please make an invoice')
+    await screen.findByText('Here it is.')
+    expect(asked.map((request) => request.mode)).toEqual(['advanced', 'advanced'])
+    await say(user, 'thanks')
+    expect(asked.at(-1)?.mode).toBeUndefined()
   })
 })

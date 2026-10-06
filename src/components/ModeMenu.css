@@ -1,0 +1,73 @@
+.mode-menu {
+  position: absolute;
+  bottom: calc(100% + 0.75rem);
+  right: 0;
+  z-index: 10;
+  width: min(21rem, 100%);
+  padding: 0.5rem;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+}
+
+.mode-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  text-align: left;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.mode-menu__item svg {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.mode-menu__item:hover,
+.mode-menu__item:focus-visible {
+  background: var(--accent-tint-soft);
+}
+
+.mode-menu__item:focus-visible {
+  outline-offset: -2px;
+}
+
+/* The mode in use for the next message: a soft fill and the accent on its icon. */
+.mode-menu__item[aria-checked='true'] {
+  background: var(--accent-tint);
+}
+
+.mode-menu__item[aria-checked='true'] svg {
+  color: var(--accent);
+}
+
+/* Spent, not hidden: quieter, and no pointer, but still readable and focusable. */
+.mode-menu__item[aria-disabled='true'] {
+  cursor: default;
+}
+
+.mode-menu__item[aria-disabled='true']:hover {
+  background: transparent;
+}
+
+.mode-menu__item[aria-disabled='true'] .mode-menu__label {
+  color: var(--text-muted);
+}
+
+.mode-menu__text {
+  display: flex;
+  flex-direction: column;
+}
+
+.mode-menu__label {
+  font-weight: 600;
+}
+
+.mode-menu__hint {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
