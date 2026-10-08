@@ -5,6 +5,7 @@ import { groupFor, instantiateTemplate, placeTemplate, promptsOf, templateById }
 import { attachedTo, describeItem, isConnector, isFrame, isNode, isRectItem, MAX_ITEMS, type BoardItem, type RectItem } from '../lib/boardTypes.ts'
 import { newId as freshId } from '../lib/ids.ts'
 import { refsOf } from './boardSnapshot.ts'
+import { plural, type Change, type FocusTarget } from './receipt.ts'
 import { MAX_AI_ARROWS, MAX_AI_CLUSTERS, MAX_AI_NOTES, type BoardTurnAction } from './boardSpec.ts'
 
 // Turns the model's actions on the board into board actions and applies them through the same reducer a person's edits use. Anything that
@@ -26,7 +27,8 @@ type Props = {
   newId?: () => string
 }
 
-export type BoardApplyResult = { state: BoardState; skipped: BoardSkipped[] }
+// `changes` is what was done, for the change receipt: notes added to the same place are one line, and so are arrows and filled prompts.
+export type BoardApplyResult = { state: BoardState; skipped: BoardSkipped[]; changes: Change[] }
 
 export function applyBoardTurnActions({ base, actions, view, newId = freshId }: Props): BoardApplyResult {
   const skipped: BoardSkipped[] = []
@@ -40,8 +42,8 @@ export function applyBoardTurnActions({ base, actions, view, newId = freshId }: 
       : history.type === 'undo' && !canUndoBoard(base) ? 'There is nothing to undo.'
       : history.type === 'redo' && !canRedoBoard(base) ? 'There is nothing to redo.'
       : null
-    if (reason) return { state: base, skipped: [{ position, action: history, reason }] }
-    return { state: reduceBoard(base, { type: history.type }), skipped }
+    if (reason) return { state: base, skipped: [{ position, action: history, reason }], changes: [] }
+    return { state: reduceBoard(base, { type: history.type }), skipped, changes: [{ kind: 'changed', text: history.type === 'undo' ? 'Took back the last change' : 'Put back the change that was taken back', focus: [] }] }
   }
 
   // The references mean what they meant when the board was shown, all the way through the turn, even after things are moved.
@@ -50,6 +52,23 @@ export function applyBoardTurnActions({ base, actions, view, newId = freshId }: 
   const collected: BoardAction[] = []
   const used = { notes: 0, clusters: 0, templates: 0, arrows: 0 }
   const clustered = new Set<string>()
+  // What was done, in the order it was done. Notes put in the same place, arrows and filled prompts are counted into one line each.
+  const changes: Change[] = []
+  const tally = new Map<string, { count: number; focus: FocusTarget[]; change: Change; text: (count: number) => string }>()
+  const count = (key: string, text: (count: number) => string, kind: Change['kind'], target: FocusTarget) => {
+    const there = tally.get(key)
+    if (there) {
+      there.count += 1
+      there.focus.push(target)
+      there.change.text = text(there.count)
+      return
+    }
+    const change: Change = { kind, text: text(1), focus: [target] }
+    tally.set(key, { count: 1, focus: change.focus, change, text })
+    changes.push(change)
+  }
+  const words = (item: BoardItem) => (isFrame(item) ? item.title : item.kind === 'note' || item.kind === 'shape' || item.kind === 'text' ? item.text : '').trim().slice(0, 40) || 'an item'
+  const quoted = (text: string) => `\u201c${text}\u201d`
 
   const items = () => docOf(scratch).items
   const find = (ref: string): BoardItem | undefined => {
@@ -89,10 +108,12 @@ export function applyBoardTurnActions({ base, actions, view, newId = freshId }: 
 
         let rect = null
         let anchor: RectItem | null = null
+        let where = 'on the board'
         if (action.in) {
           const target = find(action.in)
           if (!target) return skip(missing(action.in))
           if (!isFrame(target)) return skip(`${name(target)} is not a frame. Use near to put a note beside it, or name a frame with in.`)
+          where = `in ${quoted(words(target))}`
           rect = slotInFrame(items(), target)
           if (!rect) return skip(`${name(target)} has no room for another note (${roomInFrame(items(), target)} would fit). Put it near a note instead, or leave it out.`)
         } else if (action.near) {
@@ -100,6 +121,7 @@ export function applyBoardTurnActions({ base, actions, view, newId = freshId }: 
           if (!target) return skip(missing(action.near))
           if (!isRectItem(target)) return skip(`${action.near} is an arrow, which a note cannot be put beside. Name a note, a shape, some text or a frame.`)
           anchor = target
+          where = `beside ${quoted(words(target))}`
           rect = spotNear(items(), target)
           if (!rect) return skip(`There is no clear place beside ${name(target)} on the board.`)
         } else {
@@ -114,7 +136,11 @@ export function applyBoardTurnActions({ base, actions, view, newId = freshId }: 
         }
         if (!run(steps)) return skip('That note could not be added.')
         used.notes += 1
-        if (action.connect) used.arrows += 1
+        count(`note:${where}`, (n) => `${plural(n, 'note')} ${where}`, 'added', { kind: 'item', id, how: 'added' })
+        if (action.connect) {
+          used.arrows += 1
+          count('arrow', (n) => plural(n, 'arrow'), 'added', { kind: 'item', id: steps[1].type === 'add_connector' ? steps[1].id : id, how: 'added' })
+        }
         return
       }
 
@@ -126,6 +152,7 @@ export function applyBoardTurnActions({ base, actions, view, newId = freshId }: 
         if (target.text.trim() !== '') return skip(`${name(target)} already has words in it, which are not mine to write over. Use add_note to put a new note beside it.`)
         if (!run([{ type: 'fill_note', id: target.id, text: action.text }])) return skip('That prompt could not be filled in.')
         used.notes += 1
+        count('fill', (n) => `Filled in ${plural(n, 'prompt')}`, 'changed', { kind: 'item', id: target.id, how: 'changed' })
         return
       }
 
@@ -152,6 +179,13 @@ export function applyBoardTurnActions({ base, actions, view, newId = freshId }: 
         if (!run([frame, ...moves])) return skip('Those could not be gathered into a frame.')
         moving.forEach((item) => clustered.add(item.id))
         used.clusters += 1
+        const frameId = (frame as Extract<BoardAction, { type: 'add_frame' }>).id
+        const what = moving.every((item) => item.kind === 'note') ? 'notes' : 'things'
+        changes.push({
+          kind: 'added',
+          text: `${moving.length} ${what} moved into a new frame ${quoted(action.title)}`,
+          focus: [{ kind: 'item', id: frameId, how: 'added' }, ...moving.map((item) => ({ kind: 'item' as const, id: item.id, how: 'moved' as const }))],
+        })
         return
       }
 
@@ -174,6 +208,11 @@ export function applyBoardTurnActions({ base, actions, view, newId = freshId }: 
         })
         if (!run(steps)) return skip('That template could not be added.')
         used.templates += 1
+        changes.push({
+          kind: 'added',
+          text: `The ${template.name} template, ${plural(made.length, 'thing')}${fill.length > 0 ? `, with ${plural(fill.length, 'prompt')} filled in` : ''}`,
+          focus: made.map((item) => ({ kind: 'item' as const, id: item.id, how: 'added' as const })),
+        })
         return
       }
 
@@ -188,8 +227,10 @@ export function applyBoardTurnActions({ base, actions, view, newId = freshId }: 
         const twin = items().filter(isConnector).some((arrow) => attachedTo(arrow.from) === from.id && attachedTo(arrow.to) === to.id)
         if (twin) return skip(`There is already an arrow from ${action.from} to ${action.to}.`)
         if (!room(1)) return skip('The board already holds as many things as it can.')
-        if (!run([{ type: 'add_connector', id: newId(), from: { item: from.id }, to: { item: to.id }, ...(action.label ? { text: action.label } : {}) }])) return skip('That arrow could not be drawn.')
+        const arrowId = newId()
+        if (!run([{ type: 'add_connector', id: arrowId, from: { item: from.id }, to: { item: to.id }, ...(action.label ? { text: action.label } : {}) }])) return skip('That arrow could not be drawn.')
         used.arrows += 1
+        count('arrow', (n) => plural(n, 'arrow'), 'added', { kind: 'item', id: arrowId, how: 'added' })
         return
       }
 
@@ -199,5 +240,5 @@ export function applyBoardTurnActions({ base, actions, view, newId = freshId }: 
     }
   })
 
-  return { state: collected.length > 0 ? reduceBoard(base, { type: 'batch', actions: collected }) : base, skipped }
+  return { state: collected.length > 0 ? reduceBoard(base, { type: 'batch', actions: collected }) : base, skipped, changes }
 }

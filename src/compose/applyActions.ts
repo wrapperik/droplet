@@ -17,7 +17,9 @@ import {
   type WorkspaceAction,
   type WorkspaceState,
 } from '../lib/workspaceState.ts'
+import { hexToRgb, relativeLuminance } from '../lib/colour.ts'
 import { paletteErrors } from './paletteRules.ts'
+import { plural, type Change } from './receipt.ts'
 import type { PaletteAction } from './spec.ts'
 
 // Turns the model's actions into workspace actions and applies them through the same reducer a person's clicks use.
@@ -41,6 +43,8 @@ export type ApplyResult = {
   effects: Effect[]
   // The turn opened a workspace that was not open before.
   opened: boolean
+  // What was done, in order, for the change receipt.
+  changes: Change[]
 }
 
 type Input = {
@@ -58,6 +62,7 @@ export function applyTurnActions({ base, open, actions, env }: Input): ApplyResu
   const skipped: Skipped[] = []
   const effects: Effect[] = []
   const collected: WorkspaceAction[] = []
+  const changes: Change[] = []
 
   // Undo and redo take back or restore a whole step, so they stand alone.
   if (actions.some((a) => a.type === 'undo' || a.type === 'redo')) {
@@ -69,8 +74,8 @@ export function applyTurnActions({ base, open, actions, env }: Input): ApplyResu
       : action.type === 'undo' && !canUndoState(base) ? 'There is nothing to undo.'
       : action.type === 'redo' && !canRedoState(base) ? 'There is nothing to redo.'
       : null
-    if (reason || !base) return { state: base, skipped: [{ position, action, reason: reason ?? '' }], effects, opened: false }
-    return { state: reduce(base, { type: action.type }), skipped, effects, opened: false }
+    if (reason || !base) return { state: base, skipped: [{ position, action, reason: reason ?? '' }], effects, opened: false, changes: [] }
+    return { state: reduce(base, { type: action.type }), skipped, effects, opened: false, changes: [{ kind: 'changed', text: action.type === 'undo' ? 'Took back the last change' : 'Put back the change that was taken back', focus: [] }] }
   }
 
   let scratch: WorkspaceState | null = base
@@ -235,6 +240,8 @@ export function applyTurnActions({ base, open, actions, env }: Input): ApplyResu
 
     for (const step of next) scratch = reduce(scratch!, step)
     collected.push(...next)
+    const change = describeChange(action, blocks, docOf(scratch).blocks)
+    if (change) changes.push(change)
 
     // Keep the picture of what is on screen up to date for the moves that follow.
     if (['show_component', 'hide_component', 'reset_layout', 'expand_tool', 'collapse_tool'].includes(action.type)) {
@@ -242,7 +249,7 @@ export function applyTurnActions({ base, open, actions, env }: Input): ApplyResu
     }
   })
 
-  if (!scratch) return { state: base, skipped, effects, opened: false }
+  if (!scratch) return { state: base, skipped, effects, opened: false, changes: [] }
 
   // The turn as a whole must leave a palette that can still carry text. A person may do as they like, but the model
   // may not leave the founder with colours nothing can be read on.
@@ -252,17 +259,85 @@ export function applyTurnActions({ base, open, actions, env }: Input): ApplyResu
     const errors = paletteErrors(finalBlocks)
     if (errors.length > 0) {
       const position = Math.max(0, actions.length - 1)
-      return { state: base, skipped: [...skipped, { position, action: actions[position], reason: `After these changes: ${errors.join(' ')}` }], effects: [], opened: false }
+      return { state: base, skipped: [...skipped, { position, action: actions[position], reason: `After these changes: ${errors.join(' ')}` }], effects: [], opened: false, changes: [] }
     }
   }
 
   const first = opened ? scratch : base ? reduce(base, { type: 'batch', actions: collected }) : scratch
   // A workspace opened by this turn starts with a clean history: there is nothing earlier to undo to.
   const state = opened ? { ...first, history: createHistory(docOf(first)) } : first
-  return { state, skipped, effects, opened }
+  return { state, skipped, effects, opened, changes }
 }
 
 function toBlock(colour: { hex: string; name: string; rationale: string; role?: PaletteBlock['role'] }, index: number): PaletteBlock {
   return { id: index + 1, hex: colour.hex.toUpperCase(), name: colour.name, note: colour.rationale, ...(colour.role ? { role: colour.role } : {}) }
 }
 
+
+const COMPONENT_LABEL: Record<string, string> = { picker: 'colour picker', role: 'role tool', generate: 'Generate tool', canvas: 'palette', preview: 'sample invoice' }
+const label = (component: string) => COMPONENT_LABEL[component] ?? component
+const PLACEMENT_WORDS: Record<string, string> = { above: 'above', below: 'below', left_of: 'to the left of', right_of: 'to the right of' }
+const SIZE_WORDS: Record<string, string> = { third: 'a third', half: 'half', two_thirds: 'two thirds', full: 'the full' }
+const ROLE_WORDS: Record<string, string> = { primary: 'the primary colour', accent: 'the accent colour', background: 'the background', text: 'the text colour' }
+
+const lightness = (hex: string) => relativeLuminance(hexToRgb(hex))
+
+// One line of the receipt for an action that was applied, worked out from the colours before and after it, and never from what the model said.
+function describeChange(action: PaletteAction, before: PaletteBlock[], after: PaletteBlock[]): Change | null {
+  const at = (index: number) => before[index - 1]
+  const colour = (index: number) => `Colour ${index}`
+  switch (action.type) {
+    case 'set_palette': {
+      const names = after.map((block) => block.name || block.hex)
+      const shown = names.slice(0, 4).join(', ')
+      return { kind: 'added', text: `A new palette of ${plural(after.length, 'colour')}: ${shown}${names.length > 4 ? ` and ${names.length - 4} more` : ''}`, focus: after.map((block) => ({ kind: 'block', id: block.id, how: 'added' })) }
+    }
+    case 'set_colour': {
+      const old = at(action.index)
+      const now = after[action.index - 1]
+      const difference = lightness(now.hex) - lightness(old.hex)
+      const how = Math.abs(difference) < 0.02 ? `changed to ${now.hex}` : `made ${difference < 0 ? 'darker' : 'lighter'} (${now.hex})`
+      return { kind: 'changed', text: `${colour(action.index)} ${how}`, focus: [{ kind: 'block', id: now.id, how: 'changed' }] }
+    }
+    case 'add_colour': {
+      const added = after.find((block) => !before.some((other) => other.id === block.id))
+      return { kind: 'added', text: `Colour ${after.length} added: ${added?.name ? `${added.name}, ` : ''}${action.hex.toUpperCase()}`, focus: added ? [{ kind: 'block', id: added.id, how: 'added' }] : [] }
+    }
+    case 'remove_colour': {
+      const old = at(action.index)
+      return { kind: 'removed', text: `${colour(action.index)} removed (${old.name ? `${old.name}, ` : ''}${old.hex})`, focus: [{ kind: 'block', id: old.id, how: 'removed' }] }
+    }
+    case 'set_role': {
+      const block = at(action.index)
+      return {
+        kind: 'changed',
+        text: action.role === 'none' ? `Cleared the role of ${colour(action.index).toLowerCase()}` : `${colour(action.index)} is now ${ROLE_WORDS[action.role]}`,
+        focus: [{ kind: 'block', id: block.id, how: 'changed' }],
+      }
+    }
+    case 'keep_colour':
+      return { kind: 'changed', text: `${colour(action.index)} ${action.keep ? 'will be kept when Generate fills in the others' : 'is no longer kept'}`, focus: [{ kind: 'block', id: at(action.index).id, how: 'changed' }] }
+    case 'select_colour':
+      return { kind: 'changed', text: `Selected ${colour(action.index).toLowerCase()}`, focus: [{ kind: 'block', id: at(action.index).id, how: 'changed' }] }
+    case 'generate': {
+      const changed = after.filter((block, index) => before[index] && before[index].hex !== block.hex)
+      return { kind: 'changed', text: `Generated ${plural(changed.length, 'colour')} from ${action.harmony === 'monochrome' ? 'a monochrome harmony' : `a ${action.harmony} harmony`}`, focus: changed.map((block) => ({ kind: 'block', id: block.id, how: 'changed' })) }
+    }
+    case 'show_component':
+      return { kind: 'added', text: `Showed the ${label(action.component)}`, focus: [{ kind: 'window', id: action.component, how: 'added' }] }
+    case 'hide_component':
+      return { kind: 'removed', text: `Hid the ${label(action.component)}`, focus: [{ kind: 'window', id: action.component, how: 'removed' }] }
+    case 'move_component':
+      return { kind: 'changed', text: `Moved the ${label(action.component)} ${PLACEMENT_WORDS[action.placement]} the ${label(action.relativeTo)}`, focus: [{ kind: 'window', id: action.component, how: 'moved' }] }
+    case 'resize_component':
+      return { kind: 'changed', text: `Made the ${label(action.component)} ${SIZE_WORDS[action.size]} width`, focus: [{ kind: 'window', id: action.component, how: 'changed' }] }
+    case 'expand_tool':
+      return { kind: 'changed', text: `Made the ${label(action.component)} a window`, focus: [{ kind: 'window', id: action.component, how: 'added' }] }
+    case 'collapse_tool':
+      return { kind: 'changed', text: `Put the ${label(action.component)} back in the toolbar`, focus: [] }
+    case 'reset_layout':
+      return { kind: 'changed', text: 'Reset the layout', focus: [] }
+    default:
+      return null
+  }
+}

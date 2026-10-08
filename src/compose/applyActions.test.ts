@@ -271,3 +271,63 @@ describe('opening a workspace', () => {
     expect(result.state!.history.past).toHaveLength(1)
   })
 })
+
+describe('the changes it reports, for the receipt', () => {
+  const texts = (actions: TurnAction[], base?: WorkspaceState | null) => apply(actions, base).changes.map((change) => change.text)
+
+  it('says a colour was made darker or lighter, worked out from the colours and not from anything the model said', () => {
+    expect(texts([{ type: 'set_colour', index: 1, hex: '#0A4A7A' }])).toEqual(['Colour 1 made darker (#0A4A7A)'])
+    expect(texts([{ type: 'set_colour', index: 3, hex: '#E8F4FD' }])).toEqual(['Colour 3 made lighter (#E8F4FD)'])
+    expect(texts([{ type: 'set_colour', index: 1, hex: '#1F8FE1' }])).toEqual(['Colour 1 changed to #1F8FE1'])
+  })
+
+  it('says what was added and removed, marked as such, and points at the colour', () => {
+    const added = apply([{ type: 'add_colour', hex: '#E9A23B', name: 'Amber' }])
+    expect(added.changes).toEqual([{ kind: 'added', text: 'Colour 5 added: Amber, #E9A23B', focus: [{ kind: 'block', id: 5, how: 'added' }] }])
+    const removed = apply([{ type: 'remove_colour', index: 2 }])
+    expect(removed.changes).toEqual([{ kind: 'removed', text: 'Colour 2 removed (#0B4F8A)', focus: [{ kind: 'block', id: 2, how: 'removed' }] }])
+  })
+
+  it('says a whole palette is new, with its colours', () => {
+    const colours = [
+      { hex: '#FBF3E6', name: 'Wax cream', rationale: 'x' },
+      { hex: '#3A2540', name: 'Smoky plum', rationale: 'x' },
+      { hex: '#8A4F7D', name: 'Dusk mauve', rationale: 'x' },
+    ]
+    const result = applyTurnActions({ base: null, open, actions: [{ type: 'set_palette', colours, reason: 'x' }], env })
+    expect(result.changes.map((change) => change.text)).toEqual(['A new palette of 3 colours: Wax cream, Smoky plum, Dusk mauve'])
+    expect(result.changes[0].focus).toHaveLength(3)
+  })
+
+  it('says roles, keeps, and what Generate filled in', () => {
+    expect(texts([{ type: 'set_role', index: 2, role: 'primary' }])).toEqual(['Colour 2 is now the primary colour'])
+    expect(texts([{ type: 'set_role', index: 2, role: 'none' }])).toEqual(['Cleared the role of colour 2'])
+    expect(texts([{ type: 'keep_colour', index: 3, keep: true }])).toEqual(['Colour 3 will be kept when Generate fills in the others'])
+    const generated = apply([{ type: 'generate', harmony: 'triad', from: 1 }])
+    expect(generated.changes[0].text).toMatch(/^Generated 3 colours from a triad harmony$/)
+    expect(generated.changes[0].focus.map((target) => target.id)).toEqual([2, 3, 4])
+  })
+
+  it('says what was done to the layout, in words', () => {
+    expect(texts([{ type: 'hide_component', component: 'preview' }])).toEqual(['Hid the sample invoice'])
+    expect(texts([{ type: 'resize_component', component: 'canvas', size: 'half' }])).toEqual(['Made the palette half width'])
+    expect(texts([{ type: 'expand_tool', component: 'role' }])).toEqual(['Made the role tool a window'])
+    expect(texts([{ type: 'reset_layout' }])).toEqual(['Reset the layout'])
+  })
+
+  it('reports a line for each action, in the order they were applied, and none for one that was left out', () => {
+    const result = apply([
+      { type: 'set_colour', index: 1, hex: '#0A4A7A' },
+      { type: 'set_colour', index: 9, hex: '#0A4A7A' },
+      { type: 'set_role', index: 1, role: 'accent' },
+    ])
+    expect(result.changes.map((change) => change.text)).toEqual(['Colour 1 made darker (#0A4A7A)', 'Colour 1 is now the accent colour'])
+    expect(result.skipped).toHaveLength(1)
+  })
+
+  it('reports no change when nothing was done, and the turn that undoes as taking back', () => {
+    expect(apply([{ type: 'set_colour', index: 9, hex: '#123456' }]).changes).toEqual([])
+    const done = apply([{ type: 'set_colour', index: 1, hex: '#0A4A7A' }]).state!
+    expect(applyOn(done, [{ type: 'undo' }]).changes.map((change) => change.text)).toEqual(['Took back the last change'])
+  })
+})

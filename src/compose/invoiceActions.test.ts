@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { emptyClient, newContent } from '../lib/invoice.ts'
+import { formatRand } from '../lib/money.ts'
 import { invoiceDocOf, openInvoiceWorkspace, reduceInvoice, type InvoiceState } from '../lib/invoiceState.ts'
 import { amountsIn, applyInvoiceTurnActions, priceWasGiven, type KnownClient } from './invoiceActions.ts'
 import type { InvoiceTurnAction } from './invoiceSpec.ts'
@@ -175,5 +176,53 @@ describe('the whole turn', () => {
     expect(reasons([{ type: 'undo' }])[0]).toMatch(/nothing to undo/)
     expect(reasons([{ type: 'redo' }])[0]).toMatch(/nothing to redo/)
     expect(reasons([{ type: 'set_terms', terms: '30' }, { type: 'undo' }], ['x'], changed)[0]).toMatch(/on their own/)
+  })
+})
+
+describe('the changes it reports, for the receipt', () => {
+  const texts = (actions: InvoiceTurnAction[], founder?: string[], base?: InvoiceState) => apply(actions, founder, base).changes.map((change) => change.text)
+
+  it('says a client was set by naming what was set, and never shows a detail of theirs', () => {
+    const result = apply([{ type: 'set_client', name: 'Karoo Candles', address: '12 Long Street', email: 'a@b.co' }])
+    expect(result.changes.map((change) => change.text)).toEqual(['Client: set the name (“Karoo Candles”), the address, the email'])
+    expect(JSON.stringify(result.changes)).not.toMatch(/Long Street|a@b\.co/)
+    expect(texts([{ type: 'use_saved_client', name: 'pretoria print works' }])).toEqual(['Used the saved client “pretoria print works”'])
+  })
+
+  it('says the terms, the date, the note and VAT', () => {
+    expect(texts([{ type: 'set_terms', terms: '30' }])).toEqual(['Payment terms set to 30 days'])
+    expect(texts([{ type: 'set_terms', terms: 'on_receipt' }])).toEqual(['Payment terms set to due on receipt'])
+    expect(texts([{ type: 'set_terms', terms: 'custom', customDueDate: '2026-11-01' }])).toEqual(['Payment terms set to due on 2026-11-01'])
+    expect(texts([{ type: 'set_date', date: '2026-10-06' }])).toEqual(['Invoice date set to 2026-10-06'])
+    expect(texts([{ type: 'set_note', note: 'Thank you' }])).toEqual(['Set the note on the invoice'])
+    expect(texts([{ type: 'set_note', note: ' ' }])).toEqual(['Cleared the note'])
+    expect(texts([{ type: 'set_vat_registered', registered: true }])).toEqual(['Turned VAT on: the business is registered for it'])
+  })
+
+  it('numbers an added line as it is on the invoice, with the quantity and the price the founder gave, and says when there is none', () => {
+    const result = apply(
+      [
+        { type: 'add_line', description: 'Gift box, small', quantity: 12, unitPrice: 'R450' },
+        { type: 'add_line', description: 'Delivery' },
+      ],
+      ['12 small gift boxes at R450 each, and delivery'],
+    )
+    expect(result.changes.map((change) => change.text)).toEqual([`Line 1: Gift box, small \u00d7 12, ${formatRand(45000)} each`, 'Line 2: Delivery, no price yet'])
+    expect(result.changes.every((change) => change.kind === 'added')).toBe(true)
+    expect(result.changes[0].focus).toEqual([{ kind: 'line', id: 1, how: 'added' }])
+  })
+
+  it('says a line changed, and what was changed in it, and a removed line with what it was', () => {
+    const base = apply([{ type: 'add_line', description: 'Delivery' }, { type: 'add_line', description: 'Box', quantity: 2 }], ['x']).state
+    expect(texts([{ type: 'update_line', line: 1, unitPrice: '250' }], ['delivery is 250'], base)).toEqual([`Line 1: price set to ${formatRand(25000)}`])
+    expect(texts([{ type: 'update_line', line: 2, description: 'Big box', quantity: 3 }], ['x'], base)).toEqual(['Line 2: description, quantity changed'])
+    const removed = apply([{ type: 'remove_line', line: 1 }], ['x'], base)
+    expect(removed.changes).toEqual([{ kind: 'removed', text: 'Line 1 removed: Delivery', focus: [{ kind: 'line', id: 1, how: 'removed' }] }])
+  })
+
+  it('reports nothing for what was refused, and the turn that undoes as taking back', () => {
+    expect(apply([{ type: 'add_line', description: 'Box', unitPrice: '450' }], ['no price here']).changes).toEqual([])
+    const done = apply([{ type: 'set_terms', terms: '7' }]).state
+    expect(texts([{ type: 'undo' }], ['x'], done)).toEqual(['Took back the last change'])
   })
 })

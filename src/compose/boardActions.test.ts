@@ -359,3 +359,65 @@ describe('a summary is not an action', () => {
     }
   })
 })
+
+describe('the changes it reports, for the receipt', () => {
+  const texts = (actions: BoardTurnAction[], base?: BoardState) => apply(actions, base).changes.map((change) => change.text)
+  const frameTitle = () => (items(openBoardState()).find(isFrame) as FrameItem).title
+
+  it('puts notes added to the same frame into one line, with the frame\'s name', () => {
+    const result = apply([
+      { type: 'add_note', text: 'One', in: 'f1' },
+      { type: 'add_note', text: 'Two', in: 'f1' },
+      { type: 'add_note', text: 'Three', in: 'f1' },
+    ])
+    const lines = result.changes
+    expect(lines).toHaveLength(1)
+    expect(lines[0]).toMatchObject({ kind: 'added', text: `3 notes in “${frameTitle()}”` })
+    expect(lines[0].focus).toHaveLength(3)
+    expect(lines[0].focus.every((target) => target.kind === 'item' && target.how === 'added')).toBe(true)
+  })
+
+  it('says one note, beside what it was put, and a loose one on the board', () => {
+    expect(texts([{ type: 'add_note', text: 'Pet Pals', near: 'n3' }])[0]).toMatch(/^1 note beside “.+”$/)
+    expect(texts([{ type: 'add_note', text: 'Pet Pals' }])).toEqual(['1 note on the board'])
+  })
+
+  it('counts the arrows drawn with notes and on their own into one line', () => {
+    const result = apply([
+      { type: 'add_note', text: 'A', near: 'n3', connect: true },
+      { type: 'add_note', text: 'B', near: 'n3', connect: true },
+      { type: 'connect', from: 'n4', to: 'n5' },
+    ])
+    expect(result.changes).toHaveLength(2)
+    expect(result.changes[0].text).toMatch(/^2 notes beside \u201c.+\u201d$/)
+    expect(result.changes[1].text).toBe('3 arrows')
+    expect(result.changes[1].focus).toHaveLength(3)
+  })
+
+  it('says prompts were filled in, and a group was made with the things moved into it', () => {
+    const grouped = apply([{ type: 'cluster', title: 'Customers', notes: ['n3', 'n4', 'n5'] }])
+    expect(grouped.changes).toHaveLength(1)
+    expect(grouped.changes[0].text).toBe('3 notes moved into a new frame “Customers”')
+    expect(grouped.changes[0].focus.filter((target) => target.how === 'moved')).toHaveLength(3)
+    expect(grouped.changes[0].focus.filter((target) => target.how === 'added')).toHaveLength(1)
+  })
+
+  it('says a template was added, with how many things, and how many prompts were filled', () => {
+    const template = templateById('customer_problem')!
+    const prompts = promptsOf(template)
+    const result = apply([{ type: 'add_template', template: 'customer_problem', fill: ['A', 'B'] }])
+    expect(result.changes).toHaveLength(1)
+    expect(result.changes[0].text).toBe(`The ${template.name} template, ${template.items.length} things, with 2 prompts filled in`)
+    expect(prompts.length).toBeGreaterThanOrEqual(2)
+    expect(result.changes[0].focus).toHaveLength(template.items.length)
+    expect(texts([{ type: 'add_template', template: 'customer_problem' }])[0]).toBe(`The ${template.name} template, ${template.items.length} things`)
+  })
+
+  it('reports a line for what was done in the order it was done, none for what was left out, and taking back for an undo', () => {
+    const result = apply([{ type: 'add_note', text: 'x', in: 'n3' }, { type: 'add_note', text: 'Pet Pals' }, { type: 'connect', from: 'n3', to: 'n3' }])
+    expect(result.changes.map((change) => change.text)).toEqual(['1 note on the board'])
+    expect(result.skipped).toHaveLength(2)
+    const done = apply([{ type: 'add_note', text: 'Pet Pals' }]).state
+    expect(applyBoardTurnActions({ base: done, actions: [{ type: 'undo' }], view, newId: counter() }).changes.map((change) => change.text)).toEqual(['Took back the last change'])
+  })
+})
