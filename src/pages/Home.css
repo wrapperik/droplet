@@ -349,6 +349,7 @@
     radial-gradient(78% 40% at 56% 102%, var(--wave-mid) 0%, transparent 78%),
     radial-gradient(34% 26% at 0% 44%, var(--wave-edge) 0%, transparent 72%),
     linear-gradient(164deg, transparent 0%, transparent 42%, var(--wave-edge) 53%, var(--wave-mid) 66%, var(--wave-deep) 100%);
+  opacity: var(--wave-strength);
   animation: home-wave 18s ease-in-out infinite alternate;
 }
 
@@ -361,7 +362,7 @@
   inset: 0;
   background-image: var(--grain);
   background-size: 240px 240px;
-  opacity: var(--grain-strength);
+  opacity: calc(var(--grain-strength) * var(--wave-strength));
   /* Only where the colour is: none in the white at the top, building up through the edge of the wave, as strong as it gets in the deep
      blue. Speckle over white only dulls it. The angle and the stops are those of the wave's own edge. */
   -webkit-mask-image: linear-gradient(164deg, transparent 44%, rgb(0 0 0 / 0.55) 58%, #000 78%);

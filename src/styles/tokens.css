@@ -36,7 +36,7 @@
   --duration-base: 220ms;
 
   --page-gutter: clamp(20px, 5vw, 96px);
-  --font-sans: 'Urbanist Variable', system-ui, sans-serif;
+  --font-sans: 'Google Sans Variable', system-ui, sans-serif;
   --glass-blur: 18px;
 
   /* Semantic tokens: light (default) */
@@ -95,6 +95,7 @@
   --wave-light: #5aa7f0;
   --wave-mid: #1b95ee;
   --wave-deep: #0361dd;
+  --wave-strength: 0.45; /* How much of the wave the chat shows: the chat's wave is kept pale so it stays calm behind the text */
   /* A fine grain laid over the wave (Home, the introduction): noise from an SVG filter, turned into see-through speckles. */
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1.6 0 0 0 -0.35'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   --grain-strength: 0.1;
@@ -150,6 +151,7 @@
   --wave-light: rgb(31 143 224 / 0.42);
   --wave-mid: rgb(24 120 220 / 0.58);
   --wave-deep: rgb(8 80 200 / 0.72);
+  --wave-strength: 0.35;
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 1.6 0 0 0 -0.35'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   --grain-strength: 0.09;
 

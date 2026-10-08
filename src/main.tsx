@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { MotionConfig } from 'framer-motion'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App.tsx'
-import '@fontsource-variable/urbanist'
+import '@fontsource-variable/google-sans'
 import './styles/global.css'
 
 createRoot(document.getElementById('root')!).render(

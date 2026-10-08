@@ -23,9 +23,10 @@
 }
 
 .switcher .switcher__icon {
-  width: 2rem;
-  height: 2rem;
-  filter: drop-shadow(0 3px 3px var(--illustration-shadow));
+  flex: none;
+  width: 1.75rem;
+  height: 1.75rem;
+  color: var(--text);
 }
 
 .switcher__name {
@@ -79,7 +80,7 @@
 .switcher .switcher__item-icon {
   width: 1.75rem;
   height: 1.75rem;
-  filter: drop-shadow(0 2px 2px var(--illustration-shadow));
+  flex: none;
 }
 
 .switcher__item-name {
@@ -99,7 +100,7 @@
   background: var(--overlay-10);
 }
 
-/* Collapsed sidebar: just the folder. */
+/* Collapsed sidebar: just the icon. */
 @media (min-width: 52.0625rem) {
   .sidebar[data-collapsed='true'] .switcher__trigger {
     justify-content: center;

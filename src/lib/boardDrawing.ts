@@ -215,7 +215,7 @@ export type Surface = {
   rect(x: number, y: number, w: number, h: number): void
 }
 
-const FONT = 'Urbanist, Helvetica, Arial, sans-serif'
+const FONT = 'Google Sans Variable, Helvetica, Arial, sans-serif'
 
 function roundedRect(surface: Surface, x: number, y: number, w: number, h: number, radius: number) {
   const r = Math.min(radius, w / 2, h / 2)

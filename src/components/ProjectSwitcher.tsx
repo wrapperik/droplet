@@ -1,9 +1,8 @@
 import { useCallback, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { AddCircleIcon, CheckIcon, ChevronsUpDownIcon, NotebookIcon } from '@solar-icons/react/linear'
+import { AddCircleIcon, CheckIcon, ChevronsUpDownIcon, LibraryIcon, NotebookIcon } from '@solar-icons/react/linear'
 import { useDismiss } from '../hooks/useDismiss.ts'
 import type { ProjectSummary } from '../lib/mockProjects.ts'
-import FolderIcon from './FolderIcon.tsx'
 import './ProjectSwitcher.css'
 
 type Props = {
@@ -35,7 +34,7 @@ export default function ProjectSwitcher({ projects, currentId, collapsed, onSele
         title={collapsed ? current.name : undefined}
         onClick={() => setOpen((value) => !value)}
       >
-        <FolderIcon className="switcher__icon" />
+        <LibraryIcon className="switcher__icon" size={28} aria-hidden="true" />
         <span className="switcher__name">{current.name}</span>
         <ChevronsUpDownIcon className="switcher__chevron" size={18} aria-hidden="true" />
       </button>
@@ -63,7 +62,7 @@ export default function ProjectSwitcher({ projects, currentId, collapsed, onSele
                   onSelect(project.id)
                 }}
               >
-                <FolderIcon className="switcher__item-icon" />
+                <LibraryIcon className="switcher__item-icon" size={24} aria-hidden="true" />
                 <span className="switcher__item-name">{project.name}</span>
                 {project.id === currentId && <CheckIcon size={18} aria-hidden="true" />}
               </button>
