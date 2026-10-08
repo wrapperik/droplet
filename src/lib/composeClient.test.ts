@@ -173,3 +173,89 @@ describe('fetchAllowance', () => {
     expect(await fetchAllowance({ fetchImpl: reply(new TypeError('offline')) })).toBeNull()
   })
 })
+
+describe('requestSummary', () => {
+  const messages = [
+    { role: 'founder' as const, text: 'I will call it Kindred Gifting' },
+    { role: 'droplet' as const, text: 'Lovely.' },
+  ]
+  const good = { task: 'ideation', subject: 'Naming the business', decided: ['settled on the name Kindred Gifting'], open: [] }
+  const answer = (summary: unknown) => json({ kind: 'summarise_chat', answeredBy: 'base', summary })
+
+  it('sends the chat as a request of its own kind, and returns the memory', async () => {
+    let body: unknown
+    const impl = (async (_url: string, init?: RequestInit) => {
+      body = JSON.parse(String(init?.body))
+      return answer(good)
+    }) as unknown as typeof fetch
+    const { requestSummary } = await import('./composeClient.ts')
+    expect(await requestSummary(messages, { fetchImpl: impl })).toEqual({ ok: true, summary: good })
+    expect(body).toEqual({ kind: 'summarise_chat', messages })
+  })
+
+  it('checks the memory again against the chat, and keeps nothing that has a name that is not in it', async () => {
+    const { requestSummary } = await import('./composeClient.ts')
+    expect(await requestSummary(messages, { fetchImpl: reply(answer({ ...good, decided: ['settled on the name DuckStack'] })) })).toEqual({ ok: true, summary: null })
+  })
+
+  it('keeps nothing when the server found none it could trust', async () => {
+    const { requestSummary } = await import('./composeClient.ts')
+    expect(await requestSummary(messages, { fetchImpl: reply(answer(null)) })).toEqual({ ok: true, summary: null })
+  })
+
+  it('reports a failure as one, and an answer that is not one', async () => {
+    const { requestSummary } = await import('./composeClient.ts')
+    expect(await requestSummary(messages, { fetchImpl: reply(json({ error: 'rate_limited', message: 'Slow down.' }, 429)) })).toMatchObject({ ok: false, kind: 'rate_limited' })
+    expect(await requestSummary(messages, { fetchImpl: reply(new TypeError('offline')) })).toMatchObject({ ok: false, kind: 'network' })
+    expect(await requestSummary(messages, { fetchImpl: reply(json({ kind: 'summarise_chat', answeredBy: 'advanced', summary: good })) })).toMatchObject({ ok: false, kind: 'bad_response' })
+  })
+
+  it('uses the same address and headers as a message', async () => {
+    let seen: { url: string; init?: RequestInit } | null = null
+    const impl = (async (url: string, init?: RequestInit) => {
+      seen = { url, init }
+      return answer(null)
+    }) as unknown as typeof fetch
+    const { requestSummary } = await import('./composeClient.ts')
+    await requestSummary(messages, { fetchImpl: impl, target: { url: 'https://abc.supabase.co/functions/v1/compose', authenticated: true }, headers: async () => ({ authorization: 'Bearer t' }) })
+    expect(seen!.url).toBe('https://abc.supabase.co/functions/v1/compose')
+    expect(seen!.init?.headers).toMatchObject({ authorization: 'Bearer t' })
+  })
+})
+
+describe('requestDigest', () => {
+  const request = {
+    kind: 'digest_workspace' as const,
+    workspace: 'board' as const,
+    projectName: 'Paws',
+    items: [
+      { ref: 'r1', text: 'Care plan for older dogs', starred: true },
+      { ref: 'r2', text: 'Pet Pals' },
+    ],
+  }
+  const digest = { about: 'Ideas for a pet care business', decided: [], open: ['what to charge'], standouts: [{ ref: 'r1', reason: 'starred' }] }
+  const answer = (value: unknown) => json({ kind: 'digest_workspace', answeredBy: 'base', digest: value })
+
+  it('sends the items as a request of its own kind, and returns the digest', async () => {
+    let body: unknown
+    const impl = (async (_url: string, init?: RequestInit) => {
+      body = JSON.parse(String(init?.body))
+      return answer(digest)
+    }) as unknown as typeof fetch
+    const { requestDigest } = await import('./composeClient.ts')
+    expect(await requestDigest(request, { fetchImpl: impl })).toEqual({ ok: true, digest })
+    expect(body).toEqual(request)
+  })
+
+  it('checks the digest again against the items, and keeps nothing with a name that is not in them', async () => {
+    const { requestDigest } = await import('./composeClient.ts')
+    expect(await requestDigest(request, { fetchImpl: reply(answer({ ...digest, about: 'Ideas for Rover' })) })).toEqual({ ok: true, digest: null })
+    expect(await requestDigest(request, { fetchImpl: reply(answer(null)) })).toEqual({ ok: true, digest: null })
+  })
+
+  it('reports a failure, and an answer that is the wrong kind', async () => {
+    const { requestDigest } = await import('./composeClient.ts')
+    expect(await requestDigest(request, { fetchImpl: reply(json({ error: 'rate_limited', message: 'Slow.' }, 429)) })).toMatchObject({ ok: false, kind: 'rate_limited' })
+    expect(await requestDigest(request, { fetchImpl: reply(json({ kind: 'summarise_chat', answeredBy: 'base', summary: null })) })).toMatchObject({ ok: false, kind: 'bad_response' })
+  })
+})

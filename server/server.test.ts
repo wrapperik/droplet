@@ -281,3 +281,155 @@ describe('the Advanced allowance', () => {
     expect(allowanceOf({ used: 12, oldestAt: null }, 10)).toEqual({ advancedLeft: 0, advancedLimit: 10, resetsAt: null })
   })
 })
+
+describe('background work: a short memory of a chat', () => {
+  const chat = {
+    kind: 'summarise_chat',
+    messages: [
+      { role: 'founder', text: 'I will call it Kindred Gifting and we sell to firms in Pretoria' },
+      { role: 'droplet', text: 'Lovely name. Colours next?' },
+      { role: 'founder', text: 'Yes, another day.' },
+    ],
+  }
+  const summary = { task: 'ideation', subject: 'Naming the business', decided: ['settled on the name Kindred Gifting'], open: ['the colours are not chosen yet'] }
+  const answering = (text: string = JSON.stringify(summary)) => {
+    const asked: { mode?: string; search?: boolean; user: string }[] = []
+    const call: ModelCaller = async (request) => {
+      asked.push({ mode: request.mode, search: request.search, user: request.user })
+      return { text, meta: { model: 'gemini-3.5-flash-lite', answeredBy: 'base', usage: { prompt: 900, answer: 60, thinking: 5 } } }
+    }
+    return { call, asked }
+  }
+
+  it('is answered by Quick without search, and answers with the memory', async () => {
+    const { call, asked } = answering()
+    const { value, logged } = deps(call)
+    const reply = await handleCompose(chat, value)
+    expect(reply.status).toBe(200)
+    expect(reply.body).toEqual({ kind: 'summarise_chat', answeredBy: 'base', summary })
+    expect(asked).toEqual([{ mode: 'base', search: undefined, user: expect.stringContaining('Founder: I will call it Kindred Gifting') }])
+    expect(logged[0]).toMatchObject({ outcome: 'valid', task: 'summarise_chat', mode: 'base', answeredBy: 'base', model: 'gemini-3.5-flash-lite', tokens: { prompt: 900, answer: 60, thinking: 5 } })
+  })
+
+  it('never counts against the Advanced allowance, and does not even read it', async () => {
+    const { call } = answering()
+    const { value } = deps(call)
+    let read = 0
+    value.advanced = {
+      limit: 10,
+      status: () => {
+        read += 1
+        return { used: 0, oldestAt: null }
+      },
+      spend: () => {
+        read += 100
+      },
+    }
+    const reply = await handleCompose(chat, value)
+    expect(reply.body).not.toHaveProperty('allowance')
+    expect(read).toBe(0)
+  })
+
+  it('counts toward the hourly limit like any request', async () => {
+    const { call } = answering()
+    const { value } = deps(call, 2)
+    expect((await handleCompose(chat, value)).status).toBe(200)
+    expect((await handleCompose({ intent: 'hi' }, value)).status).toBe(200)
+    const third = await handleCompose(chat, value)
+    expect(third.status).toBe(429)
+    expect(third.body).toMatchObject({ error: 'rate_limited' })
+  })
+
+  it('keeps nothing when the memory has a name that is not in the chat, after asking once more', async () => {
+    const invented = JSON.stringify({ ...summary, decided: ['settled on the name DuckStack'] })
+    const { call, asked } = answering(invented)
+    const { value, logged } = deps(call)
+    const reply = await handleCompose(chat, value)
+    expect(reply.status).toBe(200)
+    expect(reply.body).toEqual({ kind: 'summarise_chat', answeredBy: 'base', summary: null })
+    expect(asked).toHaveLength(2)
+    expect(logged[0]).toMatchObject({ outcome: 'fallback' })
+    expect(logged[0].problems?.join(' ')).toMatch(/DuckStack/)
+  })
+
+  it('never logs what the founder wrote', async () => {
+    const { call } = answering()
+    const { value, logged } = deps(call)
+    await handleCompose(chat, value)
+    expect(JSON.stringify(logged)).not.toMatch(/Kindred|Pretoria|firms/)
+  })
+
+  it('refuses a request that is not shaped right, says plainly when there is no key, and reports a model that cannot be reached', async () => {
+    const { value } = deps(answering().call)
+    expect((await handleCompose({ kind: 'summarise_chat', messages: [] }, value)).status).toBe(400)
+    expect((await handleCompose({ kind: 'something_else' }, value)).status).toBe(400)
+    expect((await handleCompose(chat, deps(null).value)).status).toBe(503)
+    const down = deps(async () => {
+      throw new ComposeError('unavailable', 'x')
+    })
+    const reply = await handleCompose(chat, down.value)
+    expect(reply.status).toBe(503)
+    expect(down.logged[0]).toMatchObject({ outcome: 'error', error: 'unavailable', task: 'summarise_chat' })
+  })
+})
+
+describe('background work: a digest of a workspace', () => {
+  const items = [
+    { ref: 'r1', text: 'Care plan for older dogs', starred: true },
+    { ref: 'r2', text: 'Pet Pals' },
+  ]
+  const digestRequest = { kind: 'digest_workspace', workspace: 'board', projectName: 'Paws', items }
+  const digest = { about: 'Ideas for a pet care business', decided: [], open: ['what to charge'], standouts: [{ ref: 'r1', reason: 'starred' }] }
+  const answering = (text: string = JSON.stringify(digest)) => {
+    const asked: { mode?: string; search?: boolean; system: string }[] = []
+    const call: ModelCaller = async (request) => {
+      asked.push({ mode: request.mode, search: request.search, system: request.system })
+      return { text, meta: { model: 'gemini-3.5-flash-lite', answeredBy: 'base' } }
+    }
+    return { call, asked }
+  }
+
+  it('is answered by Quick, without search, and never counts against Advanced', async () => {
+    const { call, asked } = answering()
+    const { value, logged } = deps(call)
+    let read = 0
+    value.advanced = { limit: 10, status: () => (read += 1, { used: 0, oldestAt: null }), spend: () => undefined }
+    const reply = await handleCompose(digestRequest, value)
+    expect(reply.status).toBe(200)
+    expect(reply.body).toEqual({ kind: 'digest_workspace', answeredBy: 'base', digest })
+    expect(asked[0]).toMatchObject({ mode: 'base', search: undefined })
+    expect(read).toBe(0)
+    expect(logged[0]).toMatchObject({ task: 'digest_workspace', mode: 'base', answeredBy: 'base', outcome: 'valid' })
+  })
+
+  it('counts toward the hourly limit', async () => {
+    const { call } = answering()
+    const { value } = deps(call, 1)
+    expect((await handleCompose(digestRequest, value)).status).toBe(200)
+    expect((await handleCompose(digestRequest, value)).status).toBe(429)
+  })
+
+  it('drops a reference to something that is not an item, and keeps nothing that has a name that is not in the items', async () => {
+    const stray = answering(JSON.stringify({ ...digest, standouts: [{ ref: 'r9', reason: 'x' }, { ref: 'r2', reason: 'the name' }] }))
+    const reply = await handleCompose(digestRequest, deps(stray.call).value)
+    expect((reply.body.digest as { standouts: unknown[] }).standouts).toEqual([{ ref: 'r2', reason: 'the name' }])
+    const invented = answering(JSON.stringify({ ...digest, about: 'Ideas for Rover in Johannesburg' }))
+    const none = deps(invented.call)
+    const dropped = await handleCompose(digestRequest, none.value)
+    expect(dropped.body).toEqual({ kind: 'digest_workspace', answeredBy: 'base', digest: null })
+    expect(none.logged[0]).toMatchObject({ outcome: 'fallback' })
+  })
+
+  it('never logs what is in the notes', async () => {
+    const { call } = answering()
+    const { value, logged } = deps(call)
+    await handleCompose(digestRequest, value)
+    expect(JSON.stringify(logged)).not.toMatch(/Care plan|Pet Pals/)
+  })
+
+  it('refuses one that is not shaped right', async () => {
+    const { value } = deps(answering().call)
+    expect((await handleCompose({ ...digestRequest, items: [] }, value)).status).toBe(400)
+    expect((await handleCompose({ ...digestRequest, workspace: 'logo' }, value)).status).toBe(400)
+  })
+})

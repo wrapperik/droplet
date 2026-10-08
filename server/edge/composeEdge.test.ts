@@ -347,3 +347,52 @@ describe('the compose function in Supabase', () => {
     expect(response.status).toBe(503)
   })
 })
+
+describe('background work in the compose function', () => {
+  const chat = { kind: 'summarise_chat', messages: [{ role: 'founder', text: 'I will call it Kindred Gifting and we sell to firms in Pretoria' }] }
+  const summary = { task: 'ideation', subject: 'Naming the business', decided: ['settled on the name Kindred Gifting'], open: [] }
+  const answers: ModelCaller = async () => ({ text: JSON.stringify(summary), meta: { model: 'gemini-3.5-flash-lite', answeredBy: 'base' } })
+
+  it('answers a signed-in founder, and turns away one who is not', async () => {
+    const { handle } = setup({ call: answers })
+    const reply = await handle(post(chat))
+    expect(reply.status).toBe(200)
+    expect(await reply.json()).toEqual({ kind: 'summarise_chat', answeredBy: 'base', summary })
+    expect((await handle(post(chat, {}))).status).toBe(401)
+  })
+
+  it('is counted toward the hour, never toward Advanced, and the row has no words of the founder\'s', async () => {
+    const { handle, recorded, counted, countedAdvanced } = setup({ call: answers })
+    await handle(post(chat))
+    expect(counted).toHaveLength(1)
+    expect(countedAdvanced).toHaveLength(0)
+    expect(recorded[0].entry).toMatchObject({ task: 'summarise_chat', mode: 'base', answeredBy: 'base', outcome: 'valid' })
+    expect(JSON.stringify(recorded)).not.toMatch(/Kindred|Pretoria/)
+  })
+
+  it('is refused at the limit for the hour, like any request', async () => {
+    const { handle } = setup({ call: answers }, 3)
+    expect((await handle(post(chat))).status).toBe(429)
+  })
+
+  it('writes a row of its own in Supabase, as Quick', async () => {
+    const calls: { url: string; init?: RequestInit }[] = []
+    const fetchImpl = (async (url: string, init?: RequestInit) => {
+      calls.push({ url, init })
+      if (url.includes('/auth/v1/user')) return new Response(JSON.stringify({ id: 'user-1' }), { status: 200 })
+      if (init?.method === 'POST') return new Response(null, { status: 201 })
+      return new Response('[]', { status: 200, headers: { 'content-range': '*/0' } })
+    }) as unknown as typeof fetch
+    const before = globalThis.fetch
+    globalThis.fetch = (async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(summary) }] }, finishReason: 'STOP' }] }), { status: 200 })) as unknown as typeof fetch
+    try {
+      const response = await createEdgeComposeHandler({ SUPABASE_URL: 'https://abc.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 's', GEMINI_API_KEY: 'g' }, fetchImpl)(post(chat))
+      expect(response.status).toBe(200)
+    } finally {
+      globalThis.fetch = before
+    }
+    const row = JSON.parse(String(calls.find((call) => call.init?.method === 'POST' && call.url.endsWith('/rest/v1/compositions'))!.init?.body)) as Record<string, unknown>
+    expect(row).toMatchObject({ task: 'summarise_chat', mode: 'base', answered_by: 'base', outcome: 'valid' })
+    expect(JSON.stringify(row)).not.toMatch(/Kindred|Pretoria/)
+  })
+})

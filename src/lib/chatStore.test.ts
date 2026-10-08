@@ -159,3 +159,53 @@ describe('whenLabel', () => {
     expect(whenLabel('not a date', now)).toBe('')
   })
 })
+
+describe('a change receipt kept with a reply', () => {
+  const receipt = { heading: 'Changed on the board', lines: [{ mark: '+' as const, text: '5 notes in “Name ideas”' }], left: ['Adding a note: no room.'], status: 'Undone. It is as it was before this reply.' }
+
+  it('is kept with the message, the lines and what Undo this said, and not the ability to undo', () => {
+    const kept = storableMessages([{ id: 1, from: 'droplet', text: 'Done.', receipt, ...({ receiptLive: { undo: true, show: true } } as object) }])
+    expect(kept).toEqual([{ id: 1, from: 'droplet', text: 'Done.', receipt }])
+    expect(JSON.stringify(kept)).not.toContain('receiptLive')
+  })
+
+  it('comes back with the chat, and a receipt that is not one is left out without losing the message', async () => {
+    await saveChats('p1', [{ id: 'c1', title: 'Board', updatedAt: '2026-10-06T10:00:00.000Z', messages: [{ id: 1, from: 'droplet', text: 'Done.', receipt }] }])
+    expect((await loadChats('p1'))[0].messages[0].receipt).toEqual(receipt)
+    window.localStorage.clear()
+    await saveChats('p1', [{ id: 'c1', title: 'Board', updatedAt: '2026-10-06T10:00:00.000Z', messages: [{ id: 1, from: 'droplet', text: 'Done.', receipt: { heading: 5 } as never }] }])
+    // the chat as a whole could not be read, and is left out, as for any other bad part of a message
+    expect(await loadChats('p1')).toEqual([])
+  })
+
+  it('is held to the same limits when it is read back', async () => {
+    const tooMany = { ...receipt, lines: Array.from({ length: 31 }, () => ({ mark: '' as const, text: 'x' })) }
+    await saveChats('p1', [{ id: 'c1', title: 'Board', updatedAt: '2026-10-06T10:00:00.000Z', messages: [{ id: 1, from: 'droplet', text: 'Done.', receipt: tooMany }] }])
+    expect(await loadChats('p1')).toEqual([])
+  })
+
+  it('is not kept for a message with no words, as for any other', () => {
+    expect(storableMessages([{ id: 1, from: 'droplet', text: '  ', receipt }])).toEqual([])
+  })
+})
+
+describe('the memory of a chat kept with it', () => {
+  const summary = { task: 'ideation' as const, subject: 'Naming the business', decided: ['settled on the name Kindred Gifting'], open: ['the colours are not chosen yet'] }
+
+  it('comes back with the chat, with when it was written and whether the founder wrote it', async () => {
+    await saveChats('p1', [{ ...chat('c1', '2026-10-06T10:00:00.000Z'), summary, summarisedAt: '2026-10-06T11:00:00.000Z', summaryEdited: true }])
+    expect((await loadChats('p1'))[0]).toMatchObject({ summary, summarisedAt: '2026-10-06T11:00:00.000Z', summaryEdited: true })
+  })
+
+  it('is optional, so a chat from before memories is still read', async () => {
+    await saveChats('p1', [chat('c1', '2026-10-06T10:00:00.000Z')])
+    const read = (await loadChats('p1'))[0]
+    expect(read.summary).toBeUndefined()
+    expect(read.summarisedAt).toBeUndefined()
+  })
+
+  it('is held to the same limits when read back: a memory with too many lines leaves the chat out', async () => {
+    await saveChats('p1', [{ ...chat('c1', '2026-10-06T10:00:00.000Z'), summary: { ...summary, decided: ['a', 'b', 'c', 'd', 'e'] } }])
+    expect(await loadChats('p1')).toEqual([])
+  })
+})

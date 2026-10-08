@@ -1,0 +1,57 @@
+.memory {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: var(--radius-lg);
+  background: var(--overlay-06);
+  font-size: 0.9375rem;
+}
+
+.memory__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.25rem 0.75rem;
+}
+
+.memory__title {
+  font-weight: 600;
+}
+
+.memory__when {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+.memory__lines {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+
+.memory__edit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.memory__edit label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.memory__area {
+  border-radius: var(--radius-lg);
+  font-family: inherit;
+  resize: vertical;
+}

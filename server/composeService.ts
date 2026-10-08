@@ -1,4 +1,6 @@
 import { ComposeError, composeWorkspace, type ModelCaller } from '../src/compose/compose.ts'
+import { backgroundRequestSchema, isBackgroundRequest } from '../src/compose/background.ts'
+import { runDigest, runSummarise } from '../src/compose/runBackground.ts'
 import { composeRequestSchema, modeOf, type Allowance } from '../src/compose/spec.ts'
 import type { CompositionLogEntry } from './compositionLog.ts'
 import { DAY_MS, type AdvancedAllowance, type AdvancedUse, type RateLimiter } from './rateLimit.ts'
@@ -74,7 +76,44 @@ export async function handleAllowance(deps: Pick<ComposeServiceDeps, 'advanced'>
   return { status: 200, body: { allowance: allowanceOf(use, deps.advanced.limit) } }
 }
 
+// Work done in the background, such as a short memory of a chat that was left. It has a `kind` of its own, is always answered by Quick, never counts
+// against the Advanced allowance, never searches, and counts toward the hourly limit like any other request. What the founder wrote is never logged.
+async function handleBackground(body: unknown, deps: ComposeServiceDeps): Promise<ServiceReply> {
+  const now = deps.now ?? Date.now
+  const started = now()
+  const parsed = backgroundRequestSchema.safeParse(body)
+  if (!parsed.success) return { status: 400, body: { error: 'bad_request', message: 'That request is not one I can do.' } }
+  const request = parsed.data
+  const fail = async (kind: ComposeError['kind']): Promise<ServiceReply> => {
+    await deps.log({ at: new Date(started).toISOString(), intent: `(${request.kind})`, outcome: 'error', task: request.kind, mode: 'base', error: kind, ms: now() - started })
+    return { status: STATUS[kind], body: { error: kind, message: deps.messages?.[kind] ?? MESSAGES[kind] } }
+  }
+  if (!deps.call) return fail('no_key')
+  if (!(await deps.limiter.take())) return fail('rate_limited')
+  try {
+    const result = request.kind === 'summarise_chat' ? await runSummarise(request, deps.call) : await runDigest(request, deps.call)
+    await deps.log({
+      at: new Date(started).toISOString(),
+      intent: `(${request.kind})`,
+      outcome: result.value ? 'valid' : 'fallback',
+      task: request.kind,
+      mode: 'base',
+      answeredBy: 'base',
+      ...(result.meta?.model ? { model: result.meta.model } : {}),
+      ...(result.meta?.usage ? { tokens: result.meta.usage } : {}),
+      ...(result.value ? {} : { problems: result.problems.slice(0, 4) }),
+      ms: now() - started,
+    })
+    return { status: 200, body: { kind: request.kind, answeredBy: 'base', ...(request.kind === 'summarise_chat' ? { summary: result.value } : { digest: result.value }) } }
+  } catch (error) {
+    if (error instanceof ComposeError) return fail(error.kind)
+    await deps.log({ at: new Date(started).toISOString(), intent: `(${request.kind})`, outcome: 'error', task: request.kind, mode: 'base', error: 'unexpected', ms: now() - started })
+    return { status: 500, body: { error: 'unavailable', message: 'Something went wrong. Try again.' } }
+  }
+}
+
 export async function handleCompose(body: unknown, deps: ComposeServiceDeps): Promise<ServiceReply> {
+  if (isBackgroundRequest(body)) return handleBackground(body, deps)
   const now = deps.now ?? Date.now
   const started = now()
 

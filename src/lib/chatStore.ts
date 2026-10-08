@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import { blockSchema, MAX_BLOCKS, type ChatBlock } from '../compose/blocks.ts'
 import { groundingSchema, type Grounding } from '../compose/grounding.ts'
+import { summarySchema } from '../compose/background.ts'
+import { receiptSchema, type Receipt } from '../compose/receipt.ts'
 import { documentStorage } from './storage.ts'
 
 // The conversations of a project, kept in this browser so the founder can come back to one. Per project, newest first. Only what was
@@ -21,6 +23,8 @@ const messageSchema = z.object({
   checks: z.record(z.string().max(12), z.boolean()).optional(),
   // What a reply searched the web for and drew on, kept with it so the sources and Google's suggestions show whenever the reply does.
   grounding: groundingSchema.optional(),
+  // What the reply changed on screen and what it left out, kept so the card shows again. The ability to undo it is not kept.
+  receipt: receiptSchema.optional(),
   // A note from the app, not an answer from the model, so it is never sent to the model as part of the conversation.
   local: z.boolean().optional(),
 })
@@ -32,13 +36,18 @@ export const chatSchema = z.object({
   messages: z.array(messageSchema).max(MAX_STORED_MESSAGES),
   // The title was chosen by the composer, rather than being the founder's first words.
   named: z.boolean().optional(),
+  // A short memory of the chat, written in the background when it was left, so a later chat can look back at it. `summarisedAt` is when it was last
+  // looked at (a chat that changed since is written down again), and `summaryEdited` says the founder wrote it, so it is not written over.
+  summary: summarySchema.optional(),
+  summarisedAt: z.string().optional(),
+  summaryEdited: z.boolean().optional(),
 })
 
 export type StoredMessage = z.infer<typeof messageSchema>
 export type StoredChat = z.infer<typeof chatSchema>
 
 // What of a thread is worth keeping: the words, not the replies still being worked on, nor the buttons.
-export function storableMessages(thread: { id: number; from: StoredMessage['from']; text: string; question?: string; blocks?: ChatBlock[]; checks?: Record<string, boolean>; grounding?: Grounding; pending?: boolean; local?: boolean }[]): StoredMessage[] {
+export function storableMessages(thread: { id: number; from: StoredMessage['from']; text: string; question?: string; blocks?: ChatBlock[]; checks?: Record<string, boolean>; grounding?: Grounding; receipt?: Receipt; pending?: boolean; local?: boolean }[]): StoredMessage[] {
   return thread
     .filter((item) => !item.pending && item.text.trim() !== '')
     .map((item) => ({
@@ -49,6 +58,7 @@ export function storableMessages(thread: { id: number; from: StoredMessage['from
       ...(item.blocks && item.blocks.length > 0 ? { blocks: item.blocks } : {}),
       ...(item.checks && Object.keys(item.checks).length > 0 ? { checks: item.checks } : {}),
       ...(item.grounding ? { grounding: item.grounding } : {}),
+      ...(item.receipt ? { receipt: item.receipt } : {}),
       ...(item.local ? { local: true } : {}),
     }))
     .slice(-MAX_STORED_MESSAGES)
