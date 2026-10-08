@@ -23,12 +23,14 @@ type Props = {
   // A number that goes up each time something outside asks for the note to be opened (such as a button in the chat). It opens only
   // if there is something to save, and saves nothing by itself: the founder still confirms.
   openSignal?: number
+  // Droplet keeps notes on the project and will update them when this is saved. Left out when the founder has switched the notes off.
+  notesOn?: boolean
 }
 
 // Nothing is remembered without the founder's say. Pressing Save does not save: it opens a note of exactly what would be
 // remembered, each item with a tick, and only the confirm button saves. Leaving the note, or pressing Escape or Cancel, saves nothing.
 // How the workspace is arranged is not a memory, so it is kept along with whatever is confirmed, and the note says so.
-export default function ConfirmSave({ projectName, items, unsaved, status, onConfirm, openSignal = 0 }: Props) {
+export default function ConfirmSave({ projectName, items, unsaved, status, onConfirm, openSignal = 0, notesOn = false }: Props) {
   const [open, setOpen] = useState(false)
   // The ids the founder has unticked. Everything is ticked when the note opens.
   const [unticked, setUnticked] = useState<string[]>([])
@@ -110,6 +112,7 @@ export default function ConfirmSave({ projectName, items, unsaved, status, onCon
                 <p className="confirm__quiet">It stays on this device. You can forget any of it later.</p>
               </>
             )}
+            {notesOn && <p className="confirm__quiet">Droplet will update its notes on this project.</p>}
             <div className="confirm__actions">
               <button type="button" className="confirm__cancel" onClick={close}>
                 Cancel

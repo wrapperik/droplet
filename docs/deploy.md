@@ -14,6 +14,14 @@ They add which mode a request asked for and which answered, whether it searched,
 Advanced answers from them. The token counts are for working out what the composer costs and are never shown to founders. Nothing of what was asked,
 answered or searched for is kept. Run them before deploying the function: it writes these columns.
 
+Then run `supabase/migrations/20261008000000_notes_kind.sql`. It lets a project hold one more kind of document, `notes`: Droplet's notebook on the project (an
+index of what the workspaces hold, and a digest of each). The app writes it when the founder saves, unless they switch the notes off in the project brief.
+The app and the database must agree on the kinds, so run it before deploying the app that writes them.
+
+The `compose` function now also does background work for the app: a short memory of a chat that was left, and a digest of a workspace after a save. Both
+are answered by the Quick model, never count against the Advanced allowance, count toward `COMPOSE_LIMIT_PER_HOUR`, and are logged in `compositions` with
+their task and tokens but never what was written. A founder who saves often and changes chats often uses more of the hourly limit; raise it if needed.
+
 ## 2. The function
 
 The function is generated from the app's own code, so it can never disagree with the app about what a valid turn is.

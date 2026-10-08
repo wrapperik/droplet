@@ -47,10 +47,10 @@ export const CONNECTOR_HEAD_LABELS: Record<ConnectorHead, string> = { end: 'Arro
 
 // ---- Items ----
 
-// What every thing on the board can carry besides its own parts. A `group` says which template put it there (see boardTemplates.ts): every
+// What every thing on the board can carry besides its own parts. `starred` is the founder's "keep in mind": Droplet's notes on the project always include it. A `group` says which template put it there (see boardTemplates.ts): every
 // thing from one use of a template has the same group, which is how a template can be reset. A `hint` is a faint prompt shown in a note,
 // shape or text label while it has nothing written in it, and gone once it has.
-type Common = { group?: string }
+type Common = { group?: string; starred?: boolean }
 type Hinted = { hint?: string }
 
 export type NoteItem = Rect & Common & Hinted & {

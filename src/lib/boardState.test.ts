@@ -776,3 +776,32 @@ describe('fill_note', () => {
 })
 
 // ---- The summary ----
+
+describe('keeping things in mind', () => {
+  const two = () => openBoard([aNote('a', 100, 100), aNote('b', 400, 100), { id: 'f', kind: 'frame', x: 0, y: 600, w: 480, h: 360, title: 'Ideas', colour: 'white' }])
+
+  it('stars the things asked for, and takes the star off again', () => {
+    const starred = reduceBoard(two(), { type: 'set_starred', ids: ['a'], starred: true })
+    expect(note(starred, 'a').starred).toBe(true)
+    expect(note(starred, 'b').starred).toBeUndefined()
+    const cleared = reduceBoard(starred, { type: 'set_starred', ids: ['a'], starred: false })
+    expect('starred' in note(cleared, 'a')).toBe(false)
+  })
+
+  it('does nothing, and makes no history step, when the star is already so, or the thing is a frame or is not there', () => {
+    const base = two()
+    expect(reduceBoard(base, { type: 'set_starred', ids: ['a'], starred: false })).toBe(base)
+    expect(reduceBoard(base, { type: 'set_starred', ids: ['nowhere'], starred: true })).toBe(base)
+    expect(reduceBoard(base, { type: 'set_starred', ids: ['f'], starred: true })).toBe(base)
+  })
+
+  it('is one step, which undo takes back', () => {
+    const starred = reduceBoard(two(), { type: 'set_starred', ids: ['a', 'b'], starred: true })
+    expect(note(reduceBoard(starred, { type: 'undo' }), 'a').starred).toBeUndefined()
+    expect(note(reduceBoard(starred, { type: 'undo' }), 'b').starred).toBeUndefined()
+  })
+
+  it('counts as a change, so the board is not saved until it is', () => {
+    expect(isBoardUnsaved(docOf(reduceBoard(two(), { type: 'set_starred', ids: ['a'], starred: true })), { items: docOf(two()).items, layout: docOf(two()).layout })).toBe(true)
+  })
+})

@@ -139,6 +139,7 @@ export default function PaletteWorkspace({ projectId, projectName, state, dispat
               onAdd={() => dispatch({ type: 'add_block' })}
               onRemove={(id) => dispatch({ type: 'remove_block', id })}
               onToggleLock={(id) => dispatch({ type: 'toggle_keep', id })}
+              onToggleStar={(id) => dispatch({ type: 'toggle_star', id })}
               reason={doc.reasons.canvas ?? 'The colours you are choosing between. Select one to edit it.'}
             />
           </div>

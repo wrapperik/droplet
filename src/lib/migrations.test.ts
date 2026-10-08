@@ -65,6 +65,9 @@ describe('the database migrations', () => {
 
   it('only allow the kinds of document the app saves, and hold a document to a size', () => {
     expect(code).toMatch(/kind in \('palette', 'board', 'invoice', 'memory', 'chats'\)/)
+    // and the notebook is one more kind, which replaces that check (the app and the database agree on the kinds)
+    expect(code).toMatch(/drop constraint if exists project_documents_kind_check/)
+    expect(code).toMatch(/add constraint project_documents_kind_check check \(kind in \('palette', 'board', 'invoice', 'memory', 'chats', 'notes'\)\)/)
     expect(code).toMatch(/octet_length\(value::text\) <= 2000000/)
   })
 

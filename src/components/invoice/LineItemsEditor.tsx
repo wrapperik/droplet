@@ -1,5 +1,5 @@
 import { useId, useState } from 'react'
-import { AddCircleIcon, AltArrowDownIcon, AltArrowUpIcon, TrashBinMinimalisticIcon } from '@solar-icons/react/linear'
+import { AddCircleIcon, AltArrowDownIcon, AltArrowUpIcon, StarIcon, TrashBinMinimalisticIcon } from '@solar-icons/react/linear'
 import { computeTotals, lineIsBlank, lineProblems, quantityIsValid, type Line, type LineProblem } from '../../lib/invoice.ts'
 import { centsToField, formatRand, parseMoney } from '../../lib/money.ts'
 import type { InvoiceAction } from '../../lib/invoiceState.ts'
@@ -47,7 +47,7 @@ function Row({ line, index, count, problems, amount, dispatch }: RowProps) {
   const missing = (problem: LineProblem) => begun && problems.includes(problem)
 
   return (
-    <li className="lines__row" aria-label={`Line ${index + 1}`}>
+    <li className="lines__row" data-line-id={line.id} aria-label={`Line ${index + 1}`}>
       <label className="lines__cell lines__cell--description">
         <span className="visually-hidden">Description</span>
         <input
@@ -104,6 +104,9 @@ function Row({ line, index, count, problems, amount, dispatch }: RowProps) {
         {amount === null ? '–' : formatRand(amount)}
       </output>
       <div className="lines__actions">
+        <button type="button" className="lines__icon" aria-pressed={Boolean(line.starred)} onClick={() => dispatch({ type: 'update_line', id: line.id, patch: { starred: !line.starred } })} aria-label={`Keep line ${index + 1} in mind`}>
+          <StarIcon size={16} aria-hidden="true" />
+        </button>
         <button type="button" className="lines__icon" disabled={index === 0} onClick={() => dispatch({ type: 'move_line', id: line.id, direction: 'up' })} aria-label={`Move line ${index + 1} up`}>
           <AltArrowUpIcon size={16} aria-hidden="true" />
         </button>

@@ -193,3 +193,13 @@ describe('isInvoiceUnsaved', () => {
     expect(isInvoiceUnsaved(invoiceDocOf(open()), saved(), arrangement)).toBe(true)
   })
 })
+
+describe('keeping a line in mind', () => {
+  it('stars a line through the same action as any change to a line, and a change to the line keeps the star', () => {
+    const starred = run(fresh(), { type: 'update_line', id: 1, patch: { description: 'Gift box' } }, { type: 'update_line', id: 1, patch: { starred: true } })
+    expect(invoiceDocOf(starred).content.lines[0]).toMatchObject({ description: 'Gift box', starred: true })
+    const edited = run(starred, { type: 'update_line', id: 1, patch: { quantity: 3 } })
+    expect(invoiceDocOf(edited).content.lines[0].starred).toBe(true)
+    expect(canUndoInvoice(starred)).toBe(true)
+  })
+})

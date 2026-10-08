@@ -5,7 +5,8 @@
 // A document is one JSON value per project and kind. What is read back is `unknown`, because storage can hold anything: each store
 // validates it with its own Zod schema.
 
-export type DocKind = 'palette' | 'board' | 'invoice' | 'memory' | 'chats'
+// `notes` is Droplet's notebook on the project: an index of what the workspaces hold and a digest of each (see notes.ts).
+export type DocKind = 'palette' | 'board' | 'invoice' | 'memory' | 'chats' | 'notes'
 
 export interface DocumentStorage {
   // The saved value, or null when there is none. A value that cannot be read is also null: the driver never throws.
@@ -53,4 +54,24 @@ export function setDocumentStorage(driver: DocumentStorage): DocumentStorage {
   const before = current
   current = driver
   return before
+}
+
+// Told after a document was saved, so Droplet's notes on the project can be brought up to date. The stores that hold what a workspace saves say so; nothing
+// else does. A listener must not wait for anything, and one that throws does not stop the others.
+export type SavedListener = (projectId: string, kind: DocKind) => void
+const savedListeners = new Set<SavedListener>()
+
+export function onDocumentSaved(listener: SavedListener): () => void {
+  savedListeners.add(listener)
+  return () => void savedListeners.delete(listener)
+}
+
+export function documentWasSaved(projectId: string, kind: DocKind): void {
+  for (const listener of savedListeners) {
+    try {
+      listener(projectId, kind)
+    } catch {
+      // A listener's trouble is its own.
+    }
+  }
 }

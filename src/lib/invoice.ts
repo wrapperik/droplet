@@ -16,7 +16,8 @@ export const TERMS: { id: TermsId; label: string; days: number | null }[] = [
 ]
 
 // A line on the invoice. A price of null means no price has been given yet, which is flagged and counts as nothing.
-export type Line = { id: number; description: string; quantity: number; unitCents: number | null }
+// `starred` is the founder's "keep in mind": Droplet's notes on the project always include the line.
+export type Line = { id: number; description: string; quantity: number; unitCents: number | null; starred?: boolean }
 
 export type Business = {
   name: string

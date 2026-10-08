@@ -2,6 +2,10 @@ import { Fragment, useEffect, useRef } from 'react'
 import type { ChatBlock } from '../compose/blocks.ts'
 import type { JourneyStep } from '../compose/journey.ts'
 import type { Grounding } from '../compose/grounding.ts'
+import type { Receipt } from '../compose/receipt.ts'
+import ChangeReceipt from './ChangeReceipt.tsx'
+import FactChips, { type ProposalView } from './FactChips.tsx'
+import type { FactKey } from '../lib/facts.ts'
 import ChatBlocks from './ChatBlocks.tsx'
 import WebSources from './WebSources.tsx'
 import DropletLoader from './DropletLoader.tsx'
@@ -27,6 +31,12 @@ export type ThreadMessage = {
   question?: string
   // What the reply searched the web for and drew on. Shown under it, with Google's suggestions, whenever the reply is shown.
   grounding?: Grounding
+  // What the reply changed on screen and what it left out, drawn under it. Kept with the message in the saved chat.
+  receipt?: Receipt
+  // The reply was made in this session, so what it changed can still be undone and shown. Not kept: after a reload there are only the lines.
+  receiptLive?: { undo: boolean; show: boolean }
+  // Facts Droplet offers to remember, drawn under the reply. Only for the session: they mean nothing in a chat opened later.
+  proposals?: ProposalView[]
   // Answers to that question the founder can tap instead of typing. Offered only while the message is the last in the thread.
   replies?: string[]
   // Buttons under the message, while its question is still open.
@@ -49,12 +59,18 @@ type Props = {
   onToggle?: (messageId: number, block: number, item: number, checked: boolean) => void
   // A plan step's Open button was pressed.
   onOpenStep?: (step: JourneyStep) => void
+  // Undo this, or Show me, was pressed on a change receipt.
+  onUndoReceipt?: (messageId: number) => void
+  onShowReceipt?: (messageId: number) => void
+  // Remember, or Not now, was pressed on a fact Droplet offered.
+  onRememberFact?: (messageId: number, key: FactKey) => void
+  onDismissFact?: (messageId: number, key: FactKey) => void
 }
 
 const NO_STEPS: ReadonlySet<JourneyStep> = new Set()
 
 // The running conversation. It scrolls on its own, and follows the newest message.
-export default function ChatThread({ messages, onAction, onReply, done = NO_STEPS, busy, onToggle, onOpenStep }: Props) {
+export default function ChatThread({ messages, onAction, onReply, done = NO_STEPS, busy, onToggle, onOpenStep, onUndoReceipt, onShowReceipt, onRememberFact, onDismissFact }: Props) {
   const listRef = useRef<HTMLOListElement>(null)
 
   // Follow the newest message, including when a reply that was pending arrives in place and is taller than "Thinking".
@@ -95,6 +111,19 @@ export default function ChatThread({ messages, onAction, onReply, done = NO_STEP
               )}
               {!message.pending && message.blocks && message.blocks.length > 0 && (
                 <ChatBlocks blocks={message.blocks} checks={message.checks} done={done} busy={busy} onToggle={(block, item, checked) => onToggle?.(message.id, block, item, checked)} onOpen={onOpenStep} />
+              )}
+              {!message.pending && message.receipt && (
+                <ChangeReceipt
+                  receipt={message.receipt}
+                  canUndo={message.receiptLive?.undo}
+                  canShow={message.receiptLive?.show}
+                  busy={busy}
+                  onUndo={() => onUndoReceipt?.(message.id)}
+                  onShow={() => onShowReceipt?.(message.id)}
+                />
+              )}
+              {!message.pending && message.proposals && message.proposals.length > 0 && (
+                <FactChips proposals={message.proposals} onRemember={(key) => onRememberFact?.(message.id, key)} onNotNow={(key) => onDismissFact?.(message.id, key)} />
               )}
               {!message.pending && message.question && <p className="thread__question">{message.question}</p>}
               {!message.pending && message.grounding && <WebSources grounding={message.grounding} />}

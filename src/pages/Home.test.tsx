@@ -4,8 +4,9 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { loadBoard } from '../lib/boardStore.ts'
 import { loadChats, saveChats } from '../lib/chatStore.ts'
-import { emptyMemory, withIdea } from '../lib/projectMemory.ts'
-import { saveMemory } from '../lib/memoryStore.ts'
+import { currentFacts, emptyMemory, withFact, withIdea, withSetting } from '../lib/projectMemory.ts'
+import { loadMemory, saveMemory } from '../lib/memoryStore.ts'
+import { loadNotes } from '../lib/notesStore.ts'
 import { loadPalette } from '../lib/projectStore.ts'
 import { setDocumentStorage, type DocumentStorage } from '../lib/storage.ts'
 import { slowMemoryStorage } from '../test/slowStorage.ts'
@@ -16,6 +17,13 @@ type Asked = { intent: string; mode?: string; view?: string; invoice?: { lines: 
 let asked: Asked[] = []
 let answers: unknown[] = []
 // What the server says on a GET: where the founder's Advanced allowance stands. Null is a server that cannot say.
+// Short memories of chats are asked for in the background with a kind of their own. What was asked is kept apart from messages, and what the server
+// says back is the memory the test decides (null is a server that found none it could trust).
+let summaries: { messages: { role: string; text: string }[] }[] = []
+let summaryAnswer: unknown = null
+// The same for a digest of a workspace, asked for in the background after a save.
+let digests: { workspace: string; items: { ref: string; text: string; where?: string; starred?: boolean }[] }[] = []
+let digestAnswer: unknown = null
 let allowanceNow: { advancedLeft: number; advancedLimit: number; resetsAt: string | null } | null = null
 
 const reply = (task: string, message: string, actions: unknown[] = []) => ({ outcome: 'valid', answeredBy: 'base', turn: { task, message, actions, memoryUsed: [] } })
@@ -26,6 +34,10 @@ beforeEach(() => {
   window.localStorage.clear()
   asked = []
   answers = []
+  summaries = []
+  summaryAnswer = null
+  digests = []
+  digestAnswer = null
   allowanceNow = { advancedLeft: 10, advancedLimit: 10, resetsAt: null }
   vi.stubGlobal(
     'fetch',
@@ -33,7 +45,16 @@ beforeEach(() => {
       if (init.method === 'GET') {
         return allowanceNow ? new Response(JSON.stringify({ allowance: allowanceNow }), { status: 200 }) : new Response('{}', { status: 500 })
       }
-      asked.push(JSON.parse(init.body))
+      const sent = JSON.parse(init.body) as { kind?: string }
+      if (sent.kind === 'digest_workspace') {
+        digests.push(sent as never)
+        return new Response(JSON.stringify({ kind: 'digest_workspace', answeredBy: 'base', digest: digestAnswer }), { status: 200, headers: { 'content-type': 'application/json' } })
+      }
+      if (sent.kind === 'summarise_chat') {
+        summaries.push(sent as never)
+        return new Response(JSON.stringify({ kind: 'summarise_chat', answeredBy: 'base', summary: summaryAnswer }), { status: 200, headers: { 'content-type': 'application/json' } })
+      }
+      asked.push(sent as never)
       const body = answers[Math.min(asked.length - 1, answers.length - 1)]
       return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
     }),
@@ -1542,5 +1563,580 @@ describe('opening, switching and closing workspaces', () => {
     await say(user, 'close it')
     await screen.findByText(/I got an answer I could not use/)
     expect(asked).toHaveLength(1)
+  })
+})
+
+describe('the change receipt', () => {
+  const addNote = async (user: ReturnType<typeof userEvent.setup>) => {
+    const note = await screen.findByRole('button', { name: 'Note' })
+    if (note.getAttribute('aria-pressed') !== 'true') await user.click(note)
+    await user.click(await screen.findByRole('button', { name: 'Add a note to the middle of the view' }))
+  }
+  const withNote = async (user: ReturnType<typeof userEvent.setup>, text: string) => {
+    await addNote(user)
+    await user.keyboard(`${text}{Escape}`)
+  }
+  const pink = () => [...document.querySelectorAll<HTMLElement>('.note[data-colour="pink"]')]
+  const card = () => screen.getByRole('region', { name: /^(Changed|Nothing changed) on the/ })
+  const twoIdeas = () =>
+    reply('ideation', 'I added two ideas beside your note.', [
+      { type: 'add_note', text: 'Corporate hampers', near: 'n1', connect: true },
+      { type: 'add_note', text: 'Thank-you boxes', near: 'n1', connect: true },
+    ])
+
+  it('shows what a reply did to the board under it, one line for each kind of change, built from what was applied', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await pickTask(user, /Shape the business idea/)
+    await withNote(user, 'Gift boxes for offices')
+    answers = [twoIdeas()]
+    await say(user, 'Give me some related ideas')
+    await screen.findByText(/I added two ideas beside your note/)
+    const receipt = card()
+    expect(within(receipt).getByRole('heading', { name: 'Changed on the board' })).toBeInTheDocument()
+    expect(within(receipt).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['+Added: 2 notes beside “Gift boxes for offices”', '+Added: 2 arrows'])
+    // the old text about what could not be done is not in the words any more
+    expect(screen.queryByText(/I could not do everything/)).not.toBeInTheDocument()
+  })
+
+  it('shows what a reply did to the palette, and to the invoice, without a detail of the client', async () => {
+    const user = userEvent.setup()
+    answers = [reply('brand', 'Colour 1 is the main one now.', [{ type: 'set_role', index: 1, role: 'primary' }])]
+    renderHome()
+    await pickTask(user, /Build the brand/)
+    await say(user, 'make colour 1 the primary')
+    await screen.findByText('Colour 1 is the main one now.')
+    expect(within(card()).getByRole('heading', { name: 'Changed on the palette' })).toBeInTheDocument()
+    expect(within(card()).getByText('Colour 1 is now the primary colour')).toBeInTheDocument()
+
+    answers = [reply('invoice', 'Done.', [{ type: 'set_client', name: 'Karoo Candles', address: '12 Long Street' }, { type: 'add_line', description: 'Soy candle', quantity: 30, unitPrice: 'R85' }])]
+    await pickTask(user, /Make an invoice/)
+    await screen.findByLabelText(/^Invoice INV-0001/)
+    await say(user, 'Bill Karoo Candles for 30 soy candles at R85, 12 Long Street')
+    await screen.findByText('Done.')
+    const receipts = screen.getAllByRole('region', { name: 'Changed on the invoice' })
+    const text = receipts[0].textContent ?? ''
+    expect(text).toContain('Client: set the name (“Karoo Candles”), the address')
+    expect(text).toMatch(/Line 1: Soy candle × 30, R/)
+    expect(text).not.toContain('Long Street')
+  })
+
+  it('shows nothing under a reply that changed nothing and left nothing out', async () => {
+    const user = userEvent.setup()
+    answers = [reply('chat', 'Hello there.')]
+    renderHome()
+    await say(user, 'hi')
+    await screen.findByText('Hello there.')
+    expect(screen.queryByRole('region', { name: /on the/ })).not.toBeInTheDocument()
+  })
+
+  it('takes back the reply with Undo this, as one step, and says so', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await pickTask(user, /Shape the business idea/)
+    await withNote(user, 'Gift boxes for offices')
+    answers = [twoIdeas()]
+    await say(user, 'Give me some related ideas')
+    await screen.findByText(/I added two ideas beside your note/)
+    expect(pink()).toHaveLength(2)
+    await user.click(within(card()).getByRole('button', { name: 'Undo this' }))
+    expect(pink()).toHaveLength(0)
+    expect(document.querySelectorAll('[data-kind="connector"]')).toHaveLength(0)
+    // the founder's own note is still there
+    expect(screen.getByText('Gift boxes for offices')).toBeInTheDocument()
+    expect(within(card()).getByRole('status')).toHaveTextContent('Undone. It is as it was before this reply.')
+    expect(within(card()).queryByRole('button', { name: 'Undo this' })).not.toBeInTheDocument()
+  })
+
+  it('says so, and points to the workspace\'s own Undo, when the board has moved on since', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await pickTask(user, /Shape the business idea/)
+    await withNote(user, 'Gift boxes for offices')
+    answers = [twoIdeas()]
+    await say(user, 'Give me some related ideas')
+    await screen.findByText(/I added two ideas beside your note/)
+    await withNote(user, 'Another thought of my own')
+    await user.click(within(card()).getByRole('button', { name: 'Undo this' }))
+    expect(within(card()).getByRole('status')).toHaveTextContent('Things have changed since, so I cannot take back just this. Use Undo in the header to step back.')
+    // nothing was taken back
+    expect(pink()).toHaveLength(2)
+    expect(screen.getByText('Another thought of my own')).toBeInTheDocument()
+  })
+
+  it('says the workspace is closed when it has been closed since', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await pickTask(user, /Shape the business idea/)
+    answers = [reply('ideation', 'One idea.', [{ type: 'add_note', text: 'Pet Pals' }])]
+    await say(user, 'an idea')
+    await screen.findByText('One idea.')
+    await user.click(screen.getByRole('button', { name: 'Back to the full chat' }))
+    await user.click(await screen.findByRole('button', { name: 'Leave without saving' }))
+    await user.click(within(card()).getByRole('button', { name: 'Undo this' }))
+    expect(within(card()).getByRole('status')).toHaveTextContent('That workspace is closed now, so there is nothing to undo.')
+  })
+
+  it('brings what changed into view and outlines it with Show me', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await pickTask(user, /Shape the business idea/)
+    answers = [reply('ideation', 'One idea.', [{ type: 'add_note', text: 'Pet Pals' }])]
+    await say(user, 'an idea')
+    await screen.findByText('One idea.')
+    const mine = pink()[0]
+    mine.scrollIntoView = vi.fn()
+    // the ring of the arrival is over by now, or never ran here: clear any outline so Show me's own is what is seen
+    mine.style.outline = ''
+    await user.click(within(card()).getByRole('button', { name: 'Show me' }))
+    await waitFor(() => expect(mine.style.outline).toContain('2px solid'))
+    expect(mine.scrollIntoView).toHaveBeenCalled()
+  })
+
+  it('keeps the receipt with the saved chat, the lines and how Undo this ended, and not the buttons', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await pickTask(user, /Shape the business idea/)
+    answers = [reply('ideation', 'One idea.', [{ type: 'add_note', text: 'Pet Pals' }])]
+    await say(user, 'an idea')
+    await screen.findByText('One idea.')
+    await user.click(within(card()).getByRole('button', { name: 'Undo this' }))
+    await waitFor(async () => {
+      const kept = (await loadChatsFor())[0].messages.find((item) => item.receipt)
+      expect(kept?.receipt).toEqual({ heading: 'Changed on the board', lines: [{ mark: '+', text: '1 note on the board' }], left: [], status: 'Undone. It is as it was before this reply.' })
+      expect(kept && 'receiptLive' in kept).toBe(false)
+    })
+  })
+
+  it('does not send a receipt to the composer with the conversation', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await pickTask(user, /Shape the business idea/)
+    answers = [reply('ideation', 'One idea.', [{ type: 'add_note', text: 'Pet Pals' }]), reply('chat', 'Fine.')]
+    await say(user, 'an idea')
+    await screen.findByText('One idea.')
+    await say(user, 'thanks')
+    await screen.findByText('Fine.')
+    expect(JSON.stringify((asked[1] as unknown as { history: unknown }).history)).not.toMatch(/Changed on the|1 note on the board/)
+  })
+
+  it('puts the receipt of an answer that searched the web in the app\'s own message after it, so nothing is mixed into the answer', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await pickTask(user, /Shape the business idea/)
+    answers = [{ outcome: 'valid', answeredBy: 'advanced', grounding: { queries: ['cipc fee'], sources: [{ title: 'cipc.co.za', url: 'https://www.cipc.co.za/fees' }] }, turn: { task: 'ideation', message: 'I added a note with what I found.', actions: [{ type: 'add_note', text: 'CIPC fee is about R175' }], memoryUsed: [] } }]
+    await say(user, 'Add what CIPC charges to the board')
+    const grounded = (await screen.findByText('I added a note with what I found.')).closest('li')!
+    expect(within(grounded).queryByRole('region', { name: /on the board/ })).not.toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Changed on the board' })).toBeInTheDocument()
+  })
+})
+
+describe('facts Droplet offers to remember', () => {
+  const said = 'we sell to corporate clients in Pretoria'
+  const offering = (propose: unknown[], message = 'That helps.') => ({ outcome: 'valid', answeredBy: 'base', turn: { task: 'chat', message, actions: [], propose, memoryUsed: [] } })
+  const who = { key: 'profile.who_for', value: 'Corporate clients in Pretoria', quote: said }
+  const chips = () => screen.queryByRole('list', { name: 'Facts Droplet can remember' })
+  const remembered = async () => currentFacts(await loadMemory('duckstack'))
+
+  it('shows a fact under the reply, and remembers nothing until Remember is pressed', async () => {
+    const user = userEvent.setup()
+    answers = [offering([who])]
+    renderHome()
+    await say(user, said)
+    await screen.findByText('That helps.')
+    expect(within(chips()!).getByText('Remember: Corporate clients in Pretoria')).toBeInTheDocument()
+    expect(await remembered()).toEqual({})
+    await user.click(within(chips()!).getByRole('button', { name: /^Remember: Who it is for/ }))
+    await waitFor(async () => expect(await remembered()).toEqual({ 'profile.who_for': 'Corporate clients in Pretoria' }))
+    expect(chips()).not.toBeInTheDocument()
+    // a quiet note with Undo
+    expect(await screen.findByRole('status')).toHaveTextContent('Remembered: who it is for.')
+  })
+
+  it('takes it back with Undo, and forgets a fact that was new', async () => {
+    const user = userEvent.setup()
+    answers = [offering([who])]
+    renderHome()
+    await say(user, said)
+    await user.click(await screen.findByRole('button', { name: /^Remember: Who it is for/ }))
+    await waitFor(async () => expect(Object.keys(await remembered())).toHaveLength(1))
+    await user.click(await screen.findByRole('button', { name: 'Undo' }))
+    await waitFor(async () => expect(await remembered()).toEqual({}))
+  })
+
+  it('does not remember it with Not now, and does not offer it again in the same chat', async () => {
+    const user = userEvent.setup()
+    answers = [offering([who]), offering([who], 'And again.')]
+    renderHome()
+    await say(user, said)
+    await user.click(await screen.findByRole('button', { name: /^Not now: Who it is for/ }))
+    expect(chips()).not.toBeInTheDocument()
+    expect(await remembered()).toEqual({})
+    await say(user, `${said} still`)
+    await screen.findByText('And again.')
+    expect(chips()).not.toBeInTheDocument()
+  })
+
+  it('offers it again in another chat', async () => {
+    const user = userEvent.setup()
+    answers = [offering([who]), offering([who], 'Once more.')]
+    renderHome()
+    await say(user, said)
+    await user.click(await screen.findByRole('button', { name: /^Not now: Who it is for/ }))
+    await user.click(screen.getByRole('button', { name: 'New chat' }))
+    await say(user, said)
+    await screen.findByText('Once more.')
+    expect(chips()).toBeInTheDocument()
+  })
+
+  it('shows what is there and what it would become when it would change a fact, and keeps the old words if the founder updates', async () => {
+    const user = userEvent.setup()
+    await saveMemory('duckstack', withFact(emptyMemory(), 'profile.who_for', 'Any small business', '2026-10-06T10:00:00.000Z'))
+    answers = [offering([who])]
+    renderHome()
+    await say(user, said)
+    await screen.findByText('That helps.')
+    expect(within(chips()!).getByText('Was: Any small business.')).toBeInTheDocument()
+    expect(within(chips()!).getByText('Now: Corporate clients in Pretoria.')).toBeInTheDocument()
+    await user.click(within(chips()!).getByRole('button', { name: /^Update: Who it is for/ }))
+    await waitFor(async () => expect((await remembered())['profile.who_for']).toBe('Corporate clients in Pretoria'))
+    expect((await loadMemory('duckstack')).facts?.['profile.who_for']?.earlier[0].value).toBe('Any small business')
+    // Undo puts the old words back
+    await user.click(await screen.findByRole('button', { name: 'Undo' }))
+    await waitFor(async () => expect((await remembered())['profile.who_for']).toBe('Any small business'))
+  })
+
+  it('keeps the old words with Keep the old', async () => {
+    const user = userEvent.setup()
+    await saveMemory('duckstack', withFact(emptyMemory(), 'profile.who_for', 'Any small business', '2026-10-06T10:00:00.000Z'))
+    answers = [offering([who])]
+    renderHome()
+    await say(user, said)
+    await user.click(await screen.findByRole('button', { name: /^Keep the old: Who it is for/ }))
+    expect((await remembered())['profile.who_for']).toBe('Any small business')
+    expect(chips()).not.toBeInTheDocument()
+  })
+
+  it('does not offer a fact that is already remembered with the same words: the app refuses the reply', async () => {
+    const user = userEvent.setup()
+    await saveMemory('duckstack', withFact(emptyMemory(), 'profile.who_for', 'Corporate clients in Pretoria', '2026-10-06T10:00:00.000Z'))
+    answers = [offering([who])]
+    renderHome()
+    await say(user, said)
+    await screen.findByText(/I got an answer I could not use/)
+    expect(chips()).not.toBeInTheDocument()
+  })
+
+  it('remembers the name and the offer where the board does, so an invoice has the name', async () => {
+    const user = userEvent.setup()
+    answers = [offering([{ key: 'business.name', value: 'DuckStack', quote: 'DuckStack' }])]
+    renderHome()
+    await say(user, 'It is called DuckStack')
+    await user.click(await screen.findByRole('button', { name: /^Remember: The name/ }))
+    await waitFor(async () => expect((await loadMemory('duckstack')).idea?.name).toBe('DuckStack'))
+    expect((await loadMemory('duckstack')).business?.details.name).toBe('DuckStack')
+  })
+
+  it('sends what is remembered with the first message of a new chat', async () => {
+    const user = userEvent.setup()
+    await saveMemory('duckstack', withFact(emptyMemory(), 'profile.what', 'Builds full-stack software', '2026-10-06T10:00:00.000Z'))
+    answers = [reply('chat', 'Hello.')]
+    renderHome()
+    await say(user, 'hi')
+    await screen.findByText('Hello.')
+    expect((asked[0] as unknown as { project: { facts: Record<string, string> } }).project.facts).toEqual({ 'profile.what': 'Builds full-stack software' })
+  })
+
+  it('opens the project brief from the project switcher', async () => {
+    const user = userEvent.setup()
+    await saveMemory('duckstack', withFact(emptyMemory(), 'profile.what', 'Builds full-stack software', '2026-10-06T10:00:00.000Z'))
+    renderHome()
+    await user.click(screen.getByRole('button', { name: /DuckStack/ }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Project brief' }))
+    const dialog = await screen.findByRole('dialog', { name: /^Project brief/ })
+    expect(await within(dialog).findByText('Builds full-stack software')).toBeInTheDocument()
+  })
+
+  it('ticks the brand values and the logo in a plan once the facts are remembered', async () => {
+    const user = userEvent.setup()
+    await saveMemory('duckstack', withFact(withFact(emptyMemory(), 'brand.values', 'Playful, warm', '2026-10-06T10:00:00.000Z'), 'logo.status', 'Made in Canva', '2026-10-06T10:00:00.000Z'))
+    answers = [reply('chat', 'Hi.')]
+    renderHome()
+    await say(user, 'hello')
+    await screen.findByText('Hi.')
+    expect((asked[0] as unknown as { project: { facts: Record<string, string> } }).project.facts).toMatchObject({ 'brand.values': 'Playful, warm', 'logo.status': 'Made in Canva' })
+  })
+})
+
+
+describe('looking back at past chats', () => {
+  const idea = 'I want to call my gift business Kindred Gifting'
+  const memory = { task: 'ideation', subject: 'Naming the business', decided: ['settled on the name Kindred Gifting'], open: ['the colours are not chosen yet'] }
+  const newChat = (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole('button', { name: 'New chat' }))
+  const summarised = async () => (await loadChatsFor())[0]
+
+  it('writes down a chat it has been left, in the background, and keeps it with the chat', async () => {
+    const user = userEvent.setup()
+    summaryAnswer = memory
+    answers = [reply('chat', 'Lovely name.')]
+    renderHome()
+    await say(user, idea)
+    await screen.findByText('Lovely name.')
+    await newChat(user)
+    await waitFor(async () => expect((await summarised()).summary).toEqual(memory))
+    expect(summaries).toHaveLength(1)
+    expect(summaries[0].messages.map((message) => message.role)).toEqual(['founder', 'droplet'])
+    expect(summaries[0].messages[0].text).toBe(idea)
+    expect((await summarised()).summarisedAt).toBeDefined()
+    // it did not hold up the next chat, and is not a message in the thread
+    expect(screen.queryByText('Naming the business')).not.toBeInTheDocument()
+  })
+
+  it('does not write down a chat that has not changed since it was last written down', async () => {
+    const user = userEvent.setup()
+    summaryAnswer = memory
+    answers = [reply('chat', 'Lovely name.')]
+    renderHome()
+    await say(user, idea)
+    await screen.findByText('Lovely name.')
+    await newChat(user)
+    await waitFor(async () => expect((await summarised()).summary).toBeDefined())
+    // open it again and leave it again without a word
+    await user.click(within(await screen.findByRole('navigation', { name: 'Chats' })).getByRole('button', { name: /^I want to call my gift business/ }))
+    await newChat(user)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(summaries).toHaveLength(1)
+  })
+
+  it('does not write down a bare hello', async () => {
+    const user = userEvent.setup()
+    answers = [reply('chat', 'Hello.')]
+    renderHome()
+    await say(user, 'hi')
+    await screen.findByText('Hello.')
+    await newChat(user)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(summaries).toHaveLength(0)
+  })
+
+  it('keeps nothing from a memory that has a name that is not in the chat, and does not ask again until the chat changes', async () => {
+    const user = userEvent.setup()
+    summaryAnswer = { ...memory, decided: ['settled on the name DuckStack'] }
+    answers = [reply('chat', 'Lovely name.')]
+    renderHome()
+    await say(user, idea)
+    await screen.findByText('Lovely name.')
+    await newChat(user)
+    await waitFor(async () => expect((await summarised()).summarisedAt).toBeDefined())
+    expect((await summarised()).summary).toBeUndefined()
+  })
+
+  it('writes down and sends nothing when the founder has switched looking back off', async () => {
+    const user = userEvent.setup()
+    await saveMemory('duckstack', withSetting(emptyMemory(), 'recall', false))
+    summaryAnswer = memory
+    answers = [reply('chat', 'Lovely name.'), reply('chat', 'Again.')]
+    renderHome()
+    await say(user, idea)
+    await screen.findByText('Lovely name.')
+    await newChat(user)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(summaries).toHaveLength(0)
+    expect((await summarised()).summary).toBeUndefined()
+    await say(user, 'What next?')
+    await screen.findByText('Again.')
+    expect(asked[1]).not.toHaveProperty('earlierChats')
+  })
+
+  it('sends the most relevant memories with a message in another chat, dated, and not the chat it is in', async () => {
+    const user = userEvent.setup()
+    summaryAnswer = memory
+    answers = [reply('chat', 'Lovely name.'), reply('chat', 'Right.')]
+    renderHome()
+    await say(user, idea)
+    await screen.findByText('Lovely name.')
+    await newChat(user)
+    await waitFor(async () => expect((await summarised()).summary).toBeDefined())
+    await say(user, 'What was the name we settled on?')
+    await screen.findByText('Right.')
+    const sent = (asked[1] as unknown as { earlierChats: { when: string; text: string }[] }).earlierChats
+    expect(sent).toHaveLength(1)
+    expect(sent[0].when).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(sent[0].text).toBe('About: Naming the business; Decided: settled on the name Kindred Gifting; Still open: the colours are not chosen yet')
+  })
+
+  it('welcomes a founder back to a new chat, from what was written down, and as a message from the app', async () => {
+    const user = userEvent.setup()
+    summaryAnswer = memory
+    answers = [reply('chat', 'Lovely name.'), reply('chat', 'Right.')]
+    renderHome()
+    await say(user, idea)
+    await screen.findByText('Lovely name.')
+    await newChat(user)
+    expect(await screen.findByText(/Welcome back to DuckStack\. Last time you settled on the name Kindred Gifting, and nothing from the board is saved yet\./)).toBeInTheDocument()
+    expect(screen.getByText('Shall we carry on?')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Something else' })).toBeInTheDocument()
+    // it is not Droplet's words as far as the composer is concerned
+    await say(user, 'Something about colours')
+    await screen.findByText('Right.')
+    expect(JSON.stringify((asked[1] as unknown as { history?: unknown }).history ?? [])).not.toMatch(/Welcome back/)
+  })
+
+  it('sends a tapped reply to the welcome as the founder\'s own message', async () => {
+    const user = userEvent.setup()
+    summaryAnswer = { ...memory, task: 'brand', decided: ['started on the colours'], open: [] }
+    answers = [reply('chat', 'Lovely.'), reply('chat', 'On it.')]
+    renderHome()
+    await say(user, idea)
+    await screen.findByText('Lovely.')
+    await newChat(user)
+    await user.click(await screen.findByRole('button', { name: 'Carry on with the colours' }))
+    await screen.findByText('On it.')
+    expect(asked[1].intent).toBe('Carry on with the colours')
+  })
+
+  it('does not welcome back to a project with nothing written down, or when looking back is off', async () => {
+    const user = userEvent.setup()
+    answers = [reply('chat', 'Lovely name.')]
+    renderHome()
+    await say(user, idea)
+    await screen.findByText('Lovely name.')
+    await newChat(user)
+    await new Promise((resolve) => setTimeout(resolve, 80))
+    expect(screen.queryByText(/Welcome back/)).not.toBeInTheDocument()
+  })
+
+  it('does not write down a chat that was deleted', async () => {
+    const user = userEvent.setup()
+    summaryAnswer = memory
+    answers = [reply('chat', 'Lovely name.')]
+    renderHome()
+    await say(user, idea)
+    await screen.findByText('Lovely name.')
+    await user.click(await screen.findByRole('button', { name: /^Delete / }))
+    await user.click(await screen.findByRole('button', { name: 'Delete' }))
+    await new Promise((resolve) => setTimeout(resolve, 80))
+    expect(summaries).toHaveLength(0)
+  })
+})
+
+describe("Droplet's notes on the project", () => {
+  const addNote = async (user: ReturnType<typeof userEvent.setup>) => {
+    const note = await screen.findByRole('button', { name: 'Note' })
+    if (note.getAttribute('aria-pressed') !== 'true') await user.click(note)
+    await user.click(await screen.findByRole('button', { name: 'Add a note to the middle of the view' }))
+  }
+  const withNote = async (user: ReturnType<typeof userEvent.setup>, text: string) => {
+    await addNote(user)
+    await user.keyboard(`${text}{Escape}`)
+  }
+  const digest = { about: 'Ideas for names', decided: [], open: [], standouts: [{ ref: 'r1', reason: 'my favourite' }] }
+  const saveBoardNow = async (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole('button', { name: 'Save' }))
+
+  it('keeps an index of the board when it is saved, word for word, and asks Quick for a digest in the background', async () => {
+    const user = userEvent.setup()
+    digestAnswer = digest
+    renderHome()
+    await pickTask(user, /Shape the business idea/)
+    await withNote(user, 'Care plan for older dogs')
+    expect((await loadNotes('duckstack')).board).toBeUndefined()
+    await saveBoardNow(user)
+    await waitFor(async () => expect((await loadNotes('duckstack')).board?.index.map((line) => line.text)).toEqual(['Care plan for older dogs']))
+    await waitFor(() => expect(digests).toHaveLength(1))
+    expect(digests[0]).toMatchObject({ workspace: 'board', items: [{ ref: 'r1', text: 'Care plan for older dogs' }] })
+    await waitFor(async () => expect((await loadNotes('duckstack')).board?.digest?.text).toContain('“Care plan for older dogs” (my favourite)'))
+  })
+
+  it('does not hold up the save, and asks for nothing when it is saved again unchanged', async () => {
+    const user = userEvent.setup()
+    digestAnswer = digest
+    renderHome()
+    await pickTask(user, /Shape the business idea/)
+    await withNote(user, 'Care plan for older dogs')
+    await saveBoardNow(user)
+    expect(await screen.findByText('All changes saved')).toBeInTheDocument()
+    await waitFor(() => expect(digests).toHaveLength(1))
+    await withNote(user, 'Pet Pals')
+    await saveBoardNow(user)
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    // the second save is under five minutes after the first digest: the index is brought up to date, and no new digest is asked for
+    expect((await loadNotes('duckstack')).board?.index).toHaveLength(2)
+    expect(digests).toHaveLength(1)
+  })
+
+  it('sends the digests of the workspaces that are not on screen with a message, and not the one that is', async () => {
+    const user = userEvent.setup()
+    digestAnswer = digest
+    answers = [reply('chat', 'Noted.'), reply('chat', 'Noted again.')]
+    renderHome()
+    await pickTask(user, /Shape the business idea/)
+    await withNote(user, 'Care plan for older dogs')
+    await saveBoardNow(user)
+    await waitFor(async () => expect((await loadNotes('duckstack')).board?.digest).toBeDefined())
+    // the board is on screen: it is in front of Droplet in full, and not sent
+    await say(user, 'What do you think?')
+    await screen.findByText('Noted.')
+    expect(asked[0]).not.toHaveProperty('notes')
+    // the palette is on screen now, so the board's notes are sent
+    await pickTask(user, /Build the brand/)
+    await say(user, 'And now?')
+    await screen.findByText('Noted again.')
+    const sent = (asked[1] as unknown as { notes: { digests: { workspace: string; text: string }[] } }).notes
+    expect(sent.digests.map((entry) => entry.workspace)).toEqual(['board'])
+    expect(sent.digests[0].text).toContain('“Care plan for older dogs”')
+  })
+
+  it('adds the lines of the notes that match words the digests do not cover', async () => {
+    const user = userEvent.setup()
+    digestAnswer = { about: 'Ideas for names', decided: [], open: [], standouts: [] }
+    answers = [reply('chat', 'Noted.')]
+    renderHome()
+    await pickTask(user, /Shape the business idea/)
+    await withNote(user, 'Weekend walks in Brooklyn')
+    await saveBoardNow(user)
+    await waitFor(async () => expect((await loadNotes('duckstack')).board?.digest).toBeDefined())
+    await pickTask(user, /Build the brand/)
+    await say(user, 'What did I say about Brooklyn?')
+    await screen.findByText('Noted.')
+    expect((asked[0] as unknown as { notes: { found: { text: string; workspace: string }[] } }).notes.found).toEqual([expect.objectContaining({ workspace: 'board', text: 'Weekend walks in Brooklyn' })])
+  })
+
+  it('keeps nothing, asks for nothing and sends nothing when the founder has switched the notes off', async () => {
+    const user = userEvent.setup()
+    await saveMemory('duckstack', withSetting(emptyMemory(), 'notes', false))
+    digestAnswer = digest
+    renderHome()
+    await pickTask(user, /Shape the business idea/)
+    await withNote(user, 'Care plan for older dogs')
+    await saveBoardNow(user)
+    expect(await screen.findByText('All changes saved')).toBeInTheDocument()
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    expect(await loadNotes('duckstack')).toEqual({})
+    expect(digests).toHaveLength(0)
+  })
+
+  it('keeps a colour in mind with a star, and the star goes into the notes and the digest request', async () => {
+    const user = userEvent.setup()
+    digestAnswer = { about: 'A blue palette', decided: [], open: [], standouts: [] }
+    renderHome()
+    await pickTask(user, /Build the brand/)
+    await user.click(screen.getByRole('button', { name: /^Keep colour 1, .*, in mind$/ }))
+    expect(screen.getByRole('button', { name: /^Keep colour 1, .*, in mind$/ })).toHaveAttribute('aria-pressed', 'true')
+    await saveBoardNow(user)
+    await waitFor(async () => expect((await loadNotes('duckstack')).brand?.index.some((line) => line.starred)).toBe(true))
+    await waitFor(() => expect(digests).toHaveLength(1))
+    expect(digests[0]).toMatchObject({ workspace: 'brand' })
+    expect(digests[0].items.filter((item) => item.starred)).toHaveLength(1)
+    await waitFor(async () => expect((await loadNotes('duckstack')).brand?.digest?.text).toContain('Kept in mind:'))
+  })
+
+  it('says on the invoice\'s save note that Droplet will update its notes, and not when they are off', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await pickTask(user, /Make an invoice/)
+    await user.type(await clientName(user), 'Karoo Candles')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Droplet will update its notes on this project.')).toBeInTheDocument()
   })
 })

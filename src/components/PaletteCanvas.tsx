@@ -6,6 +6,7 @@ import {
   CopyIcon,
   LockKeyholeMinimalisticIcon,
   LockKeyholeMinimalisticUnlockedIcon,
+  StarIcon,
   TrashBinMinimalisticIcon,
 } from '@solar-icons/react/linear'
 import { readableTextColour } from '../lib/colour.ts'
@@ -22,12 +23,14 @@ type Props = {
   onAdd: () => void
   onRemove: (id: number) => void
   onToggleLock: (id: number) => void
+  // "Keep in mind": Droplet's notes on the project always include a starred colour.
+  onToggleStar?: (id: number) => void
   // One line saying why this component is on screen (manifesto principle 3).
   reason: string
 }
 
 // The work area for a palette: colour blocks you click to select, then change with the picker.
-export default function PaletteCanvas({ blocks, selectedId, max, min, onSelect, onAdd, onRemove, onToggleLock, reason }: Props) {
+export default function PaletteCanvas({ blocks, selectedId, max, min, onSelect, onAdd, onRemove, onToggleLock, onToggleStar, reason }: Props) {
   const full = blocks.length >= max
   const [copiedId, setCopiedId] = useState<number | null>(null)
   const [removedNote, setRemovedNote] = useState('')
@@ -102,6 +105,7 @@ export default function PaletteCanvas({ blocks, selectedId, max, min, onSelect, 
               >
                 <label
                   className="palette__block"
+                  data-block-id={block.id}
                   style={{ background: block.hex, color: ink }}
                   data-selected={selected}
                 >
@@ -142,6 +146,18 @@ export default function PaletteCanvas({ blocks, selectedId, max, min, onSelect, 
                       <LockKeyholeMinimalisticUnlockedIcon size={15} aria-hidden="true" />
                     )}
                   </button>
+                  {onToggleStar && (
+                    <button
+                      type="button"
+                      className="palette__action"
+                      style={{ color: ink, '--block': block.hex } as CSSProperties}
+                      aria-pressed={Boolean(block.starred)}
+                      aria-label={`Keep colour ${index + 1}, ${block.hex}, in mind`}
+                      onClick={() => onToggleStar(block.id)}
+                    >
+                      <StarIcon size={15} aria-hidden="true" />
+                    </button>
+                  )}
                   {canRemove && (
                     <button
                       type="button"

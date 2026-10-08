@@ -94,6 +94,11 @@
   color: var(--text);
 }
 
+.lines__icon[aria-pressed='true'] {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
 .lines__icon:disabled {
   opacity: 0.35;
 }

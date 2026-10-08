@@ -19,6 +19,7 @@ export const paletteSaveSchema = z.object({
         locked: z.boolean().optional(),
         name: z.string().max(60).optional(),
         note: z.string().max(200).optional(),
+        starred: z.boolean().optional(),
       }),
     )
     .min(1)

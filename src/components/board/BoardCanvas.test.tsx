@@ -1164,7 +1164,7 @@ describe('notes by Droplet', () => {
     const user = userEvent.setup()
     render(<Harness items={[note('mine', 400, 400)]} />)
     await user.click(itemEl('mine'))
-    expect(screen.queryByRole('button', { name: /Keep/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Keep as mine/ })).not.toBeInTheDocument()
   })
 
   it('can be taken back with undo after they are kept', async () => {
@@ -1276,5 +1276,38 @@ describe('the options of a tool', () => {
     expect(screen.getByRole('button', { name: 'Add text to the middle of the view' })).toBeInTheDocument()
     await inHand(user, 'Frame')
     expect(screen.getByRole('button', { name: 'Add a frame to the middle of the view' })).toBeInTheDocument()
+  })
+})
+
+describe('keeping things in mind', () => {
+  it('has a star on the bar for a note, which keeps it in mind and takes the star off again', async () => {
+    const user = userEvent.setup()
+    render(<Harness items={[note('mine', 400, 400)]} />)
+    await user.click(itemEl('mine'))
+    const star = screen.getByRole('button', { name: 'Keep in mind' })
+    expect(star).toHaveAttribute('aria-pressed', 'false')
+    await user.click(star)
+    expect(screen.getByRole('button', { name: 'Keep in mind' })).toHaveAttribute('aria-pressed', 'true')
+    await user.click(screen.getByRole('button', { name: 'Keep in mind' }))
+    expect(screen.getByRole('button', { name: 'Keep in mind' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('is pressed only when everything selected is starred, and stars all of them when it is not', async () => {
+    const user = userEvent.setup()
+    render(<Harness items={[note('a', 400, 400), { ...note('b', 800, 400), starred: true }]} />)
+    await user.click(itemEl('a'))
+    await user.keyboard('{Shift>}')
+    await user.click(itemEl('b'))
+    await user.keyboard('{/Shift}')
+    expect(screen.getByRole('button', { name: 'Keep in mind' })).toHaveAttribute('aria-pressed', 'false')
+    await user.click(screen.getByRole('button', { name: 'Keep in mind' }))
+    expect(screen.getByRole('button', { name: 'Keep in mind' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('has no star for a frame or an arrow, which hold or join things but have no words', async () => {
+    const user = userEvent.setup()
+    render(<Harness items={[frame('f', 200, 200)]} />)
+    await user.click(screen.getByText('Frame', { selector: '.frame__title, .frame__title *' }).closest('[data-item-id]') as HTMLElement)
+    expect(screen.queryByRole('button', { name: 'Keep in mind' })).not.toBeInTheDocument()
   })
 })

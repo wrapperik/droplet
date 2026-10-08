@@ -13,7 +13,7 @@ const placementSchema = z.object({
 
 const id = z.string().min(1).max(80)
 // Which use of a template put a thing there, and the faint prompt it shows while it is empty. Neither is required.
-const extras = { group: z.string().max(MAX_GROUP).optional() }
+const extras = { group: z.string().max(MAX_GROUP).optional(), starred: z.boolean().optional() }
 const hinted = { ...extras, hint: z.string().max(MAX_HINT).optional() }
 
 // A rectangle on the board: its place inside the board, and its size up to the most that kind can be.

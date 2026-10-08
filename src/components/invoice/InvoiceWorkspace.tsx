@@ -22,6 +22,7 @@ import {
   markExported,
   numbersInUse,
   savedInvoice,
+  settingOn,
   withBusiness,
   withClient,
   withInvoice,
@@ -245,7 +246,7 @@ export default function InvoiceWorkspace({ projectId, projectName, state, dispat
         saveStatus={saveStatus}
         unsaved={unsaved}
         onSave={() => {}}
-        saveControl={<ConfirmSave projectName={projectName} items={items} unsaved={unsaved} status={saveStatus} onConfirm={confirm} openSignal={saveSignal} />}
+        saveControl={<ConfirmSave projectName={projectName} items={items} unsaved={unsaved} status={saveStatus} onConfirm={confirm} openSignal={saveSignal} notesOn={settingOn(memory, 'notes')} />}
         exportButton={
           <ExportButton
             onExport={async () => {

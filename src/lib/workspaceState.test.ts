@@ -331,3 +331,23 @@ describe('sameBlocks', () => {
     expect(isUnsaved(doc, await loadPalette('p'))).toBe(false)
   })
 })
+
+describe('keeping a colour in mind', () => {
+  it('stars a colour and takes the star off, as one step each', () => {
+    const starred = reduce(fresh(), { type: 'toggle_star', id: 2 })
+    expect(docOf(starred).blocks[1].starred).toBe(true)
+    expect(docOf(starred).blocks[0].starred).toBeUndefined()
+    expect(canUndoState(starred)).toBe(true)
+    const cleared = reduce(starred, { type: 'toggle_star', id: 2 })
+    expect('starred' in docOf(cleared).blocks[1]).toBe(false)
+  })
+
+  it('can be set outright, does nothing when it is already so or the colour is not there, and stays with the colour when its hex changes', () => {
+    const base = fresh()
+    expect(reduce(base, { type: 'toggle_star', id: 2, starred: false })).toBe(base)
+    expect(reduce(base, { type: 'toggle_star', id: 99 })).toBe(base)
+    const starred = reduce(base, { type: 'toggle_star', id: 2, starred: true })
+    expect(reduce(starred, { type: 'toggle_star', id: 2, starred: true })).toBe(starred)
+    expect(docOf(reduce(starred, { type: 'set_hex', id: 2, hex: '#123456' })).blocks[1]).toMatchObject({ hex: '#123456', starred: true })
+  })
+})

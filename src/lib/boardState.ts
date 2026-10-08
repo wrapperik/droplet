@@ -116,6 +116,8 @@ export type BoardAction =
   | { type: 'set_text'; id: string; text: string }
   | { type: 'set_title'; id: string; title: string }
   | { type: 'set_colour'; ids: string[]; colour: NoteColour | ShapeColour }
+  // "Keep in mind": Droplet's notes on the project always include a thing that is starred.
+  | { type: 'set_starred'; ids: string[]; starred: boolean }
   // Words written into a note that has none: it becomes a note by Droplet (pink, with its name on it) in the same place, and its hint goes. This is how
   // the AI fills in the prompts of a template. It is refused for a note that has words in it, so it cannot write over the founder's.
   | { type: 'fill_note'; id: string; text: string }
@@ -385,6 +387,17 @@ function step(w: Working, action: BoardAction): Working {
         if (item.kind === 'note') return { ...item, colour: action.colour as NoteColour }
         if (action.colour === 'pink') return item
         return { ...item, colour: action.colour as ShapeColour }
+      })
+      return next.some((item, index) => item !== items[index]) ? withItems(w, next) : w
+    }
+
+    case 'set_starred': {
+      const ids = existing(w.doc, action.ids)
+      const next = items.map((item) => {
+        if (!ids.includes(item.id) || item.kind === 'connector' || item.kind === 'frame' || Boolean(item.starred) === action.starred) return item
+        if (action.starred) return { ...item, starred: true }
+        const { starred: _removed, ...rest } = item
+        return rest as BoardItem
       })
       return next.some((item, index) => item !== items[index]) ? withItems(w, next) : w
     }

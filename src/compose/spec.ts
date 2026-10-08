@@ -1,8 +1,9 @@
 import { z } from 'zod'
 import { boardSnapshotSchema, boardTurnSchema, type BoardTurn } from './boardSpec.ts'
-import { blocksField, messageField, opensField, questionField, repliesField, titleField } from './conversationFields.ts'
+import { blocksField, messageField, opensField, proposeField, questionField, repliesField, titleField } from './conversationFields.ts'
 import { invoiceSnapshotSchema, invoiceTurnSchema, type InvoiceTurn } from './invoiceSpec.ts'
 import { groundingSchema } from './grounding.ts'
+import { NOTE_WORKSPACES } from './digest.ts'
 import { projectSnapshotSchema } from './journey.ts'
 import { isScreenAction, SCREEN_WORKSPACES, screenActionSchemas, type ScreenAction } from './screenActions.ts'
 import { TASKS, type Task } from './taskNames.ts'
@@ -120,6 +121,7 @@ export const turnSchema = z.object({
   actions: z.array(actionSchema).max(MAX_ACTIONS).describe('What to do on the workspace. Empty when the founder only wants an answer.'),
   // After the actions, so the model has decided what it is doing before it says whether that opens a workspace.
   opens: opensField,
+  propose: proposeField,
   memoryUsed: z.array(z.string().max(60)).max(6).describe('Which saved decisions you used, by key, such as brand.palette.'),
   title: titleField,
 })
@@ -209,6 +211,16 @@ export const composeRequestSchema = z.object({
   memory: paletteSnapshotSchema.optional(),
   // What the project holds and so where the founder is on the journey: the name, whether there is a palette, how many invoices.
   project: projectSnapshotSchema.optional(),
+  // Short memories of earlier chats, at most three, picked by the app: what was said before, with the dates. Not facts the founder confirmed.
+  earlierChats: z.array(z.object({ when: z.string().max(20), text: z.string().max(400) })).max(3).optional(),
+  // Droplet's notes on the project, for the workspaces that are not on screen: their digests, and lines of the index that match words in the request.
+  // Ideas the founder jotted down, not decisions. The digests are written in the background by Quick; the lines are the founder's own words.
+  notes: z
+    .object({
+      digests: z.array(z.object({ workspace: z.enum(NOTE_WORKSPACES), text: z.string().max(2500) })).max(3),
+      found: z.array(z.object({ workspace: z.enum(NOTE_WORKSPACES), text: z.string().max(300), at: z.string().max(20) })).max(40),
+    })
+    .optional(),
 })
 export type ComposeRequest = z.infer<typeof composeRequestSchema>
 
@@ -255,6 +267,9 @@ function simplify(node: unknown): unknown {
   }
   return out
 }
+
+// The JSON schema for any Zod schema, in the form the model API takes (see the note above on what is left out).
+export const modelSchemaOf = (schema: z.ZodType): Record<string, unknown> => simplify(z.toJSONSchema(schema)) as Record<string, unknown>
 
 // The JSON schema for the model's reply, generated from the Zod contract above.
 // The palette workspace's schema by default. The invoice has its own, with its own actions, so each stays small enough for the model

@@ -1,6 +1,6 @@
 import { useState, type CSSProperties } from 'react'
 import { newId } from '../../lib/ids.ts'
-import { AltArrowDownIcon, AltArrowUpIcon, LinkRoundIcon, TrashBinMinimalisticIcon } from '@solar-icons/react/linear'
+import { AltArrowDownIcon, AltArrowUpIcon, LinkRoundIcon, StarIcon, TrashBinMinimalisticIcon } from '@solar-icons/react/linear'
 import {
   CONNECTOR_HEADS,
   CONNECTOR_HEAD_LABELS,
@@ -73,6 +73,10 @@ export default function SelectionBar({ selected, held, dispatch, say, style, tem
   // The words of the one thing selected, when it holds words that could be a name or an offer.
   const only1 = selected.length === 1 ? selected[0] : null
   const words = only1 && (only1.kind === 'note' || only1.kind === 'shape' || only1.kind === 'text') ? ideaText(only1.text) : ''
+
+  // Notes, shapes and text can be kept in mind. A frame only holds them, and an arrow has no words.
+  const keepable = selected.length > 0 && selected.every((item) => item.kind === 'note' || item.kind === 'shape' || item.kind === 'text')
+  const starred = keepable && selected.every((item) => item.starred)
 
   const pressed = (colour: string) => selected.every((item) => 'colour' in item && item.colour === colour)
 
@@ -202,6 +206,12 @@ export default function SelectionBar({ selected, held, dispatch, say, style, tem
           }}
         >
           <LinkRoundIcon size={18} aria-hidden="true" />
+        </button>
+      )}
+
+      {keepable && (
+        <button type="button" className="board__icon" aria-label="Keep in mind" aria-pressed={starred} title="Keep in mind: Droplet's notes on this project always include it" onClick={() => dispatch({ type: 'set_starred', ids, starred: !starred })}>
+          <StarIcon size={18} aria-hidden="true" />
         </button>
       )}
 

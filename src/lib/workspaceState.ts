@@ -99,6 +99,8 @@ export type WorkspaceAction =
   | { type: 'remove_block'; id: number }
   | { type: 'set_role'; id: number; role: ColourRole | null }
   | { type: 'toggle_keep'; id: number; keep?: boolean }
+  // "Keep in mind": Droplet's notes on the project always include the colour.
+  | { type: 'toggle_star'; id: number; starred?: boolean }
   | { type: 'set_harmony'; harmony: Harmony }
   | { type: 'generate'; fromId?: number }
   | ArrangementAction
@@ -203,6 +205,18 @@ function step(w: Working, action: WorkspaceAction): Working {
       const current = blocks.find((b) => b.id === action.id)
       if (!current || (current.role ?? null) === action.role) return w
       return withBlocks(w, assignRole(blocks, action.id, action.role))
+    }
+
+    case 'toggle_star': {
+      const current = blocks.find((b) => b.id === action.id)
+      if (!current) return w
+      const starred = action.starred ?? !current.starred
+      if (Boolean(current.starred) === starred) return w
+      return withBlocks(w, blocks.map((b) => {
+        if (b.id !== action.id) return b
+        const { starred: _removed, ...rest } = b
+        return starred ? { ...rest, starred: true } : rest
+      }))
     }
 
     case 'toggle_keep': {

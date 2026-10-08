@@ -49,6 +49,7 @@ export const invoiceContentSchema = z.object({
         description: text(200),
         quantity: z.number().finite().min(0).max(1_000_000),
         unitCents: z.number().int().min(0).max(1_000_000_000_00).nullable(),
+        starred: z.boolean().optional(),
       }),
     )
     .min(1)

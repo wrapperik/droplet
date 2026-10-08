@@ -166,3 +166,28 @@ describe('Droplet\'s messages laid out', () => {
     expect(screen.queryByRole('button', { name: 'Yes' })).toBeNull()
   })
 })
+
+describe('a change receipt in the thread', () => {
+  const receipt = { heading: 'Changed on the board', lines: [{ mark: '+' as const, text: '2 notes on the board' }], left: [] }
+
+  it('sits under the reply and before its question, and hands the message to Undo this and Show me', async () => {
+    const user = userEvent.setup()
+    const onUndoReceipt = vi.fn()
+    const onShowReceipt = vi.fn()
+    const messages: ThreadMessage[] = [{ id: 7, from: 'droplet', text: 'Done.', question: 'Does it feel right?', receipt, receiptLive: { undo: true, show: true } }]
+    const { container } = render(<ChatThread messages={messages} onUndoReceipt={onUndoReceipt} onShowReceipt={onShowReceipt} />)
+    const card = container.querySelector('.receipt')!
+    const question = container.querySelector('.thread__question')!
+    expect(card.compareDocumentPosition(question) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Undo this' }))
+    await user.click(screen.getByRole('button', { name: 'Show me' }))
+    expect(onUndoReceipt).toHaveBeenCalledWith(7)
+    expect(onShowReceipt).toHaveBeenCalledWith(7)
+  })
+
+  it('has no buttons for a receipt that was kept from an earlier session, and none while the reply is still being worked on', () => {
+    render(<ChatThread messages={[{ id: 1, from: 'droplet', text: 'Done.', receipt }]} />)
+    expect(screen.getByRole('region', { name: 'Changed on the board' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Undo this' })).not.toBeInTheDocument()
+  })
+})

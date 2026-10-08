@@ -13,7 +13,8 @@ export const COLOUR_ROLES: { id: ColourRole; label: string }[] = [
 // `locked` keeps a colour as it is when Generate fills in the others.
 // `name` and `note` come from the composer: a short name for the colour and one sentence on why it was chosen. They
 // describe the colour as it was proposed, so they are dropped as soon as the colour is changed.
-export type PaletteBlock = { id: number; hex: string; role?: ColourRole; locked?: boolean; name?: string; note?: string }
+// `starred` is the founder's "keep in mind": Droplet's notes on the project always include the colour.
+export type PaletteBlock = { id: number; hex: string; role?: ColourRole; locked?: boolean; name?: string; note?: string; starred?: boolean }
 
 // The block with a different colour. The composer's name and note described the old colour, so they go with it.
 export function withHex(block: PaletteBlock, hex: string): PaletteBlock {

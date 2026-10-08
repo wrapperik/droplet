@@ -741,7 +741,8 @@
   color: var(--text);
 }
 
-.board__choice[aria-pressed='true'] {
+.board__choice[aria-pressed='true'],
+.board__icon[aria-pressed='true'] {
   background: var(--accent-tint);
   color: var(--accent);
 }

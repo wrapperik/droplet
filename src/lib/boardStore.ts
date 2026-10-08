@@ -1,6 +1,6 @@
 import { boardSaveSchema, type BoardSave } from './boardSave.ts'
 import { openBoard, type BoardState } from './boardState.ts'
-import { documentStorage } from './storage.ts'
+import { documentStorage, documentWasSaved } from './storage.ts'
 
 // The project's saved board, through the document storage (this browser for now, a database later). Saved when the founder presses Save,
 // and not before. Every call is asynchronous.
@@ -14,7 +14,9 @@ export async function loadBoard(projectId: string): Promise<BoardSave | null> {
 // Null when it could not be stored, so the interface can say so honestly.
 export async function saveBoard(projectId: string, data: Omit<BoardSave, 'savedAt'>): Promise<BoardSave | null> {
   const save: BoardSave = { ...data, savedAt: new Date().toISOString() }
-  return (await documentStorage().write(projectId, 'board', save)) ? save : null
+  if (!(await documentStorage().write(projectId, 'board', save))) return null
+  documentWasSaved(projectId, 'board')
+  return save
 }
 
 export function clearBoard(projectId: string): Promise<void> {

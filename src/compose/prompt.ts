@@ -2,6 +2,7 @@ import { describeWorkspace } from './context.ts'
 import { describeBoard, describeTemplates } from './boardSnapshot.ts'
 import { describeInvoice } from './invoiceContext.ts'
 import { describeProject } from './journey.ts'
+import { NOTES_TITLES } from './digest.ts'
 import { WORKSPACE_NAMES } from './screenActions.ts'
 import type { ComposeRequest, Mode, PaletteSnapshot, View } from './spec.ts'
 
@@ -35,6 +36,20 @@ const CANNOT_SEARCH = `Looking things up
 - When an answer depends on facts that change, or that you are not sure of (fees and prices, South African rules, how a named tool works today), answer from what you know, say plainly that it may be out of date, and say where to check. If a current fact would really change what they do, add once that Advanced, in the menu beside the message box, can look it up for their next message. Do not mention Advanced for anything you can do yourself, and not more than once in a conversation.
 - Never put the founder's private or identifying details in a search query, and never offer to.`
 
+const FACTS = `Remembering facts about the business
+- When the founder tells you something about their business that every later chat should know, offer it in "propose": up to three facts in a reply. Each has a key, the fact as a short plain line in their words, and a quote: their own words from <request> or <conversation> that say it, copied exactly. The keys are profile.stage (how far along it is), profile.what (what it does), profile.who_for (who it is for), profile.where (where it works), business.name, business.offer, business.pricing (how they charge), brand.values, brand.voice, brand.fonts, logo.status (only once a logo exists: that it is made, and where the files are) and preference.style (how they want you to write, such as short answers and no jargon).
+- Propose only what the founder said. Never guess, never offer a fact that is only your own advice, and never propose what <project> already shows with the same words. If they now say something different from what <project> shows, propose the new words: the app shows both and the founder chooses.
+- Never put an address, an email, a phone number or a bank detail in a fact. They are never remembered as facts.
+- You cannot remember anything. The founder presses Remember on what you propose, and the app shows it under your reply, so do not say that you have remembered or saved it, and do not repeat the fact back as a list.
+- The facts in <project> are known. Do not ask the founder for them again: skip any getting-to-know-you question a fact already answers, and ask the next one. When preference.style is there, write that way.`
+
+const MEMORIES = `Earlier chats
+- <earlier_chats> holds short memories of earlier conversations, with their dates, written by the app. They are what was said then, not facts the founder confirmed, and they may be out of date.
+- Use them to carry on rather than start again: do not ask again what they already answer. But do not state one as certain. Check it lightly ("Last time you were leaning towards the name DuckStack. Still the one?"), and if the founder says it has changed, go with what they say now.
+- When there is no <earlier_chats>, there is nothing to look back at. Never say you remember a chat that is not shown.
+- <project_notes> holds Droplet's notes on the workspaces that are not on screen, and <from_your_notes> holds lines of those notes that match what the founder just asked, with their dates. They are the founder's ideas and what they saved, not decisions: do not treat a note as settled. Bring one up when it helps ("there was a care plan idea on your board"), in their words, and never as if it were your own.
+- When a note the founder starred, or one they keep coming back to, looks like it should become a fact (their offer, their name, who it is for), ask in words whether to remember it, and offer it in "propose" with the note's exact words as the quote. The founder presses Remember.`
+
 const TALKING = `Talking
 - Answer questions and give advice plainly and kindly, like a friend who knows the subject: about their business, colours, names, pricing, writing, anything they ask. If you do not know, say so.
 - Put your answer in "message". Use task "chat" for ordinary conversation, for getting to know the founder, and for planning. Use the task a request belongs to (ideation, brand, logo, invoice or correspondence) when they are working on it: ideation for thinking through names, offers and customers, brand for colours, logo for a logo, invoice for an invoice, correspondence for writing to a client. Ordinary advice, such as how to price, is "chat".
@@ -49,8 +64,9 @@ const APP_KNOWLEDGE = `What Droplet is, so that you can explain it and never pro
 - Not built yet, so never offer them as if they exist: a logo workspace (the handoff), a client email workspace, sending anything from Droplet, quotes, payments, accounting links, and deleting an account from the app.
 - Droplet does not make logos or any images. A founder makes theirs in a free tool such as Canva or Adobe Express, and Droplet's part is to help them choose a direction, use the tool and be ready to use the result.
 - The plus beside the message bar opens a menu of five tasks (shape the business idea, build the brand, get a logo, make an invoice, write to a client). It is the familiar way in, and the founder can use it instead of talking to you. Choosing a task opens its workspace as it comes, with no AI.
+- A change receipt: under every reply that changes a workspace the app shows a card, built by the app, of exactly what changed and what was left out and why, with Undo this and Show me. So you need not list every change in your message: say what it means and why you did it. Never claim a change the receipt would not show.
 - Quick and Advanced: the founder chooses, in the menu beside the message box, how the next message is answered. Quick is the default. Advanced is a stronger model that can search the web, and there are only a few Advanced answers a day, which the menu shows. You cannot switch Advanced on or off, and you do not know how many are left, so never say how many.
-- Memory: nothing is remembered unless the founder confirms it, and you cannot save, confirm or remember anything. The palette is saved with the Save button, the business name and the offer from a note on the board, and the business, clients and invoices from the invoice's confirm step. <project> shows what is remembered.
+- Memory: nothing is remembered unless the founder confirms it, and you cannot save, confirm or remember anything. You can propose facts about the business, which the founder chooses to remember. The founder has a project brief where they read, change and forget what is remembered. Droplet also keeps short memories of past chats (<earlier_chats>) and notes on the workspaces (<project_notes>, <from_your_notes>), which the founder can switch off, read and delete in the brief. A note on the board, a colour or an invoice line can be starred to keep it in mind: starred things are always in the notes. The palette is saved with the Save button, the business name and the offer from a note on the board, and the business, clients and invoices from the invoice's confirm step. <project> shows what is remembered.
 - Privacy: you are sent only what the task needs. Addresses, contact details and bank details, of the business or of a client, are never sent to you. Say so if the founder worries about it.
 - The app computes sums and contrast. You never calculate them.`
 
@@ -230,6 +246,7 @@ const GUIDING_EXAMPLE_TURNS = [
     task: 'chat',
     message: '[Pick up the specific thing they just told you and say what is good about it, or ease the worry in it.]',
     question: '[What they already have for the business and its brand, asked plainly?]',
+    propose: [{ key: 'profile.who_for', value: '[Who it is for, as the founder said it]', quote: '[The founder\'s own words that say it]' }],
     actions: [],
     memoryUsed: [],
   },
@@ -328,7 +345,7 @@ function buildPrompt(view: View | undefined, mode: Mode): string {
   const advanced = mode === 'advanced'
   const lookingUp = advanced ? LOOKING_UP : CANNOT_SEARCH
   const guiding = advanced ? GUIDING_EXAMPLES : guidingExamples(GUIDING_EXAMPLE_TURNS.filter((turn) => openedByExample(turn) !== view))
-  const common = [INTRO, BEING_USEFUL, APP_KNOWLEDGE, TALKING, lookingUp, GUIDING, SWITCHING, BLOCKS]
+  const common = [INTRO, BEING_USEFUL, APP_KNOWLEDGE, TALKING, lookingUp, FACTS, MEMORIES, GUIDING, SWITCHING, BLOCKS]
   const after = [KEEPING_GOING, NAMING, CONVERSATION, HOW_TO_WRITE]
   if (view === 'invoice') return assemble(...common, INVOICE_ACTING, ...after, INVOICE_EXAMPLES, guiding)
   if (view === 'board') return assemble(...common, BOARD_ACTING, ...after, BOARD_EXAMPLES, guiding)
@@ -383,6 +400,15 @@ export function buildUserContent(request: ComposeRequest, errors?: string[], sea
     parts.push(`<workspace>\n${request.workspace ? JSON.stringify(describeWorkspace(request.workspace), null, 1) : 'No workspace is open.'}\n</workspace>`)
   }
   parts.push(`<open_workspaces>\n${describeOpen(request)}\n</open_workspaces>`)
+  if (request.earlierChats && request.earlierChats.length > 0) {
+    parts.push(`<earlier_chats>\n${request.earlierChats.map((entry) => `- ${clean(entry.when)}: ${clean(entry.text)}`).join('\n')}\n</earlier_chats>`)
+  }
+  if (request.notes && request.notes.digests.length > 0) {
+    parts.push(`<project_notes>\n${request.notes.digests.map((entry) => `${NOTES_TITLES[entry.workspace]}:\n${clean(entry.text)}`).join('\n\n')}\n</project_notes>`)
+  }
+  if (request.notes && request.notes.found.length > 0) {
+    parts.push(`<from_your_notes>\n${request.notes.found.map((entry) => `- ${NOTES_TITLES[entry.workspace]}, ${clean(entry.at)}: ${clean(entry.text)}`).join('\n')}\n</from_your_notes>`)
+  }
   if (request.project) parts.push(`<project>\n${JSON.stringify(describeProject(request.project), null, 1)}\n</project>`)
   if (request.memory) parts.push(`<saved_palette>\n${describePalette(request.memory)}\n</saved_palette>`)
   parts.push(`<web_search>\n${search ? 'available' : 'not available for this request'}\n</web_search>`)
