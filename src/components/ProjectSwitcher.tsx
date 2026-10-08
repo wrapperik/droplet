@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { AddCircleIcon, CheckIcon, ChevronsUpDownIcon } from '@solar-icons/react/linear'
+import { AddCircleIcon, CheckIcon, ChevronsUpDownIcon, NotebookIcon } from '@solar-icons/react/linear'
 import { useDismiss } from '../hooks/useDismiss.ts'
 import type { ProjectSummary } from '../lib/mockProjects.ts'
 import FolderIcon from './FolderIcon.tsx'
@@ -12,9 +12,11 @@ type Props = {
   collapsed: boolean
   onSelect: (id: string) => void
   onNewProject?: () => void
+  // Opens the project brief: everything Droplet remembers about this business.
+  onOpenBrief?: () => void
 }
 
-export default function ProjectSwitcher({ projects, currentId, collapsed, onSelect, onNewProject }: Props) {
+export default function ProjectSwitcher({ projects, currentId, collapsed, onSelect, onNewProject, onOpenBrief }: Props) {
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
   const close = useCallback(() => setOpen(false), [])
@@ -67,6 +69,18 @@ export default function ProjectSwitcher({ projects, currentId, collapsed, onSele
               </button>
             ))}
             <hr className="switcher__divider" />
+            <button
+              type="button"
+              role="menuitem"
+              className="switcher__item"
+              onClick={() => {
+                setOpen(false)
+                onOpenBrief?.()
+              }}
+            >
+              <NotebookIcon size={22} aria-hidden="true" />
+              <span className="switcher__item-name">Project brief</span>
+            </button>
             <button
               type="button"
               role="menuitem"

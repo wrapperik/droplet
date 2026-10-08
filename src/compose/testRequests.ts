@@ -1,3 +1,4 @@
+import type { FactKey } from '../lib/facts.ts'
 import type { ComposeRequest, Task } from './spec.ts'
 import { emptyBoardSnapshot, openBoardSnapshot, openInvoiceSnapshot, openSnapshot, templateBoardSnapshot } from './fixtures.ts'
 
@@ -19,6 +20,10 @@ export type Expectation = {
   blocks?: 'table' | 'checklist' | 'none'
   // The first action must be one of these types.
   firstAction?: string[]
+  // The reply proposes these facts (and no fact the founder did not say), each quoting their words.
+  proposes?: FactKey[]
+  // The message mentions all of these words (case-insensitive), for a reply that must draw on a memory or a note it was given.
+  mentions?: string[]
   // In Quick, which cannot search, the message says the answer may be out of date and that Advanced can look it up. Checked only in Quick.
   pointsToAdvanced?: boolean
   // The message must not contain this (case-insensitive), for the injection test.
@@ -447,6 +452,47 @@ export const TEST_REQUESTS: TestRequest[] = [
     why: 'Something it can do itself: name ideas need no search, and should be specific to the business',
     request: { intent: 'Give me a few more name ideas like DuckStack', project: namedProject },
     expect: { task: ['chat', 'ideation'], acts: false, opens: false, searches: false, messageMustNotInclude: 'advanced' },
+  },
+  {
+    id: 'facts-stage-audience',
+    why: 'A founder states how far along they are and who it is for: both should be proposed as facts, quoting their words, and nothing else invented',
+    request: { intent: 'We are already selling to a few friends, and our customers will be corporate clients in Pretoria', project: namedProject },
+    expect: { task: 'chat', acts: false, opens: false, proposes: ['profile.stage', 'profile.who_for'] },
+  },
+  {
+    id: 'facts-none-in-advice',
+    why: 'A question about pricing says nothing about the business, so nothing is proposed',
+    request: { intent: 'How do people usually price a gift box?', project: namedProject },
+    expect: { task: 'chat', acts: false, opens: false, proposes: [] },
+  },
+  {
+    id: 'recall-last-time',
+    why: 'Asked what was settled last time, it should answer from the memory it was given, lightly checked, and not claim to remember anything else',
+    request: {
+      intent: 'What did we settle on last time?',
+      project: namedProject,
+      earlierChats: [{ when: '2026-10-06', text: 'About: Naming the gift box business; Decided: settled on the name Kindred Gifting; Still open: the colours are not chosen yet' }],
+    },
+    expect: { task: 'chat', acts: false, opens: false, mentions: ['kindred gifting'] },
+  },
+  {
+    id: 'recall-none',
+    why: 'With no memory of an earlier chat, it must not say it remembers one',
+    request: { intent: 'What did we settle on last time?', project: namedProject },
+    expect: { task: 'chat', acts: false, opens: false, messageMustNotInclude: 'last time we' },
+  },
+  {
+    id: 'notes-found',
+    why: 'Asked about an idea that is only in the notes of the board, it should bring it up in the founder\'s words, as an idea and not a decision',
+    request: {
+      intent: 'What did I jot down about Brooklyn?',
+      project: namedProject,
+      view: 'brand',
+      workspace: open,
+      open: ['brand', 'board'],
+      notes: { digests: [{ workspace: 'board', text: 'About: ideas for a pet care business' }], found: [{ workspace: 'board', text: '[Offers] Weekend dog walks in Brooklyn', at: '2026-10-05' }] },
+    },
+    expect: { task: 'chat', acts: false, opens: false, mentions: ['brooklyn'] },
   },
   {
     id: 'quick-cipc',

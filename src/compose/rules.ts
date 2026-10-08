@@ -1,3 +1,4 @@
+import { containsPrivateDetail, factFits, factText, FACT_INFO } from '../lib/facts.ts'
 import { openWorkspace } from '../lib/workspaceState.ts'
 import { applyTurnActions } from './applyActions.ts'
 import { applyBoardTurnActions } from './boardActions.ts'
@@ -127,6 +128,45 @@ export function checkOpening(turn: AnyTurn, request: Pick<ComposeRequest, 'inten
   return errors
 }
 
+// The facts a reply offers the founder to remember. Droplet only proposes: each must be something the founder really wrote (the quote is checked
+// against their words, compared as a person would), must hold no private detail, must not be a fact the project already holds with the same
+// words, and a reply offers a key once.
+// The founder's own words that Droplet was given in the notes: the lines of the index it was sent, and the ideas quoted in a digest. A digest's other
+// lines were written by a model, so they are not the founder's words.
+const quotesInNotes = (notes: ComposeRequest['notes']): string[] => [
+  ...(notes?.found ?? []).map((entry) => entry.text.replace(/^\[[^\]]*\]\s*/, '').replace(/\s*\(kept in mind\)$/, '')),
+  ...(notes?.digests ?? []).flatMap((entry) => [...entry.text.matchAll(/\u201c([^\u201d]+)\u201d/g)].map((match) => match[1])),
+]
+
+export function checkPropose(turn: AnyTurn, request: Pick<ComposeRequest, 'intent' | 'history' | 'project' | 'notes'>): string[] {
+  const proposals = turn.propose
+  if (!proposals || proposals.length === 0) return []
+  const errors: string[] = []
+  const said = [...founderTextOf(request), ...quotesInNotes(request.notes)].map(plain)
+  const remembered = request.project?.facts ?? {}
+  const seen = new Set<string>()
+  proposals.forEach((proposal, index) => {
+    const at = `propose.${index}`
+    if (seen.has(proposal.key)) errors.push(`${at}: ${proposal.key} is proposed twice. Propose each fact once.`)
+    seen.add(proposal.key)
+    if (!said.some((text) => text.includes(plain(proposal.quote)))) {
+      errors.push(`${at}.quote: "${proposal.quote}" is not in the founder's words. Quote what they wrote exactly, or leave this fact out: only what the founder has said can be proposed.`)
+    }
+    if (!factFits(proposal.value)) {
+      errors.push(
+        containsPrivateDetail(proposal.value)
+          ? `${at}.value: a fact never holds an address, an email, a phone number or a bank detail. Leave it out or say it without the detail.`
+          : `${at}.value: write the fact in a short plain line of up to 200 characters.`,
+      )
+    }
+    const current = remembered[proposal.key]
+    if (current !== undefined && factText(current) === factText(proposal.value)) {
+      errors.push(`${at}: ${FACT_INFO[proposal.key].label} is already remembered with these words. Leave it out.`)
+    }
+  })
+  return errors
+}
+
 // The question is shown after the message, so a message that asks it too asks it twice. A small model does this out of habit, so it is mended
 // here and not refused (a refusal cost two attempts and fell back to "I changed nothing"): any trailing sentence of the message that asks
 // something is taken off, as long as something else is left and it is not an item of a list.
@@ -145,8 +185,8 @@ export function withoutRepeatedQuestion<T extends { message: string; question?: 
 
 // The conversation part of a reply: a question is a question, replies belong to it, and on the invoice a reply never puts a price in the
 // founder's mouth. A tapped reply is sent as the founder's own words, so a suggested figure would pass the check that prices come from them.
-export function checkConversation(turn: AnyTurn, request: Pick<ComposeRequest, 'intent' | 'history' | 'view'> & { workspace?: unknown }): string[] {
-  const errors: string[] = [...checkBlocks(turn.blocks), ...checkOpening(turn, request)]
+export function checkConversation(turn: AnyTurn, request: Pick<ComposeRequest, 'intent' | 'history' | 'view' | 'project' | 'notes'> & { workspace?: unknown }): string[] {
+  const errors: string[] = [...checkBlocks(turn.blocks), ...checkOpening(turn, request), ...checkPropose(turn, request)]
   const { question, replies } = turn
   // A description from the illustrations, or a picture of a block from the conversation, written out instead of the words themselves.
   const placeholder = /\[(?:[A-Z][^\]\n]{14,}|(?:Plan|Checklist|Table)\b[^\]\n]*)\]/

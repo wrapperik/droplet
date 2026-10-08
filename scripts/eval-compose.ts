@@ -61,6 +61,17 @@ async function run(test: TestRequest): Promise<Row> {
     if (test.expect.titles !== undefined && test.expect.titles !== Boolean(turn.title)) problems.push(test.expect.titles ? 'expected a title for the chat, got none' : 'expected no title, got one')
     if (test.expect.list && shown.length === 0 && !/^\s*(?:[-*•]|\d+[.)])\s/m.test(turn.message)) problems.push('expected the message to be laid out as a list, or a table or checklist')
     if (mode === 'base' && test.expect.pointsToAdvanced && !(/advanced/i.test(turn.message) && /out of date|outdated|changed|change/i.test(turn.message))) problems.push('expected it to say the answer may be out of date and that Advanced can look it up')
+    if (test.expect.proposes !== undefined) {
+      const offered = (turn.propose ?? []).map((proposal) => proposal.key)
+      const missing = test.expect.proposes.filter((key) => !offered.includes(key))
+      const extra = offered.filter((key) => !test.expect.proposes!.includes(key))
+      if (missing.length > 0) problems.push(`expected it to propose ${missing.join(', ')}, and it did not`)
+      if (extra.length > 0) problems.push(`it proposed ${extra.join(', ')}, which the founder did not say`)
+    }
+    if (test.expect.mentions) {
+      const absent = test.expect.mentions.filter((word) => !turn.message.toLowerCase().includes(word.toLowerCase()))
+      if (absent.length > 0) problems.push(`the message does not mention ${absent.join(', ')}`)
+    }
     if (test.expect.messageMustNotInclude && turn.message.toLowerCase().includes(test.expect.messageMustNotInclude)) {
       problems.push(`the message includes "${test.expect.messageMustNotInclude}"`)
     }

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { FACT_INFO, FACT_KEYS, MAX_FACT_LENGTH, type FactKey } from '../lib/facts.ts'
 
 // The founder's journey, in the order a business starting from nothing meets it, and what Droplet knows about where a project is on it.
 // Kept free of anything from the interface, so the server function can use it too.
@@ -59,20 +60,25 @@ export const projectSnapshotSchema = z.object({
   invoices: z.number().int().min(0).max(1000),
   // Things on the saved board, so the composer can tell a board in use from an empty one.
   boardItems: z.number().int().min(0).max(1000),
+  // The facts about the business the founder confirmed, in their words, by key. Absent in a request from before facts.
+  facts: z.partialRecord(z.enum(FACT_KEYS), z.string().max(MAX_FACT_LENGTH)).optional(),
 })
 export type ProjectSnapshot = z.infer<typeof projectSnapshotSchema>
 
-// The steps the app can tell are done, from what the project holds. The others (values, logo, client email) are the founder's to say.
+// The steps the app can tell are done, from what the project holds: the name, the palette and an invoice, and from the facts the founder confirmed
+// the brand values and the logo. The client email is the founder's to say.
 export function doneSteps(project: ProjectSnapshot | undefined): Set<JourneyStep> {
   const done = new Set<JourneyStep>()
   if (!project) return done
   if (project.businessName.trim() !== '') done.add('name')
   if (project.hasPalette) done.add('palette')
   if (project.invoices > 0) done.add('invoice')
+  if ((project.facts?.['brand.values'] ?? '').trim() !== '') done.add('values')
+  if ((project.facts?.['logo.status'] ?? '').trim() !== '') done.add('logo')
   return done
 }
 
-const TRACKED: JourneyStep[] = ['name', 'palette', 'invoice']
+const TRACKED: JourneyStep[] = ['name', 'values', 'palette', 'logo', 'invoice']
 
 // The project in words, for the composer.
 export function describeProject(project: ProjectSnapshot): Record<string, unknown> {
@@ -86,6 +92,8 @@ export function describeProject(project: ProjectSnapshot): Record<string, unknow
       what: STEP_LABEL[step],
       status: TRACKED.includes(step) ? (done.has(step) ? 'in the project' : 'not in the project yet') : 'not tracked by the app: go by what the founder has said',
     })),
+    // What the founder confirmed about the business, in their words. A fact here is not to be asked again.
+    facts: Object.fromEntries(Object.entries(project.facts ?? {}).map(([key, value]) => [FACT_INFO[key as FactKey].label, value])),
     savedBusinessDetails: project.hasBusinessDetails,
     savedClients: project.clients,
     savedInvoices: project.invoices,

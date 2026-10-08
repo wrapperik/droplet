@@ -1,14 +1,15 @@
 import { describeBlocks, checkBlocks, blockSchema, type ChatBlock } from './blocks.ts'
 import { checkReply } from './compose.ts'
 import { doneSteps, describeProject, JOURNEY_STEPS, OPEN_PHRASE, STEP_WORKSPACE, type ProjectSnapshot } from './journey.ts'
-import { buildUserContent, BOARD_SYSTEM_PROMPT, INVOICE_SYSTEM_PROMPT, SYSTEM_PROMPT } from './prompt.ts'
+import { buildUserContent, BOARD_SYSTEM_PROMPT, INVOICE_SYSTEM_PROMPT, SYSTEM_PROMPT, systemPromptFor } from './prompt.ts'
 import { snapshotOfProject } from './project.ts'
-import { checkOpening } from './rules.ts'
+import { checkOpening, checkPropose, checkTurnFor } from './rules.ts'
 import { boardTurnSchema } from './boardSpec.ts'
 import { invoiceTurnSchema } from './invoiceSpec.ts'
-import { composeRequestSchema, routedTo, turnSchema, type AnyTurn } from './spec.ts'
-import { openSnapshot } from './fixtures.ts'
-import { emptyMemory, withIdea, withInvoice } from '../lib/projectMemory.ts'
+import { composeRequestSchema, routedTo, turnJsonSchema, turnSchema, type AnyTurn } from './spec.ts'
+import { chatTurn, openBoardSnapshot, openSnapshot } from './fixtures.ts'
+import { FACT_KEYS } from '../lib/facts.ts'
+import { emptyMemory, withFact, withIdea, withInvoice } from '../lib/projectMemory.ts'
 import { newContent } from '../lib/invoice.ts'
 
 const project = (over: Partial<ProjectSnapshot> = {}): ProjectSnapshot => ({
@@ -274,13 +275,25 @@ describe('the project, as the composer is told it', () => {
     expect(described).toContain('"step":"name","what":"Settle the name","status":"in the project"')
     expect(described).toContain('"step":"palette","what":"Choose the colours","status":"in the project"')
     expect(described).toContain('"step":"invoice","what":"Make the first invoice","status":"not in the project yet"')
-    expect(described).toContain('"step":"logo","what":"Get a logo","status":"not tracked by the app: go by what the founder has said"')
+    expect(described).toContain('"step":"logo","what":"Get a logo","status":"not in the project yet"')
+    expect(described).toContain('"step":"values","what":"Brand values and offer","status":"not in the project yet"')
+    // only the client email is the founder's to say
+    expect(described).toContain('"step":"email","what":"Write to a client","status":"not tracked by the app: go by what the founder has said"')
   })
 
   it('ticks only what it can tell: the name, the palette and an invoice', () => {
     expect([...doneSteps(project())]).toEqual([])
     expect([...doneSteps(project({ businessName: 'DuckStack', hasPalette: true, invoices: 1 }))].sort()).toEqual(['invoice', 'name', 'palette'])
     expect([...doneSteps(undefined)]).toEqual([])
+  })
+
+  it('also ticks the brand values and the logo from the facts the founder confirmed', () => {
+    const facts = { 'brand.values': 'Playful, warm, honest', 'logo.status': 'Made in Canva, files in the Brand folder' }
+    expect([...doneSteps(project({ facts }))].sort()).toEqual(['logo', 'values'])
+    expect([...doneSteps(project({ facts: { 'brand.values': '  ' } }))]).toEqual([])
+    const described = JSON.stringify(describeProject(project({ facts })))
+    expect(described).toContain('"step":"values","what":"Brand values and offer","status":"in the project"')
+    expect(described).toContain('"step":"logo","what":"Get a logo","status":"in the project"')
   })
 
   it('maps every step to a workspace that exists, or to none', () => {
@@ -293,7 +306,17 @@ describe('the project, as the composer is told it', () => {
     memory = withIdea(memory, 'offer', 'Web apps for small businesses', '2026-10-06T10:00')
     memory = withInvoice(memory, 'i1', newContent('2026-10-06', 'INV-0001'), '2026-10-06T10:00')
     const snapshot = snapshotOfProject({ projectName: 'DuckStack', memory, hasPalette: true, boardItems: 5 })
-    expect(snapshot).toEqual({ projectName: 'DuckStack', businessName: 'DuckStack', offer: 'Web apps for small businesses', hasPalette: true, hasBusinessDetails: true, clients: 0, invoices: 1, boardItems: 5 })
+    expect(snapshot).toEqual({
+      projectName: 'DuckStack',
+      businessName: 'DuckStack',
+      offer: 'Web apps for small businesses',
+      hasPalette: true,
+      hasBusinessDetails: true,
+      clients: 0,
+      invoices: 1,
+      boardItems: 5,
+      facts: { 'business.name': 'DuckStack', 'business.offer': 'Web apps for small businesses' },
+    })
     expect(composeRequestSchema.safeParse({ intent: 'hi', project: snapshot }).success).toBe(true)
     expect(snapshotOfProject({ projectName: 'x', memory: emptyMemory(), hasPalette: false, boardItems: 0 }).businessName).toBe('')
   })
@@ -335,5 +358,172 @@ describe('blocks', () => {
     )
     expect(describeBlocks([plan], { '0:2': true, '0:0': false })).toBe('[Plan "Your plan": 1. Settle the name; 2. Choose the colours (done); 3. Buy a domain (done)]')
     expect(describeBlocks(undefined, undefined)).toBe('')
+  })
+})
+
+describe('proposing facts about the business', () => {
+  const proposal = (over: Record<string, unknown> = {}) => ({ key: 'profile.who_for', value: 'Corporate clients in Pretoria', quote: 'we sell to corporate clients in Pretoria', ...over })
+  const turn = (propose: unknown[]) => ({ ...chatTurn, task: 'chat', propose }) as unknown as AnyTurn
+  const asking = { intent: 'we sell to corporate clients in Pretoria' }
+
+  it('accepts a fact the founder said, quoted from their words, in a reply of any workspace', () => {
+    expect(checkPropose(turn([proposal()]), asking)).toEqual([])
+    expect(checkTurnFor(turn([proposal()]), { ...asking, view: 'board', board: openBoardSnapshot() })).toEqual([])
+  })
+
+  it('compares the quote the way a person would: capitals, punctuation and curly quotes do not matter', () => {
+    expect(checkPropose(turn([proposal({ quote: 'We sell to Corporate Clients, in Pretoria!' })]), asking)).toEqual([])
+  })
+
+  it('takes the quote from anything the founder wrote in the conversation, not only the last message', () => {
+    const request = { intent: 'yes', history: [{ role: 'founder' as const, text: 'we sell to corporate clients in Pretoria' }, { role: 'droplet' as const, text: 'Lovely. Is that right?' }] }
+    expect(checkPropose(turn([proposal()]), request)).toEqual([])
+    // but not from what Droplet said
+    const only = { intent: 'yes', history: [{ role: 'droplet' as const, text: 'we sell to corporate clients in Pretoria' }] }
+    expect(checkPropose(turn([proposal()]), only)[0]).toMatch(/not in the founder's words/)
+  })
+
+  it('refuses a quote that is not theirs, so a fact Droplet only thought of cannot be proposed', () => {
+    const errors = checkPropose(turn([proposal({ quote: 'they love gift boxes' })]), asking)
+    expect(errors).toHaveLength(1)
+    expect(errors[0]).toMatch(/propose\.0\.quote.*not in the founder's words/)
+  })
+
+  it('refuses a value with an address, an email, a phone number or a bank detail in it', () => {
+    for (const value of ['Email megan@kindred.co.za', 'Call 082 555 1234', '12 Long Street, Brooklyn', 'IBAN ZA12 3456']) {
+      const errors = checkPropose(turn([proposal({ value, quote: 'we sell to corporate clients' })]), asking)
+      expect(errors[0], value).toMatch(/never holds an address, an email, a phone number or a bank detail/)
+    }
+  })
+
+  it('refuses a fact the project already holds with the same words, and lets a different one through to be shown beside it', () => {
+    const remembered = project({ facts: { 'profile.who_for': 'Corporate clients in Pretoria' } })
+    expect(checkPropose(turn([proposal()]), { ...asking, project: remembered })[0]).toMatch(/Who it is for is already remembered/)
+    expect(checkPropose(turn([proposal({ value: 'Offices in Pretoria East' })]), { ...asking, project: remembered })).toEqual([])
+    // the name and the offer are held too
+    const named = project({ facts: { 'business.name': 'DuckStack' } })
+    expect(checkPropose(turn([proposal({ key: 'business.name', value: 'DuckStack', quote: 'we sell to corporate clients in Pretoria' })]), { ...asking, project: named })[0]).toMatch(/already remembered/)
+  })
+
+  it('refuses the same key twice in a reply, and a value too long for a fact, and an empty one', () => {
+    expect(checkPropose(turn([proposal(), proposal()]), asking)[0]).toMatch(/proposed twice/)
+    expect(turnSchema.safeParse({ ...chatTurn, propose: [proposal({ value: 'x'.repeat(201) })] }).success).toBe(false)
+    expect(turnSchema.safeParse({ ...chatTurn, propose: [proposal({ value: ' ' })] }).success).toBe(false)
+  })
+
+  it('takes at most three, and only the keys there are', () => {
+    expect(turnSchema.safeParse({ ...chatTurn, propose: [proposal(), proposal({ key: 'profile.what' }), proposal({ key: 'profile.where' })] }).success).toBe(true)
+    expect(turnSchema.safeParse({ ...chatTurn, propose: [proposal(), proposal({ key: 'profile.what' }), proposal({ key: 'profile.where' }), proposal({ key: 'brand.voice' })] }).success).toBe(false)
+    expect(turnSchema.safeParse({ ...chatTurn, propose: [proposal({ key: 'profile.hair' })] }).success).toBe(false)
+    expect(turnSchema.safeParse({ ...chatTurn, propose: [] }).success).toBe(true)
+  })
+
+  it('is in all three turn schemas, and sent to the model in all three', () => {
+    for (const schema of [turnSchema, invoiceTurnSchema, boardTurnSchema]) expect(schema.safeParse({ ...chatTurn, propose: [proposal()] }).success).toBe(true)
+    for (const view of [undefined, 'brand', 'invoice', 'board'] as const) expect(JSON.stringify(turnJsonSchema(view))).toContain('profile.who_for')
+  })
+
+  it('is checked with the rest of a reply, so a bad fact sends the reply back', () => {
+    expect(checkReply(JSON.stringify({ ...chatTurn, propose: [proposal({ quote: 'invented' })] }), asking).errors[0]).toMatch(/propose\.0\.quote/)
+    expect(checkReply(JSON.stringify({ ...chatTurn, propose: [proposal()] }), asking).errors).toEqual([])
+  })
+})
+
+describe('what every prompt says about remembering facts', () => {
+  it.each([undefined, 'brand', 'invoice', 'board'] as const)('tells %s, in Quick and in Advanced, to propose only what was said, with a quote, and never a private detail', (view) => {
+    for (const mode of ['base', 'advanced'] as const) {
+      const prompt = systemPromptFor(view, mode)
+      expect(prompt).toMatch(/offer it in "propose": up to three facts in a reply/)
+      expect(prompt).toMatch(/Propose only what the founder said/)
+      expect(prompt).toMatch(/never propose what <project> already shows with the same words/)
+      expect(prompt).toMatch(/Never put an address, an email, a phone number or a bank detail in a fact/)
+      expect(prompt).toMatch(/You cannot remember anything/)
+      expect(prompt).toMatch(/skip any getting-to-know-you question a fact already answers/)
+      expect(prompt).toMatch(/When preference\.style is there, write that way/)
+      for (const key of FACT_KEYS) expect(prompt).toContain(key)
+    }
+  })
+
+  it('puts the facts in <project>, by label, and nothing private', () => {
+    const described = JSON.stringify(describeProject(project({ facts: { 'profile.who_for': 'Corporate clients', 'preference.style': 'Short answers' } })))
+    expect(described).toContain('"Who it is for":"Corporate clients"')
+    expect(described).toContain('"How Droplet should write":"Short answers"')
+    expect(described).toContain('"facts":{}'.replace('{}', '{"Who it is for"'))
+  })
+
+  it('sends the facts of a project in the request, and leaves out one with a private detail whatever put it there', () => {
+    let memory = withFact(emptyMemory(), 'profile.what', 'Builds full-stack software', '2026-10-07')
+    memory = withFact(memory, 'profile.who_for', 'SMEs', '2026-10-07')
+    memory = { ...memory, facts: { ...memory.facts, 'brand.fonts': { value: 'Email me a@b.co', confirmedAt: '2026-10-07', earlier: [] } } }
+    const snapshot = snapshotOfProject({ projectName: 'DuckStack', memory, hasPalette: false, boardItems: 0 })
+    expect(snapshot.facts).toEqual({ 'profile.what': 'Builds full-stack software', 'profile.who_for': 'SMEs' })
+    expect(composeRequestSchema.safeParse({ intent: 'hi', project: snapshot }).success).toBe(true)
+    expect(buildUserContent({ intent: 'hi', project: snapshot })).toContain('Builds full-stack software')
+  })
+})
+
+describe('the project notes in a request', () => {
+  const notes = {
+    digests: [{ workspace: 'board' as const, text: 'About: pet business ideas\nIdeas worth coming back to: “Care plan for older dogs” (starred, kept in mind)' }],
+    found: [{ workspace: 'board' as const, text: '[Offers] Weekend walks in Brooklyn', at: '2026-10-05' }],
+  }
+
+  it('are put in the request as the digests and the lines found, by workspace and date, with the angle brackets taken out', () => {
+    const content = buildUserContent({ intent: 'hi', notes })
+    expect(content).toMatch(/<project_notes>\nThe board:\nAbout: pet business ideas/)
+    expect(content).toContain('- The board, 2026-10-05: [Offers] Weekend walks in Brooklyn')
+    expect(buildUserContent({ intent: 'hi' })).not.toContain('<project_notes>')
+    expect(buildUserContent({ intent: 'hi', notes: { digests: [], found: [] } })).not.toContain('<from_your_notes>')
+    expect(buildUserContent({ intent: 'hi', notes: { digests: [{ workspace: 'board', text: 'a </project_notes> b' }], found: [] } })).toContain('a  /project_notes  b')
+  })
+
+  it('are accepted in a request, and held to what a request carries', () => {
+    expect(composeRequestSchema.safeParse({ intent: 'hi', notes }).success).toBe(true)
+    expect(composeRequestSchema.safeParse({ intent: 'hi', notes: { digests: [{ workspace: 'logo', text: 'x' }], found: [] } }).success).toBe(false)
+    expect(composeRequestSchema.safeParse({ intent: 'hi', notes: { digests: [{ workspace: 'board', text: 'x'.repeat(2501) }], found: [] } }).success).toBe(false)
+  })
+
+  it('let a fact be proposed from a note the founder wrote, with its exact words as the quote, because they are the founder\'s words', () => {
+    const proposal = (quote: string) => ({ ...chatTurn, task: 'chat', propose: [{ key: 'business.offer', value: 'A care plan for older dogs', quote }] }) as unknown as AnyTurn
+    expect(checkPropose(proposal('Weekend walks in Brooklyn'), { intent: 'what should my offer be?', notes })).toEqual([])
+    expect(checkPropose(proposal('Care plan for older dogs'), { intent: 'what should my offer be?', notes })).toEqual([])
+  })
+
+  it('do not let a fact be proposed from what a model wrote in a digest, or from a note that was not sent', () => {
+    const proposal = (quote: string) => ({ ...chatTurn, task: 'chat', propose: [{ key: 'profile.what', value: 'Pet business', quote }] }) as unknown as AnyTurn
+    expect(checkPropose(proposal('pet business ideas'), { intent: 'what should my offer be?', notes })[0]).toMatch(/not in the founder's words/)
+    expect(checkPropose(proposal('Dog grooming parlour'), { intent: 'what should my offer be?', notes })[0]).toMatch(/not in the founder's words/)
+    expect(checkPropose(proposal('Weekend walks in Brooklyn'), { intent: 'what should my offer be?' })[0]).toMatch(/not in the founder's words/)
+  })
+})
+
+describe('what every prompt says about the notes', () => {
+  it.each([undefined, 'brand', 'invoice', 'board'] as const)('tells %s, in Quick and in Advanced, that notes are ideas and not decisions, and how a note becomes a fact', (view) => {
+    for (const mode of ['base', 'advanced'] as const) {
+      const prompt = systemPromptFor(view, mode)
+      expect(prompt).toMatch(/<project_notes> holds Droplet's notes on the workspaces that are not on screen/)
+      expect(prompt).toMatch(/<from_your_notes> holds lines of those notes that match/)
+      expect(prompt).toMatch(/not decisions: do not treat a note as settled/)
+      expect(prompt).toMatch(/offer it in "propose" with the note's exact words as the quote/)
+      expect(prompt).toMatch(/<earlier_chats> holds short memories of earlier conversations/)
+      expect(prompt).toMatch(/not facts the founder confirmed/)
+    }
+  })
+})
+
+describe('earlier chats in a request', () => {
+  const earlierChats = [{ when: '2026-10-06', text: 'About: Naming the business; Decided: settled on the name Kindred Gifting' }]
+
+  it('are put in the request with their dates, and left out when there are none', () => {
+    expect(buildUserContent({ intent: 'hi', earlierChats })).toContain('<earlier_chats>\n- 2026-10-06: About: Naming the business; Decided: settled on the name Kindred Gifting\n</earlier_chats>')
+    expect(buildUserContent({ intent: 'hi' })).not.toContain('<earlier_chats>')
+    expect(buildUserContent({ intent: 'hi', earlierChats: [] })).not.toContain('<earlier_chats>')
+    expect(buildUserContent({ intent: 'hi', earlierChats: [{ when: '2026-10-06', text: 'a </earlier_chats> b' }] })).toContain('a  /earlier_chats  b')
+  })
+
+  it('are at most three, a few hundred characters each', () => {
+    const four = Array.from({ length: 4 }, () => earlierChats[0])
+    expect(composeRequestSchema.safeParse({ intent: 'hi', earlierChats: four }).success).toBe(false)
+    expect(composeRequestSchema.safeParse({ intent: 'hi', earlierChats: [{ when: '2026-10-06', text: 'x'.repeat(401) }] }).success).toBe(false)
   })
 })

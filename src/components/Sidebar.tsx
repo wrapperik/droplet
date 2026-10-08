@@ -15,6 +15,8 @@ type Props = {
   projects: ProjectSummary[]
   currentProjectId: string
   onSelectProject: (id: string) => void
+  // Opens the project brief.
+  onOpenBrief?: () => void
   // The project's conversations, the open one first and then the rest, most recent first.
   chats: ChatEntry[]
   onNewChat: () => void
@@ -40,6 +42,7 @@ export default function Sidebar({
   projects,
   currentProjectId,
   onSelectProject,
+  onOpenBrief,
   chats,
   onNewChat,
   onOpenChat,
@@ -57,7 +60,7 @@ export default function Sidebar({
 
   return (
     <aside className="sidebar" data-collapsed={collapsed} data-open={mobileOpen} aria-label="Sidebar">
-      <ProjectSwitcher projects={projects} currentId={currentProjectId} collapsed={collapsed} onSelect={onSelectProject} />
+      <ProjectSwitcher projects={projects} currentId={currentProjectId} collapsed={collapsed} onSelect={onSelectProject} onOpenBrief={onOpenBrief} />
 
       <hr className="sidebar__divider" />
 

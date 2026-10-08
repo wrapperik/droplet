@@ -209,3 +209,96 @@ describe('what was decided on the board', () => {
     expect(memorySchema.safeParse({ ...memory, idea: { name: 'x'.repeat(81), offer: null, confirmedAt: now } }).success).toBe(false)
   })
 })
+
+describe('facts about the business', () => {
+  const t1 = '2026-10-07T10:00:00.000Z'
+  const t2 = '2026-10-08T10:00:00.000Z'
+
+  it('are remembered with when and which chat they came from, and read back', async () => {
+    const { currentFacts, withFact } = await import('./projectMemory.ts')
+    const memory = withFact(emptyMemory(), 'profile.who_for', 'Corporate clients in Pretoria', t1, 'chat-1')
+    expect(currentFacts(memory)).toEqual({ 'profile.who_for': 'Corporate clients in Pretoria' })
+    expect(memory.facts?.['profile.who_for']).toEqual({ value: 'Corporate clients in Pretoria', confirmedAt: t1, chatId: 'chat-1', earlier: [] })
+    expect(memorySchema.safeParse(memory).success).toBe(true)
+  })
+
+  it('keep the old words when a fact changes, so a change can be seen and taken back, newest first', async () => {
+    const { withFact } = await import('./projectMemory.ts')
+    let memory = withFact(emptyMemory(), 'profile.who_for', 'Any small business', t1)
+    memory = withFact(memory, 'profile.who_for', 'Corporate clients', t2)
+    memory = withFact(memory, 'profile.who_for', 'Offices in Pretoria', '2026-10-09T10:00:00.000Z')
+    expect(memory.facts?.['profile.who_for']?.value).toBe('Offices in Pretoria')
+    expect(memory.facts?.['profile.who_for']?.earlier.map((entry) => entry.value)).toEqual(['Corporate clients', 'Any small business'])
+  })
+
+  it('keep at most five earlier values', async () => {
+    const { withFact } = await import('./projectMemory.ts')
+    let memory = emptyMemory()
+    for (let i = 0; i < 9; i += 1) memory = withFact(memory, 'brand.voice', `Voice ${i}`, t1)
+    expect(memory.facts?.['brand.voice']?.earlier).toHaveLength(5)
+    expect(memory.facts?.['brand.voice']?.earlier[0].value).toBe('Voice 7')
+  })
+
+  it('say whether remembering would be new, an update, or nothing', async () => {
+    const { factStatus, withFact } = await import('./projectMemory.ts')
+    const memory = withFact(emptyMemory(), 'profile.what', 'Builds full-stack software', t1)
+    expect(factStatus(emptyMemory(), 'profile.what', 'Builds full-stack software')).toBe('new')
+    expect(factStatus(memory, 'profile.what', 'Builds full-stack software')).toBe('same')
+    expect(factStatus(memory, 'profile.what', '  Builds full-stack software ')).toBe('same')
+    expect(factStatus(memory, 'profile.what', 'Builds mobile apps')).toBe('updated')
+    expect(factStatus(memory, 'profile.what', '')).toBe('none')
+    expect(factStatus(memory, 'profile.what', 'Email me at a@b.co')).toBe('none')
+  })
+
+  it('do not keep what holds a private detail, or nothing, or what is already so', async () => {
+    const { withFact } = await import('./projectMemory.ts')
+    const memory = withFact(emptyMemory(), 'profile.where', 'Pretoria East', t1)
+    expect(withFact(memory, 'profile.where', 'Call 082 555 1234', t2)).toBe(memory)
+    expect(withFact(memory, 'profile.where', '   ', t2)).toBe(memory)
+    expect(withFact(memory, 'profile.where', 'Pretoria East', t2)).toBe(memory)
+  })
+
+  it('are forgotten with what they had before, and the memory has no facts left when the last goes', async () => {
+    const { forgetFact, withFact } = await import('./projectMemory.ts')
+    let memory = withFact(emptyMemory(), 'profile.where', 'Pretoria', t1)
+    memory = withFact(memory, 'profile.where', 'Pretoria East', t2)
+    memory = withFact(memory, 'brand.fonts', 'Urbanist', t2)
+    memory = forgetFact(memory, 'profile.where')
+    expect(Object.keys(memory.facts ?? {})).toEqual(['brand.fonts'])
+    expect(forgetFact(memory, 'brand.fonts').facts).toBeUndefined()
+  })
+
+  it('show the name and the offer from what the board decided, and put them there when remembered, so the two cannot disagree', async () => {
+    const { currentFacts, forgetFact, withFact } = await import('./projectMemory.ts')
+    let memory = withIdea(emptyMemory(), 'name', 'DuckStack', t1)
+    expect(currentFacts(memory)['business.name']).toBe('DuckStack')
+    memory = withFact(memory, 'business.name', 'Pond Studio', t2)
+    expect(memory.idea?.name).toBe('Pond Studio')
+    expect(memory.business?.details.name).toBe('Pond Studio')
+    expect(currentFacts(memory)['business.name']).toBe('Pond Studio')
+    expect(memory.facts?.['business.name']?.earlier.map((entry) => entry.value)).toEqual(['DuckStack'])
+    memory = withFact(memory, 'business.offer', 'Web apps for small businesses', t2)
+    expect(memory.idea?.offer).toBe('Web apps for small businesses')
+    expect(forgetFact(memory, 'business.offer').idea?.offer).toBeNull()
+    // the board decides the name too, and what it decided is what is read
+    expect(currentFacts(withIdea(memory, 'name', 'Reed', t2))['business.name']).toBe('Reed')
+  })
+
+  it('do not remember a name longer than a name holds', async () => {
+    const { withFact } = await import('./projectMemory.ts')
+    const memory = emptyMemory()
+    expect(withFact(memory, 'business.name', 'x'.repeat(100), t1)).toBe(memory)
+    expect(withFact(memory, 'business.offer', 'x'.repeat(150), t1).idea?.offer).toBe('x'.repeat(150))
+  })
+
+  it('read in a memory from before facts, and keep the switches: both on unless turned off', async () => {
+    const { settingOn, withSetting } = await import('./projectMemory.ts')
+    expect(memorySchema.safeParse({ business: null, clients: [], invoices: [] }).success).toBe(true)
+    expect(settingOn(emptyMemory(), 'recall')).toBe(true)
+    expect(settingOn(emptyMemory(), 'notes')).toBe(true)
+    const off = withSetting(emptyMemory(), 'recall', false)
+    expect(settingOn(off, 'recall')).toBe(false)
+    expect(settingOn(off, 'notes')).toBe(true)
+    expect(memorySchema.safeParse(off).success).toBe(true)
+  })
+})

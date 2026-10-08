@@ -1,4 +1,6 @@
+import { containsPrivateDetail } from '../lib/facts.ts'
 import type { ProjectMemory } from '../lib/memorySave.ts'
+import { currentFacts } from '../lib/projectMemory.ts'
 import type { ProjectSnapshot } from './journey.ts'
 
 // What the composer is told about the project: where the founder is on the journey. Only what a task needs. The business name and the offer
@@ -15,5 +17,7 @@ export function snapshotOfProject(input: { projectName: string; memory: ProjectM
     clients: Math.min(memory.clients.length, 1000),
     invoices: Math.min(memory.invoices.length, 1000),
     boardItems: Math.min(Math.max(input.boardItems, 0), 1000),
+    // The facts the founder confirmed. One with a private detail in it is left out, whatever put it there, since a fact is sent with every request.
+    facts: Object.fromEntries(Object.entries(currentFacts(memory)).filter(([, value]) => !containsPrivateDetail(value))),
   }
 }
