@@ -71,6 +71,8 @@ export const boardSaveSchema = z.object({
   expanded: z.array(z.string()).optional(),
   hidden: z.array(z.string()).optional(),
   savedAt: z.string(),
+  // When the saved board was last exported as a PNG or a PDF, if it has been.
+  exportedAt: z.string().optional(),
 })
 
 export type BoardSave = z.infer<typeof boardSaveSchema>

@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState, type RefObject } from 'react'
 import { CursorIcon, FrameIcon, LayersMinimalisticIcon, NotesIcon, RoutingIcon, StopIcon, TextFieldIcon } from '@solar-icons/react/linear'
 import { BOARD_SPEC, canRedoBoard, canUndoBoard, docOf, isBoardUnsaved, type BoardAction, type BoardState } from '../../lib/boardState.ts'
-import { loadBoard, saveBoard } from '../../lib/boardStore.ts'
+import { loadBoard, markBoardExported, saveBoard } from '../../lib/boardStore.ts'
 import { loadMemory, saveMemory } from '../../lib/memoryStore.ts'
 import type { ProjectMemory } from '../../lib/memorySave.ts'
 import { useLoaded } from '../../hooks/useLoaded.ts'
@@ -102,7 +102,15 @@ export default function BoardWorkspace({ projectId, projectName = 'Droplet', sta
       onSave={save}
       exportButton={
         <BoardExportMenu
-          onExport={(format: BoardFormat) => exportBoard(format, { items: doc.items, projectName })}
+          onExport={async (format: BoardFormat) => {
+            const exported = await exportBoard(format, { items: doc.items, projectName })
+            // A board that was saved and has not changed is marked as exported, so the library says so.
+            if (exported && saved && !unsaved) {
+              const marked = await markBoardExported(projectId)
+              if (marked) setSaved(marked)
+            }
+            return exported
+          }}
           blockedReason={() => exportBlockedReason(doc.items)}
         />
       }

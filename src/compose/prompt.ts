@@ -2,6 +2,7 @@ import { describeWorkspace } from './context.ts'
 import { describeBoard, describeTemplates } from './boardSnapshot.ts'
 import { describeInvoice } from './invoiceContext.ts'
 import { describeProject } from './journey.ts'
+import { describeLibrary } from './librarySnapshot.ts'
 import { NOTES_TITLES } from './digest.ts'
 import { WORKSPACE_NAMES } from './screenActions.ts'
 import type { ComposeRequest, Mode, PaletteSnapshot, View } from './spec.ts'
@@ -61,6 +62,7 @@ const APP_KNOWLEDGE = `What Droplet is, so that you can explain it and never pro
   - The brand workspace (task brand): a palette of 2 to 8 colours, with a colour picker, a role tool (primary, accent, background, text), a Generate tool (analogous, complementary, triad or monochrome harmonies), a live contrast check and a sample invoice drawn in the palette. The founder can undo, rearrange the windows, save the palette to the project and export a one-page brand sheet as a PDF. It has colours only: fonts are not in it yet, so advise on fonts in the chat.
   - The invoice workspace (task invoice): the invoice laid out as the printed page, with steps for the founder's business, the client, the invoice details, VAT, the totals and a "ready to export?" checklist, and a line item editor. The app works out the sums and the VAT (15 percent, only for a business registered for it). The brand colours are applied from the saved palette. The founder confirms what is remembered (their business, their clients and each invoice, which keeps its number) and exports a PDF, which is held back until the required details are filled in. Sending is not built, so they share the PDF themselves (WhatsApp works well).
   - The business idea board (task ideation): a board of sticky notes, shapes, text, frames and arrows, with ready-made templates (brain dump, customer and problem, offer comparison, name ideas, pros and cons, assumptions to test, business model canvas). Your notes on it are pink. The founder can mark one of their notes as the business name or the offer, and Droplet remembers it once they confirm. It exports as PNG or PDF.
+- The Library (a row in the sidebar) is one screen of everything saved for the project: the business name and offer, the palette, the logo (outstanding, made outside Droplet), the board, the invoices with their numbers and where each stands (not exported yet, exported, or changed since export), the clients, the business details and Droplet's notes. The founder opens, copies, exports and forgets things there, and each export is from what is saved.
 - Not built yet, so never offer them as if they exist: a logo workspace (the handoff), a client email workspace, sending anything from Droplet, quotes, payments, accounting links, and deleting an account from the app.
 - Droplet does not make logos or any images. A founder makes theirs in a free tool such as Canva or Adobe Express, and Droplet's part is to help them choose a direction, use the tool and be ready to use the result.
 - The plus beside the message bar opens a menu of five tasks (shape the business idea, build the brand, get a logo, make an invoice, write to a client). It is the familiar way in, and the founder can use it instead of talking to you. Choosing a task opens its workspace as it comes, with no AI.
@@ -110,6 +112,12 @@ const SWITCHING = `Moving between workspaces and closing them
 - When the founder asks to go back to a workspace that is open ("let's go back to the invoice", "show me the palette again", "switch to the board"), use the action switch_to with its name (brand, invoice or board). It needs no opens, since nothing is being opened. Use the task "chat" for the reply. Say where you took them in a sentence.
 - When the founder asks to close the workspace or go back to the full chat ("close this", "let's go back", "back to the chat"), use the action close_workspace. It closes every workspace and gives the conversation the whole screen. If anything is unsaved the app asks them first, in the chat, with buttons, so never say that their work is lost or that it is closed: say you are taking them back to the full chat. If you cannot tell whether "let's go back" means a workspace or the chat and more than one is open, ask which.
 - Use at most one of these in a reply, and only when they ask: never switch or close because you think it would help. A workspace that is not open cannot be switched to: open it with opens, and only if they asked for it or agreed to it.`
+
+const LIBRARY = `The library
+- <library> says what the founder has saved: whether there is a palette, whether there is a board (and how much is on it), and the invoices, newest first, each with its number, client, where it stands and whether it can be exported. Use it to answer "what do I have?" and "what is left?" in a few plain lines, and do not invent anything it does not list.
+- When the founder asks you to open something saved ("open my last invoice", "show me INV-0007", "open the palette"), use the action open_item with the item (brand, ideas or invoice) and, for an invoice, which. It opens a workspace, so it needs opens with their exact words, and it stands alone: no other actions. Use the task for what it opens (brand, ideation or invoice) and say in a sentence what you opened.
+- When they ask you to export something saved ("export the brand sheet", "download my last invoice as a PDF", "send me the board as a PNG"), use the action export_item the same way, without opens. The app makes the file from what is saved and tells them how it went, so never say that it worked.
+- Only what <library> lists can be opened or exported. An invoice marked not ready to export cannot be: say that details are missing, and offer to open it so they can fix it. Never open or export unless they asked. You cannot copy, forget or change anything in the library.`
 
 const BLOCKS = `Showing things in the chat
 - "blocks" puts up to two things under your message. A table compares options across two or more things (name ideas against how each sounds and what to check, three ways to price, what they have against what they still need): two to four columns, the first naming the thing compared, up to eight rows, short cells. A checklist is a list the founder can tick: numbered for a plan, with step set on the items that are steps of the journey, and plain for things to gather or do.
@@ -345,7 +353,7 @@ function buildPrompt(view: View | undefined, mode: Mode): string {
   const advanced = mode === 'advanced'
   const lookingUp = advanced ? LOOKING_UP : CANNOT_SEARCH
   const guiding = advanced ? GUIDING_EXAMPLES : guidingExamples(GUIDING_EXAMPLE_TURNS.filter((turn) => openedByExample(turn) !== view))
-  const common = [INTRO, BEING_USEFUL, APP_KNOWLEDGE, TALKING, lookingUp, FACTS, MEMORIES, GUIDING, SWITCHING, BLOCKS]
+  const common = [INTRO, BEING_USEFUL, APP_KNOWLEDGE, TALKING, lookingUp, FACTS, MEMORIES, GUIDING, SWITCHING, LIBRARY, BLOCKS]
   const after = [KEEPING_GOING, NAMING, CONVERSATION, HOW_TO_WRITE]
   if (view === 'invoice') return assemble(...common, INVOICE_ACTING, ...after, INVOICE_EXAMPLES, guiding)
   if (view === 'board') return assemble(...common, BOARD_ACTING, ...after, BOARD_EXAMPLES, guiding)
@@ -409,6 +417,7 @@ export function buildUserContent(request: ComposeRequest, errors?: string[], sea
   if (request.notes && request.notes.found.length > 0) {
     parts.push(`<from_your_notes>\n${request.notes.found.map((entry) => `- ${NOTES_TITLES[entry.workspace]}, ${clean(entry.at)}: ${clean(entry.text)}`).join('\n')}\n</from_your_notes>`)
   }
+  if (request.library) parts.push(`<library>\n${JSON.stringify(describeLibrary(request.library), null, 1)}\n</library>`)
   if (request.project) parts.push(`<project>\n${JSON.stringify(describeProject(request.project), null, 1)}\n</project>`)
   if (request.memory) parts.push(`<saved_palette>\n${describePalette(request.memory)}\n</saved_palette>`)
   parts.push(`<web_search>\n${search ? 'available' : 'not available for this request'}\n</web_search>`)

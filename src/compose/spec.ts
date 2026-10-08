@@ -5,6 +5,7 @@ import { invoiceSnapshotSchema, invoiceTurnSchema, type InvoiceTurn } from './in
 import { groundingSchema } from './grounding.ts'
 import { NOTE_WORKSPACES } from './digest.ts'
 import { projectSnapshotSchema } from './journey.ts'
+import { librarySnapshotSchema } from './librarySnapshot.ts'
 import { isScreenAction, SCREEN_WORKSPACES, screenActionSchemas, type ScreenAction } from './screenActions.ts'
 import { TASKS, type Task } from './taskNames.ts'
 
@@ -213,6 +214,8 @@ export const composeRequestSchema = z.object({
   project: projectSnapshotSchema.optional(),
   // Short memories of earlier chats, at most three, picked by the app: what was said before, with the dates. Not facts the founder confirmed.
   earlierChats: z.array(z.object({ when: z.string().max(20), text: z.string().max(400) })).max(3).optional(),
+  // What the library holds, so the composer can open or export one of its things when asked: counts, names and statuses, nothing more.
+  library: librarySnapshotSchema.optional(),
   // Droplet's notes on the project, for the workspaces that are not on screen: their digests, and lines of the index that match words in the request.
   // Ideas the founder jotted down, not decisions. The digests are written in the background by Quick; the lines are the founder's own words.
   notes: z

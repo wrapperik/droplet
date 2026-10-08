@@ -5,7 +5,7 @@ import { replaceableIds } from '../lib/harmony.ts'
 import { resolveRoles, type ColourRole } from '../lib/palette.ts'
 import { exportBrandSheet } from '../lib/exportSheet.ts'
 import { useLoaded } from '../hooks/useLoaded.ts'
-import { loadPalette, savePalette, type PaletteSave } from '../lib/projectStore.ts'
+import { loadPalette, markPaletteExported, savePalette, type PaletteSave } from '../lib/projectStore.ts'
 import {
   MAX_BLOCKS,
   MIN_BLOCKS,
@@ -69,7 +69,18 @@ export default function PaletteWorkspace({ projectId, projectName, state, dispat
     if (result) setSaved(result)
   }
 
-  const exportSheet = useCallback(() => exportBrandSheet(blocks, projectName), [blocks, projectName])
+  // A palette that was saved and has not changed is marked as exported, so the library says so. One with unsaved changes is not: what was exported is
+  // not what is saved.
+  const exportSheet = useCallback(async () => {
+    const exported = await exportBrandSheet(blocks, projectName)
+    if (exported && saved && !isUnsaved(doc, saved)) {
+      const marked = await markPaletteExported(projectId)
+      if (marked) setSaved(marked)
+    }
+    return exported
+    // doc is read for what is saved only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blocks, projectName, projectId, saved, state])
 
   // The tools, each a segment of the toolbar. The reason is shown from the tool's icon.
   const tools: Record<string, ShelfTool> = useMemo(

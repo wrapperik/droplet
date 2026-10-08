@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChatRoundAddIcon, ClockCircleIcon, PanelLeftCloseIcon, PanelLeftOpenIcon } from '@solar-icons/react/linear'
+import { ChatRoundAddIcon, ClockCircleIcon, FolderWithFilesIcon, PanelLeftCloseIcon, PanelLeftOpenIcon } from '@solar-icons/react/linear'
 import type { ProjectSummary } from '../lib/mockProjects.ts'
 import AccountMenu from './AccountMenu.tsx'
 import ChatHistoryDialog from './ChatHistoryDialog.tsx'
@@ -17,6 +17,9 @@ type Props = {
   onSelectProject: (id: string) => void
   // Opens the project brief.
   onOpenBrief?: () => void
+  // Opens the library, everything made for the project. `libraryOpen` marks it while it is on screen.
+  onOpenLibrary?: () => void
+  libraryOpen?: boolean
   // The project's conversations, the open one first and then the rest, most recent first.
   chats: ChatEntry[]
   onNewChat: () => void
@@ -43,6 +46,8 @@ export default function Sidebar({
   currentProjectId,
   onSelectProject,
   onOpenBrief,
+  onOpenLibrary,
+  libraryOpen = false,
   chats,
   onNewChat,
   onOpenChat,
@@ -68,6 +73,18 @@ export default function Sidebar({
         <button type="button" className="nav__item" disabled={busy} aria-label={collapsed ? 'New chat' : undefined} title={collapsed ? 'New chat' : undefined} onClick={onNewChat}>
           <ChatRoundAddIcon size={22} aria-hidden="true" />
           <span className="nav__label">New chat</span>
+        </button>
+
+        <button
+          type="button"
+          className="nav__item"
+          aria-current={libraryOpen ? 'page' : undefined}
+          aria-label={collapsed ? 'Library' : undefined}
+          title={collapsed ? 'Library' : undefined}
+          onClick={onOpenLibrary}
+        >
+          <FolderWithFilesIcon size={22} aria-hidden="true" />
+          <span className="nav__label">Library</span>
         </button>
 
         {collapsed ? (

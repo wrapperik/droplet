@@ -7,6 +7,7 @@ import type { BoardHandle } from '../components/board/BoardCanvas.tsx'
 import BoardWorkspace from '../components/board/BoardWorkspace.tsx'
 import ChatThread, { type ThreadAction, type ThreadMessage } from '../components/ChatThread.tsx'
 import IntentBar from '../components/IntentBar.tsx'
+import Library from '../components/Library.tsx'
 import InvoiceWorkspace from '../components/invoice/InvoiceWorkspace.tsx'
 import PaletteWorkspace from '../components/PaletteWorkspace.tsx'
 import RippleGlow from '../components/RippleGlow.tsx'
@@ -48,7 +49,10 @@ import { loadPalette, savePalette } from '../lib/projectStore.ts'
 import { shownWorkspace, type WorkspaceView } from '../lib/shownWorkspace.ts'
 import type { TaskId } from '../lib/tasks.ts'
 import { todayIso } from '../lib/invoice.ts'
-import { loadInvoice, openInvoiceForProject } from '../lib/invoiceStore.ts'
+import { duplicateInvoice, loadInvoice, openInvoiceForProject, openNewInvoice, openSavedInvoice } from '../lib/invoiceStore.ts'
+import { exportLibraryItem, type ExportTarget, type OpenTarget } from '../lib/libraryActions.ts'
+import { findInvoice, libraryOf, type InvoiceItem } from '../lib/library.ts'
+import { snapshotOfLibrary } from '../compose/librarySnapshot.ts'
 import { loadMemory, saveMemory } from '../lib/memoryStore.ts'
 import { currentFacts, factStatus, forgetFact, settingOn, withFact } from '../lib/projectMemory.ts'
 import { MAX_CHAT_MESSAGES } from '../compose/background.ts'
@@ -104,6 +108,10 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   const [board, setBoard] = useState<BoardState | null>(null)
   // Which workspace is on screen. Each keeps its own state while another is shown.
   const [view, setView] = useState<WorkspaceView>('brand')
+  // The library is shown in place of the workspaces, which keep their state while it is. Opening a workspace from it, or by asking, closes it.
+  const [libraryOpen, setLibraryOpen] = useState(false)
+  // Bumped when something outside the library changed what it lists, so it reads again.
+  const [libraryVersion, setLibraryVersion] = useState(0)
   const [composing, setComposing] = useState(false)
   // Where the founder's Advanced allowance stands, as the server last said.
   const [allowance, setAllowance] = useAdvancedAllowance()
@@ -197,6 +205,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   // What the board can be asked of, such as where the founder is looking, so the composer's notes go there.
   const boardHandleRef = useRef<BoardHandle | null>(null)
   const viewRef = useRef<WorkspaceView>('brand')
+  const libraryOpenRef = useRef(false)
   const threadRef = useRef<ThreadMessage[]>([])
   // Facts the founder pressed Not now on, by chat and key: not offered again in that chat.
   const dismissedFactsRef = useRef(new Set<string>())
@@ -211,6 +220,8 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   const arrivalRef = useRef<Arrival | null>(null)
   // The leave check, for a reply that closes the workspace. It is defined after the request that calls it.
   const leaveWorkspacesRef = useRef<() => Promise<void>>(async () => undefined)
+  // Opens something from the library, for a reply that asks to. It is defined after the request that calls it.
+  const openFromLibraryRef = useRef<(target: OpenTarget) => Promise<'done' | 'unsaved'>>(async () => 'done')
   // Where each component is drawn and how tall, reported by the grid, for moves relative to another component.
   const drawnRef = useRef<{ layout: Placement[]; heights: Heights }>({ layout: [], heights: {} })
   useEffect(() => {
@@ -218,8 +229,10 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
     invoiceRef.current = invoice
     boardRef.current = board
     viewRef.current = view
+    libraryOpenRef.current = libraryOpen
     threadRef.current = thread
     leaveWorkspacesRef.current = leaveWorkspaces
+    openFromLibraryRef.current = openFromLibrary
     chatIdRef.current = chatId
   })
 
@@ -285,8 +298,9 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   useEffect(() => onDocumentSaved((projectId, kind) => void keepNotes(projectId, projectName(projectId), kind)), [projectName])
 
   // Once a workspace exists the conversation moves to a side panel, beside it.
-  const docked = workspace !== null || invoice !== null || board !== null
-  const shown = shownWorkspace({ brand: workspace !== null, invoice: invoice !== null, board: board !== null }, view)
+  const docked = workspace !== null || invoice !== null || board !== null || libraryOpen
+  // The workspace that is on screen, which is none while the library is.
+  const shown = libraryOpen ? null : shownWorkspace({ brand: workspace !== null, invoice: invoice !== null, board: board !== null }, view)
 
   // The project is read when Home opens, when another is chosen, and when the workspace on screen changes, so a plan is ticked from what is saved.
   useEffect(() => {
@@ -311,6 +325,13 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   const dispatchBoard = useCallback((action: BoardAction) => setBoard((current) => (current ? reduceBoard(current, action) : current)), [])
   const dispatchInvoice = useCallback((action: InvoiceAction) => setInvoice((current) => (current ? reduceInvoice(current, action) : current)), [])
 
+  // Puts a workspace on screen. The library, if it is shown, gives way to it.
+  const changeView = useCallback((next: WorkspaceView) => {
+    libraryOpenRef.current = false
+    setLibraryOpen(false)
+    setView(next)
+  }, [])
+
   // Whether the board has been saved, for what the composer is told.
   const boardSaveStatus = async (state: BoardState) => {
     const saved = await loadBoard(currentProjectId)
@@ -321,7 +342,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   const workspaceOpened = useCallback(() => setCollapsed(true), [])
 
   // The workspace the composer works on is the one on screen: the palette, the invoice or the board.
-  const onScreen = (): View | undefined => shownWorkspace({ brand: workspaceRef.current !== null, invoice: invoiceRef.current !== null, board: boardRef.current !== null }, viewRef.current) ?? undefined
+  const onScreen = (): View | undefined => libraryOpenRef.current ? undefined : shownWorkspace({ brand: workspaceRef.current !== null, invoice: invoiceRef.current !== null, board: boardRef.current !== null }, viewRef.current) ?? undefined
 
   // The workspaces that are open, one of which is on screen, so the composer can switch to one by name.
   const openNow = (): View[] => [...(workspaceRef.current ? (['brand'] as const) : []), ...(invoiceRef.current ? (['invoice'] as const) : []), ...(boardRef.current ? (['board'] as const) : [])]
@@ -350,10 +371,10 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
       }
       viewRef.current = target
       spaceRef.current = target === 'board' ? 'ideation' : target
-      setView(target)
+      changeView(target)
       workspaceOpened()
     },
-    [currentProjectId, workspaceOpened],
+    [changeView, currentProjectId, workspaceOpened],
   )
 
   // One question to the composer and what comes of it. If the composer says the request belongs to the other workspace, that one
@@ -372,6 +393,8 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
       // Short memories of earlier chats, if the founder has not switched that off: the ones that match the request, at most three.
       const earlier = settingOn(memory, 'recall') ? selectEarlierChats(await loadChats(currentProjectId), { currentChatId: chatIdRef.current, task: view ? TASK_OF_VIEW[view] : undefined, intent: text }) : []
       // Droplet's notes on the other workspaces, if the founder has not switched them off: their digests, and lines that match what was asked.
+      // What is saved, for opening or exporting one of its things when asked: counts, names and statuses only.
+      const libraryData = libraryOf({ palette: saved, board: savedBoard, memory, notes: {} })
       const projectNotes = settingOn(memory, 'notes') ? notesForRequest(await loadNotes(currentProjectId), { onScreen: view, intent: text }) : null
       const result = await requestComposition({
         intent: text,
@@ -391,6 +414,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         ...(saved ? { memory: paletteSnapshotOf(saved.blocks) } : {}),
         ...(earlier.length > 0 ? { earlierChats: earlier } : {}),
         ...(projectNotes ? { notes: projectNotes } : {}),
+        library: snapshotOfLibrary(libraryData),
         project,
       })
 
@@ -489,7 +513,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
           arrivalRef.current = prepareArrival(focusOf(applied.changes))
           setWorkspace(applied.state)
           // The palette changed, so it is the one to look at.
-          setView('brand')
+          changeView('brand')
           spaceRef.current = 'brand'
           if (applied.opened) workspaceOpened()
         }
@@ -509,7 +533,26 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         if (isOpen && screen.workspace !== onScreen()) {
           viewRef.current = screen.workspace
           spaceRef.current = screen.workspace === 'board' ? 'ideation' : screen.workspace
-          setView(screen.workspace)
+          changeView(screen.workspace)
+        }
+      }
+      // Something saved is opened or exported when the founder asked. The app does it from what is saved, and says how it went in its own words, never
+      // from the model's.
+      if (screen?.type === 'open_item' || screen?.type === 'export_item') {
+        const invoices = libraryData.items.filter((item): item is InvoiceItem => item.section === 'invoices')
+        const invoiceFound = screen.item === 'invoice' ? findInvoice(invoices, screen.which) : null
+        if (screen.type === 'open_item') {
+          const target: OpenTarget | null = screen.item === 'brand' ? { kind: 'brand' } : screen.item === 'ideas' ? { kind: 'board' } : invoiceFound ? { kind: 'invoice', id: invoiceFound.invoiceId } : null
+          if (target && (await openFromLibraryRef.current(target)) === 'unsaved') {
+            notes.push('The invoice you have open has changes that are not saved, so I did not replace it. Save it or leave it, then ask again.')
+          }
+        } else {
+          const target: ExportTarget | null = screen.item === 'brand' ? { kind: 'brand' } : screen.item === 'ideas' ? { kind: 'ideas', format: screen.format ?? 'pdf' } : invoiceFound ? { kind: 'invoice', id: invoiceFound.invoiceId } : null
+          if (target) {
+            const outcome = await exportLibraryItem(currentProjectId, projectName(currentProjectId), target)
+            notes.push(outcome.ok ? outcome.text : `I could not export it. ${outcome.reason}`)
+            setLibraryVersion((count) => count + 1)
+          }
         }
       }
       // An answer that searched the web is shown as the model gave it, with nothing of the app's mixed in (Google's terms), so the app's own
@@ -598,7 +641,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
       spaceRef.current = id
       // What was saved is read before the workspace opens. If the same task was chosen twice meanwhile, the first to arrive is the one opened.
       if (id === 'brand') {
-        setView('brand')
+        changeView('brand')
         if (workspaceRef.current) return
         const saved = await loadPalette(currentProjectId)
         if (workspaceRef.current) return
@@ -607,7 +650,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         setWorkspace(opened)
         workspaceOpened()
       } else if (id === 'invoice') {
-        setView('invoice')
+        changeView('invoice')
         if (invoiceRef.current) return
         const opened = await openInvoiceForProject(currentProjectId)
         if (invoiceRef.current) return
@@ -615,7 +658,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         setInvoice(opened)
         workspaceOpened()
       } else if (id === 'ideation') {
-        setView('board')
+        changeView('board')
         if (boardRef.current) return
         const opened = await openBoardForProject(currentProjectId)
         if (boardRef.current) return
@@ -624,7 +667,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         workspaceOpened()
       }
     },
-    [currentProjectId, workspaceOpened],
+    [changeView, currentProjectId, workspaceOpened],
   )
 
   // How Undo this ended, shown on the receipt. It can be pressed once.
@@ -672,7 +715,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
       if (switching) {
         viewRef.current = live.workspace
         spaceRef.current = live.workspace === 'board' ? 'ideation' : live.workspace
-        setView(live.workspace)
+        changeView(live.workspace)
       }
       // Once it is on screen, if it had to be brought there.
       window.setTimeout(() => revealTargets(live.targets), switching ? 120 : 0)
@@ -844,6 +887,8 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
     setWorkspace(null)
     setInvoice(null)
     setBoard(null)
+    libraryOpenRef.current = false
+    setLibraryOpen(false)
     setView('brand')
     setCollapsed(false)
   }, [])
@@ -988,6 +1033,79 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
     [beginChat, currentProjectId],
   )
 
+  // ---- The library ----
+
+  // Shows the library, which takes the working screen while the conversation sits beside it.
+  const openLibrary = useCallback(() => {
+    libraryOpenRef.current = true
+    setLibraryVersion((count) => count + 1)
+    setLibraryOpen(true)
+    workspaceOpened()
+  }, [workspaceOpened])
+
+  // Back from the library: to the workspace that was shown, or to the full conversation if none is open.
+  const closeLibrary = useCallback(() => {
+    libraryOpenRef.current = false
+    setLibraryOpen(false)
+    if (workspaceRef.current === null && invoiceRef.current === null && boardRef.current === null) setCollapsed(false)
+  }, [])
+
+  // The invoice workspace takes a replacement: a saved invoice, a copy of one or a new one. The arrangement stays as it is now.
+  const arrangementNow = async () => {
+    const present = invoiceRef.current
+    return present ? invoiceDocOf(present) : await loadInvoice(currentProjectId)
+  }
+
+  // Does what a library item's Open asks for. Replacing the invoice that is open loses its unsaved changes, so that says so first and goes
+  // ahead only when the founder has agreed.
+  const openFromLibrary = useCallback(
+    async (target: OpenTarget, options?: { confirmed?: boolean }): Promise<'done' | 'unsaved'> => {
+      if (target.kind === 'brand') {
+        await openWorkspaceFor('brand')
+        return 'done'
+      }
+      if (target.kind === 'board') {
+        await openWorkspaceFor('board')
+        return 'done'
+      }
+      const present = invoiceRef.current
+      const wanted = target.kind === 'invoice' ? target.id : null
+      // The same invoice that is already open is only shown.
+      if (present && wanted !== null && invoiceDocOf(present).invoiceId === wanted) {
+        await openWorkspaceFor('invoice')
+        return 'done'
+      }
+      if (present && target.kind !== 'business_details' && !options?.confirmed) {
+        const [memory, arrangement] = await Promise.all([loadMemory(currentProjectId), loadInvoice(currentProjectId)])
+        if (invoiceHasChanges(present, memory, arrangement)) return 'unsaved'
+      }
+      const arrangement = await arrangementNow()
+      let next: InvoiceState | null = null
+      if (target.kind === 'invoice') next = await openSavedInvoice(currentProjectId, target.id, arrangement)
+      else if (target.kind === 'copy_invoice') next = await duplicateInvoice(currentProjectId, target.id, arrangement)
+      else if (target.kind === 'new_invoice') {
+        next = await openNewInvoice(currentProjectId, arrangement)
+        const client = target.clientId ? (await loadMemory(currentProjectId)).clients.find((saved) => saved.id === target.clientId)?.client : undefined
+        if (next && client) next = reduceInvoice(next, { type: 'set_client', patch: client })
+      } else if (!present) next = await openInvoiceForProject(currentProjectId)
+      if (next) {
+        invoiceRef.current = next
+        setInvoice(next)
+      }
+      if (!invoiceRef.current) return 'done'
+      // Your business details: the invoice with that step open, ready to edit.
+      if (target.kind === 'business_details') {
+        invoiceRef.current = reduceInvoice(invoiceRef.current, { type: 'batch', actions: [{ type: 'show', component: 'business' }, { type: 'expand_tool', id: 'business' }] })
+        setInvoice(invoiceRef.current)
+      }
+      await openWorkspaceFor('invoice')
+      return 'done'
+    },
+    // arrangementNow reads refs and the project.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentProjectId, openWorkspaceFor],
+  )
+
   // The tip that offers the workspace menu is for the very start, before the founder has said anything.
   const bar = (isDocked: boolean) => (
     <IntentBar docked={isDocked} busy={composing} showTip={!hasFounderMessage(thread)} allowance={allowance} onSubmitIntent={submitIntent} onChooseTask={chooseTask} />
@@ -1003,6 +1121,8 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         currentProjectId={currentProjectId}
         onSelectProject={selectProject}
         onOpenBrief={() => setBriefOpen(true)}
+        onOpenLibrary={libraryOpen ? closeLibrary : openLibrary}
+        libraryOpen={libraryOpen}
         chats={chatList}
         onNewChat={() => {
           newChat()
@@ -1068,6 +1188,19 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
           )}
           {/* One workspace at a time: the one on screen leaves before the other arrives, so their toolbars and header controls never overlap. */}
           <AnimatePresence mode="wait">
+            {libraryOpen && (
+              <motion.div key="library" className="home__component" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.2 } }}>
+                <Library
+                  projectId={currentProjectId}
+                  projectName={projectName(currentProjectId)}
+                  version={libraryVersion}
+                  onClose={closeLibrary}
+                  onOpen={openFromLibrary}
+                  onAsk={(text) => void submitIntent(text)}
+                  onChanged={() => void refreshProject()}
+                />
+              </motion.div>
+            )}
             {workspace && shown === 'brand' && (
               <motion.div
                 key="palette"

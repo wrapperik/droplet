@@ -50,7 +50,8 @@ describe('the board actions', () => {
   it('cannot delete, edit, recolour, move, resize, save or export, and the schema sent to the model has no way to', () => {
     for (const bad of ['delete_note', 'edit_note', 'set_colour', 'move_note', 'resize_note', 'save', 'export_board', 'set_text', 'clear']) expect(ok({ type: bad, note: 'n1', text: 'x' }), bad).toBe(false)
     const schema = JSON.stringify(turnJsonSchema('board'))
-    for (const word of ['delete', 'edit', 'recolour', 'save', 'export', 'set_palette', 'set_colour', 'add_line']) expect(schema).not.toContain(`"${word}`)
+    // export_item is the library's: it exports what is saved, never the board on screen.
+    for (const word of ['delete', 'edit', 'recolour', 'save', 'export_board', 'export_brand_sheet', 'set_palette', 'set_colour', 'add_line']) expect(schema).not.toContain(`"${word}`)
     for (const place of ['"x"', '"y"', '"w"', '"h"', '"colour"', '"position"']) expect(schema).not.toContain(place)
     for (const word of ['add_note', 'fill_prompt', 'cluster', 'add_template', 'connect']) expect(schema).toContain(word)
   })

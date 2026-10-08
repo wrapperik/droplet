@@ -89,6 +89,14 @@
   background: var(--overlay-06);
 }
 
+.nav__item[aria-current='page'] {
+  background: var(--accent-tint-soft);
+}
+
+.nav__item[aria-current='page'] svg {
+  color: var(--accent);
+}
+
 .nav__item:focus-visible {
   outline-offset: -2px;
 }

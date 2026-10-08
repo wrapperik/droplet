@@ -1,10 +1,13 @@
 import { z } from 'zod'
 
-// Actions on the screen rather than on a workspace: go back to one that is already open, or close the workspaces and return to the full chat. They
-// fit every workspace, like undo and redo, and every turn schema carries them. They are applied by Home after the workspace's own actions. A
+// Actions on the screen rather than on a workspace: go back to one that is already open, close the workspaces and return to the full chat, or open or
+// export something the library holds. They fit every workspace, like undo and redo, and every turn schema carries them. They are applied by Home after the workspace's own actions. A
 // workspace that is not open is never opened by an action: that is `opens`, which needs the founder's own words (see conversationFields.ts).
 
 export const SCREEN_WORKSPACES = ['brand', 'invoice', 'board'] as const
+// What the library holds that can be opened or exported.
+export const LIBRARY_ITEMS = ['brand', 'ideas', 'invoice'] as const
+export type LibraryItemKind = (typeof LIBRARY_ITEMS)[number]
 export type ScreenWorkspace = (typeof SCREEN_WORKSPACES)[number]
 
 export const screenActionSchemas = [
@@ -13,11 +16,22 @@ export const screenActionSchemas = [
     workspace: z.enum(SCREEN_WORKSPACES).describe('A workspace that is already open, listed in <open_workspaces>, and not the one on screen: brand (the palette), invoice or board (the business idea board).'),
   }),
   z.object({ type: z.enum(['close_workspace']) }),
+  z.object({
+    type: z.enum(['open_item']),
+    item: z.enum(LIBRARY_ITEMS).describe('What to open from the library: the saved palette (brand), the saved board (ideas) or a saved invoice.'),
+    which: z.string().max(60).optional().describe('For an invoice only: which one, as the founder said it, such as "last", "INV-0007" or the client\'s name. Leave out for the most recent.'),
+  }),
+  z.object({
+    type: z.enum(['export_item']),
+    item: z.enum(LIBRARY_ITEMS).describe('What to export from the library: the saved palette as a brand sheet (brand), the saved board (ideas) or a saved invoice as a PDF.'),
+    which: z.string().max(60).optional().describe('For an invoice only: which one, as the founder said it. Leave out for the most recent.'),
+    format: z.enum(['png', 'pdf']).optional().describe('For the board only: png or pdf. pdf if the founder did not say.'),
+  }),
 ] as const
 
 export type ScreenAction = z.infer<(typeof screenActionSchemas)[number]>
 
-export const SCREEN_ACTION_TYPES: string[] = ['switch_to', 'close_workspace']
+export const SCREEN_ACTION_TYPES: string[] = ['switch_to', 'close_workspace', 'open_item', 'export_item']
 export const isScreenAction = (action: { type: string }): action is ScreenAction => SCREEN_ACTION_TYPES.includes(action.type)
 
 // What a workspace is called to the founder.

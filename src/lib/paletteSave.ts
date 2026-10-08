@@ -32,6 +32,8 @@ export const paletteSaveSchema = z.object({
   // Components taken off the screen, by item id.
   hidden: z.array(z.string()).optional(),
   savedAt: z.string(),
+  // When the saved palette was last exported as a brand sheet, if it has been.
+  exportedAt: z.string().optional(),
 })
 
 export type PaletteSave = z.infer<typeof paletteSaveSchema>

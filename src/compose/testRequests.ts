@@ -46,6 +46,17 @@ const open = openSnapshot()
 const invoice = openInvoiceSnapshot()
 const board = openBoardSnapshot()
 const templateBoard = templateBoardSnapshot()
+// What the library holds, for the requests about it: a saved palette and board, and three invoices, the oldest of which is not ready to export.
+const libraryWithInvoices = {
+  brand: true,
+  ideas: { notes: 6, frames: 2 },
+  invoices: [
+    { number: 'INV-0003', client: 'Pretoria Print Works', status: 'Not exported yet', ready: true },
+    { number: 'INV-0002', client: 'Bloem Bakery', status: 'Exported 4 Oct', ready: true },
+    { number: 'INV-0001', client: 'Bloem Bakery', status: 'Not exported yet', ready: false },
+  ],
+}
+const emptyLibrary = { brand: false, ideas: null, invoices: [] }
 const withHistory = (history: ComposeRequest['history']) => ({ history })
 
 // A project with a name and nothing else yet, as it is early on, and one that has the name and a saved palette.
@@ -385,6 +396,36 @@ export const TEST_REQUESTS: TestRequest[] = [
     why: 'Asked to go to a workspace that is not open: it cannot switch to it, so it opens it with the founder\'s words quoted, or asks, and does not switch',
     request: { intent: 'Take me to the invoice', workspace: open, view: 'brand', open: ['brand'], project: brandedProject },
     expect: { task: ['chat', 'invoice'], acts: false },
+  },
+  {
+    id: 'library-open-invoice',
+    why: 'Asked to open a saved invoice: open_item with the invoice and the founder\'s words quoted in opens, nothing else, and no claim that it is open before the app has done it',
+    request: { intent: 'Open my last invoice', project: brandedProject, library: libraryWithInvoices },
+    expect: { task: ['invoice', 'chat'], acts: true, opens: true, firstAction: ['open_item'] },
+  },
+  {
+    id: 'library-export-brand',
+    why: 'Asked to export the brand sheet when a palette is saved: export_item for the brand, with no opens, and no claim that the file was made',
+    request: { intent: 'Export my brand sheet as a PDF', project: brandedProject, library: libraryWithInvoices },
+    expect: { task: ['brand', 'chat'], acts: true, opens: false, firstAction: ['export_item'] },
+  },
+  {
+    id: 'library-export-not-ready',
+    why: 'Asked to export an invoice that is not ready: it must not export it, and says details are missing and offers to open it',
+    request: { intent: 'Export invoice INV-0001 as a PDF', project: brandedProject, library: libraryWithInvoices },
+    expect: { task: ['invoice', 'chat'], acts: false },
+  },
+  {
+    id: 'library-nothing-saved',
+    why: 'Asked to open an invoice when none is saved: it must not open or export anything, say so, and offer to make one',
+    request: { intent: 'Open my last invoice', project: namedProject, library: emptyLibrary },
+    expect: { task: ['invoice', 'chat'], acts: false },
+  },
+  {
+    id: 'library-what-have-i-got',
+    why: 'Asked what is saved: a short account from the library, no actions, drawn only from what it lists',
+    request: { intent: 'What have I got saved so far?', project: brandedProject, library: libraryWithInvoices },
+    expect: { task: 'chat', acts: false, opens: false, mentions: ['INV-0003'] },
   },
   {
     id: 'invoice-logo-first',

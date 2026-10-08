@@ -43,17 +43,17 @@ export async function openInvoiceForProject(projectId: string, today: string = t
 }
 
 // Another invoice in the same workspace, keeping how it is arranged right now.
-export async function openNewInvoice(projectId: string, arrangement: ArrangementSave, today: string = todayIso()): Promise<InvoiceState> {
+export async function openNewInvoice(projectId: string, arrangement: ArrangementSave | null, today: string = todayIso()): Promise<InvoiceState> {
   return openInvoiceWorkspace(newInvoiceContent(await loadMemory(projectId), today), arrangement, newId())
 }
 
-export async function openSavedInvoice(projectId: string, invoiceId: string, arrangement: ArrangementSave): Promise<InvoiceState | null> {
+export async function openSavedInvoice(projectId: string, invoiceId: string, arrangement: ArrangementSave | null): Promise<InvoiceState | null> {
   const invoice = savedInvoice(await loadMemory(projectId), invoiceId)
   return invoice ? openInvoiceWorkspace(invoice.content, arrangement, invoice.id) : null
 }
 
 // A new invoice made from a saved one, with the next number and today's date.
-export async function duplicateInvoice(projectId: string, invoiceId: string, arrangement: ArrangementSave, today: string = todayIso()): Promise<InvoiceState | null> {
+export async function duplicateInvoice(projectId: string, invoiceId: string, arrangement: ArrangementSave | null, today: string = todayIso()): Promise<InvoiceState | null> {
   const memory = await loadMemory(projectId)
   const invoice = savedInvoice(memory, invoiceId)
   return invoice ? openInvoiceWorkspace(duplicateContent(memory, invoice.content, today), arrangement, newId()) : null

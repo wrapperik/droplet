@@ -9,7 +9,8 @@ import { stateOfSnapshot } from './snapshot.ts'
 import { amountsIn, applyInvoiceTurnActions, priceWasGiven } from './invoiceActions.ts'
 import type { InvoiceSnapshot, InvoiceTurnAction } from './invoiceSpec.ts'
 import { stateOfInvoiceSnapshot } from './invoiceSnapshot.ts'
-import { isScreenAction, WORKSPACE_NAMES } from './screenActions.ts'
+import { findInvoice } from '../lib/library.ts'
+import { isScreenAction, WORKSPACE_NAMES, type ScreenAction } from './screenActions.ts'
 import { isBoardAction, isInvoiceAction, type AnyTurn, type ComposeRequest, type InvoiceTurn, type PaletteAction, type Turn, type WorkspaceSnapshot } from './spec.ts'
 
 // Business rules for a turn, checked in code after the shape is right. The actions are tried against the workspace
@@ -209,15 +210,17 @@ export function checkConversation(turn: AnyTurn, request: Pick<ComposeRequest, '
 // The workspace on screen, from what the request carries.
 const viewOf = (request: Pick<ComposeRequest, 'view'> & { workspace?: unknown }): ComposeRequest['view'] | undefined => request.view ?? (request.workspace === undefined ? undefined : 'brand')
 
-// The screen actions of a reply, which go back to a workspace that is already open or close the workspaces. They need no `opens`, since nothing is
-// being opened, but they can only name what is open, and a reply carries at most one.
-export function checkScreenActions(turn: AnyTurn, request: Pick<ComposeRequest, 'view' | 'open'> & { workspace?: unknown }): string[] {
+// The screen actions of a reply: go back to a workspace that is already open, close the workspaces, or open or export something the library holds. Going
+// back and closing need no `opens`, since nothing is being opened, but they can only name what is open. Opening an item from the library does open a
+// workspace, so it needs the founder's own words like any other. A reply carries at most one.
+export function checkScreenActions(turn: AnyTurn, request: Pick<ComposeRequest, 'view' | 'open' | 'library'> & { workspace?: unknown }): string[] {
   const screen = turn.actions.filter(isScreenAction)
   if (screen.length === 0) return []
-  if (screen.length > 1) return ['Use at most one of switch_to and close_workspace in a reply.']
+  if (screen.length > 1) return ['Use at most one of switch_to, close_workspace, open_item and export_item in a reply.']
+  const action = screen[0]
+  if (action.type === 'open_item' || action.type === 'export_item') return checkLibraryAction(action, turn, request)
   const here = viewOf(request)
   const open = request.open ?? (here ? [here] : [])
-  const action = screen[0]
   if (action.type === 'close_workspace') return open.length === 0 ? ['close_workspace: no workspace is open, so there is nothing to close. Leave the action out.'] : []
   const name = WORKSPACE_NAMES[action.workspace]
   if (action.workspace === here) return [`switch_to: the ${name} is already on screen. Leave the action out.`]
@@ -225,6 +228,31 @@ export function checkScreenActions(turn: AnyTurn, request: Pick<ComposeRequest, 
     return [`switch_to: the ${name} is not open, and an action cannot open it. If the founder asked for it or agreed to it, open it with opens (their exact words) and no actions. If not, leave the action out.`]
   }
   return []
+}
+
+// Opening or exporting something from the library: it must be there, an invoice must be one the founder means, an export must be possible, and opening
+// goes on the founder's own words. The action stands alone, and the app does it from what is saved.
+function checkLibraryAction(action: Extract<ScreenAction, { type: 'open_item' | 'export_item' }>, turn: AnyTurn, request: Pick<ComposeRequest, 'library'>): string[] {
+  const name = action.type
+  const errors: string[] = []
+  if (turn.actions.length > 1) errors.push(`${name}: it goes on its own. Leave the other actions out.`)
+  const library = request.library
+  if (action.item === 'brand' && !library?.brand) errors.push(`${name}: no palette is saved, so there is nothing to ${name === 'open_item' ? 'open' : 'export'}. Say so, and offer to build one.`)
+  if (action.item === 'ideas' && !library?.ideas) errors.push(`${name}: no board is saved, so there is nothing to ${name === 'open_item' ? 'open' : 'export'}. Say so.`)
+  if (action.item !== 'invoice' && action.type === 'open_item' && action.which) errors.push('open_item: which is only for an invoice. Leave it out.')
+  if (action.item === 'invoice') {
+    const invoices = library?.invoices ?? []
+    if (invoices.length === 0) errors.push(`${name}: no invoice is saved. Say so, and offer to make one.`)
+    else {
+      const found = findInvoice(invoices, action.which)
+      if (!found) errors.push(`${name}: "${action.which ?? ''}" is not one of the saved invoices (${invoices.map((invoice) => invoice.number || 'no number').join(', ')}). Ask which they mean, or use the latest if they said "the last one".`)
+      else if (action.type === 'export_item' && !found.ready) errors.push(`export_item: invoice ${found.number || '(no number)'} is not ready to export, because required details are missing. Say so, and offer to open it so they can fix it.`)
+    }
+  }
+  if (action.type === 'open_item' && !turn.opens) {
+    errors.push('open_item: it opens a workspace, so it needs opens: { because: "asked" or "agreed", quote: the founder\'s exact words from <request> }. If they did not ask to open it, leave the action out.')
+  }
+  return errors
 }
 
 // A reply checked for whichever workspace the request was about: the invoice, the board or the palette. Screen actions are checked on their own, and

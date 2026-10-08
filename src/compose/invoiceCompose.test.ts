@@ -44,7 +44,8 @@ describe('the invoice actions', () => {
 
   it('cannot be a palette action, and the schema sent to the model has no way to save, set an amount or change the number', () => {
     const schema = JSON.stringify(turnJsonSchema('invoice'))
-    for (const word of ['set_palette', 'set_colour', 'move_component', 'export', 'save', 'set_number', 'set_total']) expect(schema).not.toContain(`"${word}`)
+    // export_item is the library's: it exports what is saved, never the invoice on screen.
+    for (const word of ['set_palette', 'set_colour', 'move_component', 'export_invoice', 'export_brand_sheet', 'save', 'set_number', 'set_total']) expect(schema).not.toContain(`"${word}`)
     expect(schema).toContain('use_saved_client')
     expect(invoiceTurnSchema.safeParse(turn([{ type: 'set_colour', index: 1, hex: '#000000' }])).success).toBe(false)
   })
