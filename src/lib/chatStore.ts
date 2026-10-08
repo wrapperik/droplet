@@ -27,6 +27,8 @@ const messageSchema = z.object({
   receipt: receiptSchema.optional(),
   // A note from the app, not an answer from the model, so it is never sent to the model as part of the conversation.
   local: z.boolean().optional(),
+  // When it was sent or arrived (ISO). Shown under the message on hover. Older chats have none.
+  at: z.string().max(40).optional(),
 })
 
 export const chatSchema = z.object({
@@ -36,6 +38,8 @@ export const chatSchema = z.object({
   messages: z.array(messageSchema).max(MAX_STORED_MESSAGES),
   // The title was chosen by the composer, rather than being the founder's first words.
   named: z.boolean().optional(),
+  // Pinned by the founder: listed first, and kept when older chats make way.
+  pinned: z.boolean().optional(),
   // A short memory of the chat, written in the background when it was left, so a later chat can look back at it. `summarisedAt` is when it was last
   // looked at (a chat that changed since is written down again), and `summaryEdited` says the founder wrote it, so it is not written over.
   summary: summarySchema.optional(),
@@ -47,7 +51,7 @@ export type StoredMessage = z.infer<typeof messageSchema>
 export type StoredChat = z.infer<typeof chatSchema>
 
 // What of a thread is worth keeping: the words, not the replies still being worked on, nor the buttons.
-export function storableMessages(thread: { id: number; from: StoredMessage['from']; text: string; question?: string; blocks?: ChatBlock[]; checks?: Record<string, boolean>; grounding?: Grounding; receipt?: Receipt; pending?: boolean; local?: boolean }[]): StoredMessage[] {
+export function storableMessages(thread: { id: number; from: StoredMessage['from']; text: string; question?: string; blocks?: ChatBlock[]; checks?: Record<string, boolean>; grounding?: Grounding; receipt?: Receipt; pending?: boolean; local?: boolean; at?: string }[]): StoredMessage[] {
   return thread
     .filter((item) => !item.pending && item.text.trim() !== '')
     .map((item) => ({
@@ -60,6 +64,7 @@ export function storableMessages(thread: { id: number; from: StoredMessage['from
       ...(item.grounding ? { grounding: item.grounding } : {}),
       ...(item.receipt ? { receipt: item.receipt } : {}),
       ...(item.local ? { local: true } : {}),
+      ...(item.at ? { at: item.at } : {}),
     }))
     .slice(-MAX_STORED_MESSAGES)
 }
@@ -88,7 +93,30 @@ export function chatTitle(messages: { from: string; text: string }[]): string {
 
 // The chat put in its place: replaced if it is there, otherwise added. Newest first, and only so many are kept.
 export function upsertChat(chats: StoredChat[], chat: StoredChat): StoredChat[] {
-  return [chat, ...chats.filter((other) => other.id !== chat.id)].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, MAX_CHATS)
+  return byPinnedThenRecent([chat, ...chats.filter((other) => other.id !== chat.id)]).slice(0, MAX_CHATS)
+}
+
+// Pinned chats first, then the most recent.
+export function byPinnedThenRecent<T extends { pinned?: boolean; updatedAt?: string }>(chats: T[]): T[] {
+  return [...chats].sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
+}
+
+// A chat pinned or unpinned. Its place in time does not change.
+export const pinChat = (chats: StoredChat[], id: string, pinned: boolean): StoredChat[] =>
+  byPinnedThenRecent(
+    chats.map((chat) => {
+      if (chat.id !== id) return chat
+      const { pinned: _was, ...rest } = chat
+      return pinned ? { ...rest, pinned: true } : rest
+    }),
+  )
+
+// When a chat last moved on: the time of the founder's newest message, or what was kept before if that is later (an older chat has no times
+// on its messages). Opening a chat, ticking a box or a reply arriving does not move it; only something the founder sends does.
+export function lastActive(messages: { from: string; at?: string }[], before?: string): string | undefined {
+  const said = messages.reduce<string | undefined>((latest, item) => (item.from === 'you' && item.at && (!latest || item.at > latest) ? item.at : latest), undefined)
+  if (!said) return before
+  return before && before > said ? before : said
 }
 
 export const removeChat = (chats: StoredChat[], id: string): StoredChat[] => chats.filter((chat) => chat.id !== id)

@@ -11,6 +11,7 @@ type Props = {
   chats: ChatEntry[]
   onOpen: (id: string) => void
   onDelete: (id: string) => void
+  onPin?: (id: string, pinned: boolean) => void
   busy?: boolean
 }
 
@@ -21,7 +22,7 @@ export default function ChatHistoryDialog({ open, ...rest }: Props) {
 }
 
 // Mounted only while open, so the search starts empty each time.
-function Dialog({ onClose, chats, onOpen, onDelete, busy }: Omit<Props, 'open'>) {
+function Dialog({ onClose, chats, onOpen, onDelete, onPin, busy }: Omit<Props, 'open'>) {
   const [query, setQuery] = useState('')
   const panelRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -63,6 +64,7 @@ function Dialog({ onClose, chats, onOpen, onDelete, busy }: Omit<Props, 'open'>)
               showWhen
               busy={busy}
               onDelete={onDelete}
+              onPin={onPin}
               onOpen={(id) => {
                 onOpen(id)
                 onClose()

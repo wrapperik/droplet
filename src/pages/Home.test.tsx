@@ -480,11 +480,13 @@ describe('the chat history', () => {
     await talk(user, 'First question', 'First answer.')
     await user.click(screen.getByRole('button', { name: 'New chat' }))
     await talk(user, 'Second question', 'Second answer.')
-    await user.click(screen.getByRole('button', { name: 'Delete First question' }))
+    await user.click(screen.getByRole('button', { name: 'More for First question' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Delete' }))
     expect(screen.getByText('Delete this chat?')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Keep' }))
     expect(within(screen.getByRole('navigation', { name: 'Chats' })).getAllByRole('listitem')).toHaveLength(2)
-    await user.click(screen.getByRole('button', { name: 'Delete First question' }))
+    await user.click(screen.getByRole('button', { name: 'More for First question' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Delete' }))
     await user.click(screen.getByRole('button', { name: 'Delete' }))
     expect(within(screen.getByRole('navigation', { name: 'Chats' })).getAllByRole('listitem')).toHaveLength(1)
     expect((await loadChatsFor()).map((chat) => chat.title)).toEqual(['Second question'])
@@ -494,7 +496,8 @@ describe('the chat history', () => {
     const user = userEvent.setup()
     renderHome()
     await talk(user, 'Only question', 'Only answer.')
-    await user.click(screen.getByRole('button', { name: 'Delete Only question' }))
+    await user.click(screen.getByRole('button', { name: 'More for Only question' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Delete' }))
     await user.click(screen.getByRole('button', { name: 'Delete' }))
     expect(screen.queryByText('Only answer.')).not.toBeInTheDocument()
     expect(await loadChatsFor()).toEqual([])
@@ -558,7 +561,9 @@ describe('the chat history', () => {
     renderHome()
     await user.click(await screen.findByRole('button', { name: 'See all chats' }))
     const dialog = screen.getByRole('dialog', { name: 'All chats' })
-    await user.click(within(dialog).getByRole('button', { name: 'Delete Chat 10' }))
+    await user.click(within(dialog).getByRole('button', { name: 'More for Chat 10' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Delete' }))
+    expect(screen.getByRole('dialog', { name: 'All chats' })).toBeInTheDocument()
     expect(await loadChatsFor()).toHaveLength(10)
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
     expect(await loadChatsFor()).toHaveLength(9)
@@ -631,35 +636,6 @@ describe('a question and suggested replies', () => {
     const stored = JSON.parse(window.localStorage.getItem(key)!)
     expect(stored[0].messages.at(-1)).toMatchObject({ from: 'droplet', question: 'What does a box cost you?' })
     expect(JSON.stringify(stored)).not.toContain('Not sure')
-  })
-})
-
-describe('the wave behind the conversation', () => {
-  const backdrop = (container: HTMLElement) => container.querySelector('.home__backdrop')
-
-  it('is there before anything has been said, as decoration', () => {
-    const { container } = renderHome()
-    expect(backdrop(container)).not.toBeNull()
-    expect(backdrop(container)).toHaveAttribute('aria-hidden', 'true')
-    expect(backdrop(container)).not.toHaveAttribute('data-gone')
-  })
-
-  it('fades out when a message is sent, and comes back with a new chat', async () => {
-    const user = userEvent.setup()
-    const { container } = renderHome()
-    answers = [reply('chat', 'Hello.')]
-    await say(user, 'Hi')
-    expect(backdrop(container)).toHaveAttribute('data-gone')
-    await waitFor(() => expect(screen.getByText('Hello.')).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: 'New chat' }))
-    expect(backdrop(container)).not.toHaveAttribute('data-gone')
-  })
-
-  it('is not behind a workspace', async () => {
-    const user = userEvent.setup()
-    const { container } = renderHome()
-    await pickTask(user, /Build the brand/)
-    expect(backdrop(container)).toBeNull()
   })
 })
 
@@ -1848,12 +1824,11 @@ describe('facts Droplet offers to remember', () => {
     expect((asked[0] as unknown as { project: { facts: Record<string, string> } }).project.facts).toEqual({ 'profile.what': 'Builds full-stack software' })
   })
 
-  it('opens the project brief from the project switcher', async () => {
+  it('opens the project brief from the row under the project switcher', async () => {
     const user = userEvent.setup()
     await saveMemory('duckstack', withFact(emptyMemory(), 'profile.what', 'Builds full-stack software', '2026-10-06T10:00:00.000Z'))
     renderHome()
-    await user.click(screen.getByRole('button', { name: /DuckStack/ }))
-    await user.click(await screen.findByRole('menuitem', { name: 'Project brief' }))
+    await user.click(within(screen.getByRole('group', { name: 'This project' })).getByRole('button', { name: 'Project brief' }))
     const dialog = await screen.findByRole('dialog', { name: /^Project brief/ })
     expect(await within(dialog).findByText('Builds full-stack software')).toBeInTheDocument()
   })
@@ -2014,7 +1989,8 @@ describe('looking back at past chats', () => {
     renderHome()
     await say(user, idea)
     await screen.findByText('Lovely name.')
-    await user.click(await screen.findByRole('button', { name: /^Delete / }))
+    await user.click(await screen.findByRole('button', { name: /^More for / }))
+    await user.click(screen.getByRole('menuitem', { name: 'Delete' }))
     await user.click(await screen.findByRole('button', { name: 'Delete' }))
     await new Promise((resolve) => setTimeout(resolve, 80))
     expect(summaries).toHaveLength(0)
@@ -2138,5 +2114,27 @@ describe("Droplet's notes on the project", () => {
     await user.type(await clientName(user), 'Karoo Candles')
     await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(await screen.findByText('Droplet will update its notes on this project.')).toBeInTheDocument()
+  })
+})
+
+describe('the menu on a chat', () => {
+  it('pins a chat to the top of the list, and unpins it', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    answers = [reply('chat', 'First answer.')]
+    await say(user, 'First question')
+    await screen.findByText('First answer.')
+    await user.click(screen.getByRole('button', { name: 'New chat' }))
+    answers = [reply('chat', 'Second answer.')]
+    await say(user, 'Second question')
+    await screen.findByText('Second answer.')
+    const titles = () => within(screen.getByRole('navigation', { name: 'Chats' })).getAllByRole('listitem').map((item) => item.querySelector('.chatlist__title')?.textContent)
+    await waitFor(() => expect(titles()).toEqual(['Second question', 'First question']))
+    await user.click(screen.getByRole('button', { name: 'More for First question' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Pin' }))
+    await waitFor(() => expect(titles()).toEqual(['First question', 'Second question']))
+    await user.click(screen.getByRole('button', { name: 'More for First question' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Unpin' }))
+    await waitFor(() => expect(titles()).toEqual(['Second question', 'First question']))
   })
 })

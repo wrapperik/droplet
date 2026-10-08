@@ -15,7 +15,8 @@ const seed = async () => {
   memory = withFact(memory, 'brand.voice', 'Warm and plain', t)
   await saveMemory('p1', memory)
 }
-const renderBrief = (onChanged = vi.fn()) => render(<ProjectBrief open onClose={() => undefined} projectId="p1" projectName="DuckStack" onChanged={onChanged} />)
+const renderBrief = (onChanged = vi.fn(), tab: 'knows' | 'memory' = 'knows') => render(<ProjectBrief open onClose={() => undefined} projectId="p1" projectName="DuckStack" onChanged={onChanged} tab={tab} />)
+const renderMemory = () => renderBrief(vi.fn(), 'memory')
 
 describe('the project brief', () => {
   it('shows nothing when closed', () => {
@@ -23,7 +24,7 @@ describe('the project brief', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('shows every fact under its heading, in plain words, with what it was before when it changed, and "Nothing yet" for a heading with none', async () => {
+  it('shows every fact under its heading, in plain words, with what it was before when it changed, and leaves out a heading with none', async () => {
     await seed()
     renderBrief()
     const dialog = await screen.findByRole('dialog', { name: 'Project brief: DuckStack' })
@@ -33,7 +34,8 @@ describe('the project brief', () => {
     expect(within(about).getByText('Corporate clients')).toBeInTheDocument()
     expect(within(about).getByText('Before: SMEs')).toBeInTheDocument()
     expect(within(dialog).getByRole('region', { name: 'Brand' })).toHaveTextContent('Warm and plain')
-    expect(within(dialog).getByRole('region', { name: 'Preferences' })).toHaveTextContent('Nothing yet.')
+    expect(within(dialog).queryByRole('region', { name: 'Preferences' })).not.toBeInTheDocument()
+    expect(within(dialog).getByText('DuckStack')).toBeInTheDocument()
   })
 
   it('changes a fact in place and saves it, keeping the old words, and tells the app', async () => {
@@ -83,7 +85,8 @@ describe('the project brief', () => {
   it('lets the founder add something Droplet should know, and refuses a private detail', async () => {
     const user = userEvent.setup()
     renderBrief()
-    await screen.findByRole('region', { name: 'Add something Droplet should know' })
+    expect(await screen.findByText(/Nothing yet\. Droplet asks before it keeps anything/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Add something Droplet should know' }))
     await user.selectOptions(screen.getByLabelText('About'), 'preference.style')
     await user.type(screen.getByLabelText('What Droplet should know'), 'Short answers, no jargon')
     await user.click(screen.getByRole('button', { name: 'Add' }))
@@ -97,6 +100,7 @@ describe('the project brief', () => {
   it('has the two switches, both on until turned off, and saves them', async () => {
     const user = userEvent.setup()
     renderBrief()
+    await user.click(await screen.findByRole('tab', { name: 'Memory' }))
     const recall = await screen.findByRole('switch', { name: 'Let Droplet look back at past chats' })
     const notes = screen.getByRole('switch', { name: 'Keep notes on my workspaces' })
     expect(recall).toBeChecked()
@@ -143,7 +147,7 @@ describe('the memories of past chats in the brief', () => {
 
   it('shows each memory by the chat it belongs to, as the lines that are sent', async () => {
     await seedChat()
-    renderBrief()
+    renderMemory()
     const section = await screen.findByRole('region', { name: 'Past chats Droplet remembers' })
     expect(await within(section).findByText('Naming Kindred Gifting')).toBeInTheDocument()
     expect(within(section).getByText('About: Naming the business')).toBeInTheDocument()
@@ -152,14 +156,14 @@ describe('the memories of past chats in the brief', () => {
   })
 
   it('says there is nothing yet, and what makes one', async () => {
-    renderBrief()
+    renderMemory()
     expect(await screen.findByText(/A short memory is written when you leave a chat you have said something in\./)).toBeInTheDocument()
   })
 
   it('says Droplet is not looking back when the switch is off, and still lets them be read and deleted', async () => {
     await seedChat()
     await saveMemory('p1', { ...emptyMemory(), settings: { recall: false } })
-    renderBrief()
+    renderMemory()
     expect(await screen.findByText(/Droplet is not looking back at past chats\. These are kept until you delete them\./)).toBeInTheDocument()
     expect(await screen.findByText('About: Naming the business')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Delete the memory of Naming Kindred Gifting' })).toBeInTheDocument()
@@ -168,7 +172,7 @@ describe('the memories of past chats in the brief', () => {
   it('changes a memory, and from then on it is the founder\'s own: marked, and not written over', async () => {
     await seedChat()
     const user = userEvent.setup()
-    renderBrief()
+    renderMemory()
     await user.click(await screen.findByRole('button', { name: 'Edit the memory of Naming Kindred Gifting' }))
     const decided = screen.getByLabelText('Decided (one to a line)')
     await user.clear(decided)
@@ -185,7 +189,7 @@ describe('the memories of past chats in the brief', () => {
   it('refuses a memory with no subject, or too many lines', async () => {
     await seedChat()
     const user = userEvent.setup()
-    renderBrief()
+    renderMemory()
     await user.click(await screen.findByRole('button', { name: 'Edit the memory of Naming Kindred Gifting' }))
     await user.clear(screen.getByLabelText('Subject'))
     await user.click(screen.getByRole('button', { name: 'Save' }))
@@ -196,7 +200,7 @@ describe('the memories of past chats in the brief', () => {
   it('deletes a memory after a second press, keeps the chat, and does not write it again until the chat changes', async () => {
     await seedChat()
     const user = userEvent.setup()
-    renderBrief()
+    renderMemory()
     await user.click(await screen.findByRole('button', { name: 'Delete the memory of Naming Kindred Gifting' }))
     expect(screen.getByText('Delete this memory? The chat stays.')).toBeInTheDocument()
     expect((await chatNow()).summary).toBeDefined()

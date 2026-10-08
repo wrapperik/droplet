@@ -81,6 +81,8 @@
 
 .chats-dialog__body {
   min-height: 0;
+  /* Room on the right for the scrollbar, which a Mac draws over the content. */
+  padding-right: 0.75rem;
   overflow-y: auto;
 }
 

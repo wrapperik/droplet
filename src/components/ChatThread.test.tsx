@@ -102,8 +102,8 @@ describe('ChatThread dividers and actions', () => {
   })
 
   it('shows no buttons once a message has none left', () => {
-    render(<ChatThread messages={[{ id: 7, from: 'droplet', text: 'Done.', actions: [] }]} />)
-    expect(screen.queryByRole('button')).toBeNull()
+    const { container } = render(<ChatThread messages={[{ id: 7, from: 'droplet', text: 'Done.', actions: [] }]} />)
+    expect(container.querySelector('.thread__action')).toBeNull()
   })
 })
 
@@ -189,5 +189,29 @@ describe('a change receipt in the thread', () => {
     render(<ChatThread messages={[{ id: 1, from: 'droplet', text: 'Done.', receipt }]} />)
     expect(screen.getByRole('region', { name: 'Changed on the board' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Undo this' })).not.toBeInTheDocument()
+  })
+})
+
+describe('the time and copy under a message', () => {
+  it('shows when each message was sent, and a copy button on Droplet’s replies only', () => {
+    const at = new Date().toISOString()
+    const { container } = render(<ChatThread messages={[{ id: 1, from: 'you', text: 'Hi', at }, { id: 2, from: 'droplet', text: 'Hello.', at }]} />)
+    expect(container.querySelectorAll('time.thread__time')).toHaveLength(2)
+    expect(container.querySelector('time')).toHaveAttribute('dateTime', at)
+    expect(screen.getAllByRole('button', { name: 'Copy reply' })).toHaveLength(1)
+  })
+
+  it('copies the reply and its question as plain text', async () => {
+    const user = userEvent.setup()
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue()
+    render(<ChatThread messages={[{ id: 2, from: 'droplet', text: 'Start from your costs.', question: 'What does a box cost you?' }]} />)
+    await user.click(screen.getByRole('button', { name: 'Copy reply' }))
+    expect(writeText).toHaveBeenCalledWith('Start from your costs.\n\nWhat does a box cost you?')
+    expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument()
+  })
+
+  it('shows nothing for a reply still being worked on', () => {
+    const { container } = render(<ChatThread messages={[{ id: 2, from: 'droplet', text: '', pending: true }]} />)
+    expect(container.querySelector('.thread__meta')).toBeNull()
   })
 })

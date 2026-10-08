@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChatRoundAddIcon, ClockCircleIcon, FolderWithFilesIcon, PanelLeftCloseIcon, PanelLeftOpenIcon } from '@solar-icons/react/linear'
+import { ChatRoundAddIcon, ClockCircleIcon, FolderWithFilesIcon, NotebookIcon, PanelLeftCloseIcon, PanelLeftOpenIcon } from '@solar-icons/react/linear'
 import type { ProjectSummary } from '../lib/mockProjects.ts'
 import AccountMenu from './AccountMenu.tsx'
 import ChatHistoryDialog from './ChatHistoryDialog.tsx'
@@ -25,6 +25,7 @@ type Props = {
   onNewChat: () => void
   onOpenChat: (id: string) => void
   onDeleteChat: (id: string) => void
+  onPinChat?: (id: string, pinned: boolean) => void
   // Droplet is working on a reply, so the conversation cannot be changed under it.
   busy?: boolean
   collapsed: boolean
@@ -52,6 +53,7 @@ export default function Sidebar({
   onNewChat,
   onOpenChat,
   onDeleteChat,
+  onPinChat,
   busy = false,
   collapsed,
   onToggleCollapsed,
@@ -64,17 +66,15 @@ export default function Sidebar({
   const recent = chats.slice(0, RECENT_CHATS)
 
   return (
-    <aside className="sidebar" data-collapsed={collapsed} data-open={mobileOpen} aria-label="Sidebar">
-      <ProjectSwitcher projects={projects} currentId={currentProjectId} collapsed={collapsed} onSelect={onSelectProject} onOpenBrief={onOpenBrief} />
+    <aside className="sidebar on-shell" data-collapsed={collapsed} data-open={mobileOpen} aria-label="Sidebar">
+      <ProjectSwitcher projects={projects} currentId={currentProjectId} collapsed={collapsed} onSelect={onSelectProject} />
 
-      <hr className="sidebar__divider" />
-
-      <nav className="chats" aria-label="Chats">
-        <button type="button" className="nav__item" disabled={busy} aria-label={collapsed ? 'New chat' : undefined} title={collapsed ? 'New chat' : undefined} onClick={onNewChat}>
-          <ChatRoundAddIcon size={22} aria-hidden="true" />
-          <span className="nav__label">New chat</span>
+      {/* What belongs to the selected project sits right under its name: its brief and its library. */}
+      <div className="sidebar__project" role="group" aria-label="This project">
+        <button type="button" className="nav__item" aria-haspopup="dialog" aria-label={collapsed ? 'Project brief' : undefined} title={collapsed ? 'Project brief' : undefined} onClick={onOpenBrief}>
+          <NotebookIcon size={18} aria-hidden="true" />
+          <span className="nav__label">Project brief</span>
         </button>
-
         <button
           type="button"
           className="nav__item"
@@ -83,14 +83,23 @@ export default function Sidebar({
           title={collapsed ? 'Library' : undefined}
           onClick={onOpenLibrary}
         >
-          <FolderWithFilesIcon size={22} aria-hidden="true" />
+          <FolderWithFilesIcon size={18} aria-hidden="true" />
           <span className="nav__label">Library</span>
+        </button>
+      </div>
+
+      <hr className="sidebar__divider" />
+
+      <nav className="chats" aria-label="Chats">
+        <button type="button" className="nav__item" disabled={busy} aria-label={collapsed ? 'New chat' : undefined} title={collapsed ? 'New chat' : undefined} onClick={onNewChat}>
+          <ChatRoundAddIcon size={18} aria-hidden="true" />
+          <span className="nav__label">New chat</span>
         </button>
 
         {collapsed ? (
           chats.length > 0 && (
             <button type="button" className="nav__item" aria-label="Chat history" title="Chat history" onClick={() => setAllOpen(true)}>
-              <ClockCircleIcon size={22} aria-hidden="true" />
+              <ClockCircleIcon size={18} aria-hidden="true" />
               <span className="nav__label">Chat history</span>
             </button>
           )
@@ -100,7 +109,7 @@ export default function Sidebar({
             {recent.length === 0 ? (
               <p className="chats__empty">Your conversations are kept here once you have said something.</p>
             ) : (
-              <ChatList chats={recent} busy={busy} onOpen={onOpenChat} onDelete={onDeleteChat} />
+              <ChatList chats={recent} busy={busy} onOpen={onOpenChat} onDelete={onDeleteChat} onPin={onPinChat} onShell />
             )}
             {chats.length > RECENT_CHATS && (
               <button type="button" className="chats__all" onClick={() => setAllOpen(true)}>
@@ -122,11 +131,11 @@ export default function Sidebar({
         title={collapsed ? 'Expand sidebar' : undefined}
         onClick={onToggleCollapsed}
       >
-        {collapsed ? <PanelLeftOpenIcon size={22} aria-hidden="true" /> : <PanelLeftCloseIcon size={22} aria-hidden="true" />}
+        {collapsed ? <PanelLeftOpenIcon size={18} aria-hidden="true" /> : <PanelLeftCloseIcon size={18} aria-hidden="true" />}
         <span className="nav__label">Collapse</span>
       </button>
 
-      <ChatHistoryDialog open={allOpen} onClose={() => setAllOpen(false)} chats={chats} busy={busy} onOpen={onOpenChat} onDelete={onDeleteChat} />
+      <ChatHistoryDialog open={allOpen} onClose={() => setAllOpen(false)} chats={chats} busy={busy} onOpen={onOpenChat} onDelete={onDeleteChat} onPin={onPinChat} />
     </aside>
   )
 }

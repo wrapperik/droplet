@@ -1,4 +1,5 @@
-import { Fragment, useEffect, useRef } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
+import { CheckIcon, CopyIcon } from '@solar-icons/react/linear'
 import type { ChatBlock } from '../compose/blocks.ts'
 import type { JourneyStep } from '../compose/journey.ts'
 import type { Grounding } from '../compose/grounding.ts'
@@ -10,6 +11,7 @@ import ChatBlocks from './ChatBlocks.tsx'
 import WebSources from './WebSources.tsx'
 import DropletLoader from './DropletLoader.tsx'
 import RichText from './RichText.tsx'
+import { whenLabel } from '../lib/chatStore.ts'
 import './ChatThread.css'
 
 // A button on a message, for something Droplet asks the founder to decide, such as saving before leaving.
@@ -43,6 +45,8 @@ export type ThreadMessage = {
   actions?: ThreadAction[]
   // A note from the app, not an answer from the model, so it is not sent to the model as part of the conversation.
   local?: boolean
+  // When it was sent or arrived (ISO), shown under it on hover or focus.
+  at?: string
 }
 
 type Props = {
@@ -136,6 +140,16 @@ export default function ChatThread({ messages, onAction, onReply, done = NO_STEP
                   ))}
                 </span>
               )}
+              {!message.pending && (message.at || message.from === 'droplet') && (
+                <span className="thread__meta">
+                  {message.at && whenLabel(message.at) && (
+                    <time className="thread__time" dateTime={message.at}>
+                      {whenLabel(message.at)}
+                    </time>
+                  )}
+                  {message.from === 'droplet' && <CopyButton text={[message.text, message.question].filter(Boolean).join('\n\n')} />}
+                </span>
+              )}
             </li>
             {replies.length > 0 && (
               <li className="thread__replies">
@@ -154,5 +168,33 @@ export default function ChatThread({ messages, onAction, onReply, done = NO_STEP
         )
       })}
     </ol>
+  )
+}
+
+// Copies a reply's words (and its question) as plain text. Says "Copied" for a moment, aloud as well.
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  useEffect(() => {
+    if (!copied) return
+    const timer = window.setTimeout(() => setCopied(false), 1500)
+    return () => window.clearTimeout(timer)
+  }, [copied])
+  return (
+    <button
+      type="button"
+      className="thread__copy"
+      aria-label={copied ? 'Copied' : 'Copy reply'}
+      title={copied ? 'Copied' : 'Copy'}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text)
+          setCopied(true)
+        } catch {
+          setCopied(false)
+        }
+      }}
+    >
+      {copied ? <CheckIcon size={14} aria-hidden="true" /> : <CopyIcon size={14} aria-hidden="true" />}
+    </button>
   )
 }

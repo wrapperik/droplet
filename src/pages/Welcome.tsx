@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { AltArrowLeftIcon, ArrowRightIcon, CalculatorIcon, CheckCircleIcon, ShieldCheckIcon } from '@solar-icons/react/linear'
+import { AltArrowLeftIcon, ArrowRightIcon, CalculatorIcon, CheckCircleIcon, DangerCircleIcon, ShieldCheckIcon } from '@solar-icons/react/linear'
 import Wordmark from '../components/Wordmark.tsx'
 import { INTRO_SLIDES, NAME_STEP, planFirstProject } from '../lib/onboarding.ts'
 import { cleanProjectName, MAX_PROJECT_NAME } from '../lib/projectNames.ts'
@@ -132,7 +132,8 @@ export default function Welcome() {
                       onChange={(event) => setName(event.target.value)}
                     />
                     <p className="welcome__problem" id={ids.problem} role="alert" hidden={problem === ''}>
-                      {problem}
+                      <DangerCircleIcon className="welcome__problem-icon" size={18} aria-hidden="true" />
+                      <span>{problem}</span>
                     </p>
                     <button type="button" className="welcome__later" onClick={() => void finish('')} disabled={busy}>
                       Skip for now
@@ -185,7 +186,6 @@ export default function Welcome() {
 
         {/* The picture. Decoration: the words on the left say everything it says. */}
         <section className="welcome__stage" aria-hidden="true">
-          <div className="welcome__wave" />
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={step.id}

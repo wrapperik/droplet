@@ -10,8 +10,15 @@
 .chatlist__item {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+/* The whole row lights up, the menu button with it, so the fill never stops short of it. */
+.chatlist__item:hover,
+.chatlist__item:focus-within,
+.chatlist__item[data-menu] {
+  background: var(--overlay-06);
 }
 
 .chatlist__item[data-current] {
@@ -24,65 +31,121 @@
   flex-direction: column;
   gap: 0.125rem;
   min-width: 0;
-  padding: 0.5rem 0.75rem;
+  padding: 0.4375rem 0 0.4375rem 0.625rem;
   border: 0;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: transparent;
   text-align: left;
-  transition: background var(--duration-fast) var(--ease-out);
 }
 
-.chatlist__open:not(:disabled):hover,
 .chatlist__open:focus-visible {
-  background: var(--accent-tint-soft);
+  outline-offset: -2px;
 }
 
 .chatlist__title {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
+.chatlist__name {
   overflow: hidden;
-  font-weight: 500;
+  font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.chatlist__item[data-current] .chatlist__title {
-  font-weight: 700;
+.chatlist__pin {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.chatlist__item[data-current] .chatlist__name {
+  font-weight: 600;
 }
 
 .chatlist__when {
   color: var(--text-muted);
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
 }
 
-/* The delete shows when the row is pointed at or focused, so a short list stays quiet. It is always there for a touch screen. */
-.chatlist__forget {
+/* The three dots show when the row is pointed at or focused, or its menu is open. Always there on a touch screen. */
+.chatlist__more {
   display: grid;
   flex: none;
   place-items: center;
-  width: 2rem;
-  height: 2rem;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin-right: 0.25rem;
   padding: 0;
   border: 0;
-  border-radius: 50%;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-muted);
   opacity: 0;
 }
 
-.chatlist__item:hover .chatlist__forget,
-.chatlist__item:focus-within .chatlist__forget {
+.chatlist__item:hover .chatlist__more,
+.chatlist__item:focus-within .chatlist__more,
+.chatlist__item[data-menu] .chatlist__more {
   opacity: 1;
 }
 
 @media (hover: none) {
-  .chatlist__forget {
+  .chatlist__more {
     opacity: 1;
   }
 }
 
-.chatlist__forget:not(:disabled):hover,
-.chatlist__forget:focus-visible {
-  background: var(--overlay-06);
+.chatlist__more:not(:disabled):hover,
+.chatlist__more:focus-visible,
+.chatlist__item[data-menu] .chatlist__more {
   color: var(--text);
+}
+
+.chatlist__more:focus-visible {
+  outline-offset: -2px;
+}
+
+/* A chat's menu, on the page beside its button. */
+.chatmenu {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  min-width: 9rem;
+  padding: 0.25rem;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  color: var(--text);
+  font-size: 0.875rem;
+}
+
+.chatmenu__item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4375rem 0.5rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+}
+
+.chatmenu__item svg {
+  color: var(--text-muted);
+}
+
+.chatmenu__item:hover,
+.chatmenu__item:focus-visible {
+  background: var(--overlay-06);
+  outline: none;
+}
+
+.chatmenu__item--danger,
+.chatmenu__item--danger svg {
+  color: var(--status-outstanding);
 }
 
 .chatlist__ask {

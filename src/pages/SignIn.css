@@ -102,26 +102,34 @@
 }
 
 /* What went wrong, or what to do next. Never by colour alone: the words say it. */
+/* A message: a plain rounded box with an icon that says what kind it is. No coloured edge. */
 .signin__message {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
   margin: 0;
-  padding: 0.625rem 0.875rem;
-  border-radius: var(--radius-md);
+  padding: 0.625rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--overlay-06);
   font-size: 0.875rem;
   font-weight: 500;
+}
+
+.signin__message-icon {
+  flex: none;
+  margin-top: 0.0625rem;
 }
 
 .signin__message[hidden] {
   display: none;
 }
 
-.signin__message[data-kind='error'] {
-  background: var(--overlay-06);
-  box-shadow: inset 3px 0 0 var(--status-outstanding);
+.signin__message[data-kind='error'] .signin__message-icon {
+  color: var(--status-outstanding);
 }
 
-.signin__message[data-kind='notice'] {
-  background: var(--accent-tint-soft);
-  box-shadow: inset 3px 0 0 var(--accent);
+.signin__message[data-kind='notice'] .signin__message-icon {
+  color: var(--accent);
 }
 
 .signin__primary,

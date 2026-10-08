@@ -1,5 +1,6 @@
 import { useEffect, useId, useState, type FormEvent } from 'react'
 import { Navigate } from 'react-router-dom'
+import { DangerCircleIcon, InfoCircleIcon } from '@solar-icons/react/linear'
 import { MIN_PASSWORD } from '../lib/auth.ts'
 import { useAuth } from '../store/auth.ts'
 import Wordmark from '../components/Wordmark.tsx'
@@ -84,10 +85,12 @@ export default function SignIn() {
           </div>
 
           <p className="signin__message" role="alert" data-kind="error" hidden={error === ''}>
-            {error}
+            <DangerCircleIcon className="signin__message-icon" size={18} aria-hidden="true" />
+            <span>{error}</span>
           </p>
           <p className="signin__message" role="status" data-kind="notice" hidden={notice === ''}>
-            {notice}
+            <InfoCircleIcon className="signin__message-icon" size={18} aria-hidden="true" />
+            <span>{notice}</span>
           </p>
 
           <button type="submit" className="signin__primary" disabled={busy} aria-busy={busy}>

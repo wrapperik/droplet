@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { MAX_CHATS, chatTitle, cleanTitle, whenLabel, hasFounderMessage, loadChats, removeChat, saveChats, storableMessages, upsertChat, type StoredChat } from './chatStore.ts'
+import { MAX_CHATS, chatTitle, cleanTitle, whenLabel, hasFounderMessage, lastActive, loadChats, pinChat, removeChat, saveChats, storableMessages, upsertChat, type StoredChat } from './chatStore.ts'
 
 const chat = (id: string, updatedAt: string, text = 'Hello'): StoredChat => ({ id, title: text, updatedAt, messages: [{ id: 1, from: 'you', text }] })
 
@@ -207,5 +207,42 @@ describe('the memory of a chat kept with it', () => {
   it('is held to the same limits when read back: a memory with too many lines leaves the chat out', async () => {
     await saveChats('p1', [{ ...chat('c1', '2026-10-06T10:00:00.000Z'), summary: { ...summary, decided: ['a', 'b', 'c', 'd', 'e'] } }])
     expect(await loadChats('p1')).toEqual([])
+  })
+})
+
+describe('lastActive', () => {
+  it('is the time of the founder’s newest message, not of a reply or a note', () => {
+    const messages = [
+      { from: 'you', at: '2026-10-08T10:00:00.000Z' },
+      { from: 'droplet', at: '2026-10-08T10:05:00.000Z' },
+    ]
+    expect(lastActive(messages)).toBe('2026-10-08T10:00:00.000Z')
+  })
+
+  it('keeps what was kept before when the messages have no times, or older ones', () => {
+    expect(lastActive([{ from: 'you' }], '2026-10-01T09:00:00.000Z')).toBe('2026-10-01T09:00:00.000Z')
+    expect(lastActive([{ from: 'you', at: '2026-09-01T09:00:00.000Z' }], '2026-10-01T09:00:00.000Z')).toBe('2026-10-01T09:00:00.000Z')
+    expect(lastActive([{ from: 'droplet' }])).toBeUndefined()
+  })
+
+  it('keeps the time a message was sent when it is stored', () => {
+    expect(storableMessages([{ id: 1, from: 'you', text: 'Hi', at: '2026-10-08T10:00:00.000Z' }])[0].at).toBe('2026-10-08T10:00:00.000Z')
+  })
+})
+
+describe('pinning a chat', () => {
+  it('lists pinned chats first, keeps their time, and unpins', () => {
+    const chats = [chat('a', '2026-10-08T10:00:00.000Z'), chat('b', '2026-10-01T10:00:00.000Z')]
+    const pinned = pinChat(chats, 'b', true)
+    expect(pinned.map((entry) => entry.id)).toEqual(['b', 'a'])
+    expect(pinned[0]).toMatchObject({ pinned: true, updatedAt: '2026-10-01T10:00:00.000Z' })
+    const unpinned = pinChat(pinned, 'b', false)
+    expect(unpinned.map((entry) => entry.id)).toEqual(['a', 'b'])
+    expect(unpinned[1]).not.toHaveProperty('pinned')
+  })
+
+  it('keeps a pinned chat first when another is saved', () => {
+    const chats = pinChat([chat('a', '2026-10-01T10:00:00.000Z')], 'a', true)
+    expect(upsertChat(chats, chat('b', '2026-10-08T10:00:00.000Z')).map((entry) => entry.id)).toEqual(['a', 'b'])
   })
 })

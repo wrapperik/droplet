@@ -37,7 +37,7 @@ import { MAX_HISTORY_MESSAGES, isBoardAction, isInvoiceAction, isScreenAction, r
 import { useRipple } from '../hooks/useRipple.ts'
 import { requestComposition, requestSummary } from '../lib/composeClient.ts'
 import { useAdvancedAllowance } from '../lib/advancedAllowance.ts'
-import { chatTitle, cleanTitle, hasFounderMessage, loadChats, removeChat, saveChats, storableMessages, upsertChat, type StoredChat } from '../lib/chatStore.ts'
+import { byPinnedThenRecent, chatTitle, cleanTitle, hasFounderMessage, lastActive, loadChats, pinChat, removeChat, saveChats, storableMessages, upsertChat, type StoredChat } from '../lib/chatStore.ts'
 import { loadBoard, openBoardForProject, saveBoard } from '../lib/boardStore.ts'
 import { docOf as boardDocOf, isBoardUnsaved, reduceBoard, type BoardAction, type BoardState } from '../lib/boardState.ts'
 import { exportBrandSheet } from '../lib/exportSheet.ts'
@@ -256,8 +256,8 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
       const there = kept.find((chat) => chat.id === chatId)
       if (there && there.title === title && JSON.stringify(there.messages) === JSON.stringify(messages)) return
       // The memory of the chat, written when it was left, stays with it until the chat is looked at again.
-      const memory = there ? { ...(there.summary ? { summary: there.summary } : {}), ...(there.summarisedAt ? { summarisedAt: there.summarisedAt } : {}), ...(there.summaryEdited ? { summaryEdited: true } : {}) } : {}
-      await saveChats(currentProjectId, upsertChat(kept, { id: chatId, title, ...(chatName ? { named: true } : {}), updatedAt: new Date().toISOString(), messages, ...memory }))
+      const memory = there ? { ...(there.pinned ? { pinned: true } : {}), ...(there.summary ? { summary: there.summary } : {}), ...(there.summarisedAt ? { summarisedAt: there.summarisedAt } : {}), ...(there.summaryEdited ? { summaryEdited: true } : {}) } : {}
+      await saveChats(currentProjectId, upsertChat(kept, { id: chatId, title, ...(chatName ? { named: true } : {}), updatedAt: lastActive(messages, there?.updatedAt) ?? new Date().toISOString(), messages, ...memory }))
     })
   }, [thread, chatId, chatName, currentProjectId, enqueueChats])
 
@@ -286,7 +286,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         invoices: memory.invoices.length,
         boardItems: board?.items.length ?? 0,
       })
-      setThread([{ id: nextMessageId.current++, from: 'droplet', text: welcome.text, local: true, question: welcome.question, replies: welcome.replies }])
+      setThread([{ id: nextMessageId.current++, from: 'droplet', text: welcome.text, at: new Date().toISOString(), local: true, question: welcome.question, replies: welcome.replies }])
     })()
     return () => {
       current = false
@@ -317,7 +317,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   }, [mobileOpen])
 
   const message = useCallback(
-    (from: ThreadMessage['from'], text: string, pending = false): ThreadMessage => ({ id: nextMessageId.current++, from, text, pending }),
+    (from: ThreadMessage['from'], text: string, pending = false): ThreadMessage => ({ id: nextMessageId.current++, from, text, pending, ...(pending ? {} : { at: new Date().toISOString() }) }),
     [],
   )
 
@@ -428,6 +428,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
                   ...item,
                   text: reply,
                   pending: false,
+                  at: new Date().toISOString(),
                   ...(card ? { receipt: card.receipt, receiptLive: card.live } : {}),
                   ...(proposals && proposals.length > 0 ? { proposals } : {}),
                   ...(turn?.blocks && turn.blocks.length > 0 ? { blocks: turn.blocks } : {}),
@@ -788,8 +789,11 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   // The conversations listed in the history: the open one first (once something has been said in it), then the project's others.
   const chatList: ChatEntry[] = (() => {
     const messages = storableMessages(thread)
-    const open = hasFounderMessage(messages) ? [{ id: chatId, title: chatName || chatTitle(messages), current: true }] : []
-    return [...open, ...chats.filter((chat) => chat.id !== chatId).map((chat) => ({ id: chat.id, title: chat.title, updatedAt: chat.updatedAt, current: false }))]
+    // The open chat keeps its place until the founder sends something in it: then it is the most recent and goes to the top.
+    const kept = chats.find((chat) => chat.id === chatId)
+    const open = hasFounderMessage(messages) ? [{ id: chatId, title: chatName || chatTitle(messages), updatedAt: lastActive(messages, kept?.updatedAt) ?? '', current: true, pinned: kept?.pinned }] : []
+    const others = chats.filter((chat) => chat.id !== chatId).map((chat) => ({ id: chat.id, title: chat.title, updatedAt: chat.updatedAt, current: false, pinned: chat.pinned }))
+    return byPinnedThenRecent([...open, ...others])
   })()
 
   // A chat that has been left is written down in a few lines, in the background, so a later chat can look back at it. Only if the founder has not switched
@@ -861,6 +865,17 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
       })
     },
     [beginChat, currentProjectId, enqueueChats],
+  )
+
+  // Pinned chats stay at the top of the list. A chat with nothing said in it yet is not kept, so it cannot be pinned.
+  const pinChatById = useCallback(
+    (id: string, pinned: boolean) => {
+      void enqueueChats(async () => {
+        await saveChats(currentProjectId, pinChat(await loadChats(currentProjectId), id, pinned))
+      })
+      void refreshChats(currentProjectId)
+    },
+    [currentProjectId, enqueueChats, refreshChats],
   )
 
   const deleteChat = useCallback(
@@ -1133,6 +1148,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
           setMobileOpen(false)
         }}
         onDeleteChat={deleteChat}
+        onPinChat={pinChatById}
         busy={composing}
         collapsed={collapsed}
         onToggleCollapsed={() => setCollapsed((value) => !value)}
@@ -1144,12 +1160,6 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
       {mobileOpen && <div className="home__scrim" onClick={() => setMobileOpen(false)} aria-hidden="true" />}
 
       <div className="home__screen glass glass--strong" data-immersive={(docked && shown === 'board') || undefined}>
-        {/* Before anything has been said, a wave of blue behind the conversation. It fades out when the first message is sent. */}
-        {!docked && (
-          <div className="home__backdrop" data-gone={hasFounderMessage(thread) || undefined} aria-hidden="true">
-            <div className="home__wave" />
-          </div>
-        )}
         {/* The header and the toolbar, together: over a board that fills the screen they are lit from below by a gradual blur. */}
         <div className="home__top" ref={topRef}>
         <header className="home__header">
@@ -1263,7 +1273,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
 
       {docked && (
         <motion.aside
-          className="home__chat"
+          className="home__chat on-shell"
           aria-label="Conversation"
           initial={{ opacity: 0, x: 24 }}
           animate={{ opacity: 1, x: 0 }}

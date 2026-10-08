@@ -1,25 +1,39 @@
-.account-page {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  width: min(42rem, 100%);
+/* The account page sits in the same frame as Home: a rounded screen inset in the charcoal shell. Inside it, one readable column of quiet,
+   compact groups. */
+.account-shell {
   min-height: 100dvh;
-  margin-inline: auto;
-  padding: 2.5rem 1.5rem 4rem;
+  padding: 0.375rem;
+  background: var(--shell);
 }
 
-/* The way back is the only thing above the title: the wordmark was a second thing to read before the page began. */
+.account-page {
+  min-height: calc(100dvh - 0.75rem);
+  border-radius: var(--radius-screen);
+  background: var(--screen);
+  color: var(--text);
+}
+
+.account-page__inner {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: min(38rem, 100%);
+  margin-inline: auto;
+  padding: 1.5rem 1.5rem 3rem;
+  font-size: 0.875rem;
+}
+
+/* The way back is the only thing above the title. */
 .account-page__back {
   align-self: flex-start;
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  margin-left: -0.625rem;
-  padding: 0.5rem 1rem 0.5rem 0.625rem;
-  border-radius: var(--radius-pill);
+  margin-left: -0.5rem;
+  padding: 0.375rem 0.625rem 0.375rem 0.5rem;
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
-  font-size: 0.9375rem;
-  font-weight: 600;
+  font-weight: 500;
   text-decoration: none;
 }
 
@@ -29,44 +43,43 @@
 }
 
 .account-page__title {
-  margin: 0.5rem 0 0.5rem;
-  font-size: clamp(2rem, 1.5rem + 1.5vw, 2.75rem);
+  margin: 1rem 0 0.25rem;
+  font-size: 1.75rem;
   font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
 }
 
-/* Each group is a card on the working screen's own colour, the same raised white as the app. */
+/* A group is outlined by a hairline on the screen's own colour, not raised as a card. */
 .account-card {
-  border-radius: var(--radius-lg);
-  background: var(--canvas);
-  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--overlay-10);
+  border-radius: var(--radius-md);
 }
 
 .account-card--profile {
   display: flex;
   align-items: center;
-  gap: 1.25rem;
-  padding: 1.75rem 2rem;
+  gap: 0.875rem;
+  padding: 1rem 1.25rem;
 }
 
 .account-card__avatar {
   display: grid;
   flex: none;
   place-items: center;
-  width: 4rem;
-  height: 4rem;
+  width: 2.75rem;
+  height: 2.75rem;
   border-radius: 50%;
   background: var(--accent-tint);
   color: var(--accent);
-  font-size: 1.75rem;
+  font-size: 1.125rem;
   font-weight: 600;
 }
 
 .account-card__who {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.125rem;
   min-width: 0;
 }
 
@@ -78,18 +91,16 @@
 }
 
 .account-card__name {
-  color: var(--text);
-  font-size: 1.375rem;
+  font-size: 1rem;
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1.3;
 }
 
 .account-card__detail {
   color: var(--text-muted);
-  font-size: 0.9375rem;
 }
 
-/* Related rows share one card and are told apart by a hairline, not by more boxes. */
+/* Related rows share one group and are told apart by a hairline. */
 .account-card--group {
   overflow: hidden;
 }
@@ -98,8 +109,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1.5rem;
-  padding: 1.5rem 2rem;
+  gap: 1.25rem;
+  padding: 1rem 1.25rem;
 }
 
 .account-row + .account-row {
@@ -109,14 +120,14 @@
 .account-row__text {
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
+  gap: 0.25rem;
   min-width: 0;
-  max-width: 30rem;
+  max-width: 28rem;
 }
 
 .account-row h2 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.875rem;
   font-weight: 600;
   line-height: 1.3;
 }
@@ -124,45 +135,51 @@
 .account-row p {
   margin: 0;
   color: var(--text-muted);
-  font-size: 0.9375rem;
-  line-height: 1.55;
+  line-height: 1.5;
 }
 
 .account-row__button {
   display: inline-flex;
   flex: none;
   align-items: center;
-  gap: 0.5rem;
-  min-height: 2.75rem;
-  padding: 0.625rem 1.25rem;
+  gap: 0.375rem;
+  padding: 0.4375rem 0.875rem;
   border: 1px solid var(--overlay-10);
   border-radius: var(--radius-pill);
-  background: var(--overlay-06);
-  font-size: 0.9375rem;
-  font-weight: 600;
+  background: transparent;
+  font-size: 0.8125rem;
+  font-weight: 500;
 }
 
 .account-row__button:hover {
-  background: var(--accent-tint-soft);
+  background: var(--overlay-06);
 }
 
 @media (max-width: 34rem) {
+  .account-shell {
+    padding: 0.25rem;
+  }
+
   .account-page {
-    padding: 1.25rem 1rem 3rem;
+    min-height: calc(100dvh - 0.5rem);
+  }
+
+  .account-page__inner {
+    padding: 1rem 1rem 2.5rem;
   }
 
   .account-card--profile,
   .account-row {
-    padding: 1.25rem;
+    padding: 0.875rem 1rem;
   }
 
   .account-row {
     flex-direction: column;
     align-items: stretch;
-    gap: 1rem;
+    gap: 0.75rem;
   }
 
   .account-row__button {
-    justify-content: center;
+    align-self: flex-start;
   }
 }

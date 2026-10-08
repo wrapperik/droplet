@@ -38,12 +38,12 @@ export default function AccountMenu({ name, collapsed = false, onAccount, onSign
             transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
           >
             <button type="button" role="menuitem" className="account__item" onClick={choose(onAccount)}>
-              <UserCircleIcon size={20} aria-hidden="true" />
+              <UserCircleIcon size={18} aria-hidden="true" />
               Account
             </button>
             <hr className="account__divider" />
             <button type="button" role="menuitem" className="account__item" onClick={choose(onSignOut)}>
-              <Logout2Icon size={20} aria-hidden="true" />
+              <Logout2Icon size={18} aria-hidden="true" />
               Sign out
             </button>
           </motion.div>

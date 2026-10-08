@@ -4,7 +4,7 @@
 .board-stage {
   position: absolute;
   inset: 0;
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-screen);
   overflow: hidden;
 }
 

@@ -2,28 +2,26 @@
   display: flex;
   gap: 0.25rem;
   height: 100dvh;
-  padding: 0.75rem;
-  /* Clear, so the page's own background shows. Before anything has been said it is plain (see below), and fades to the page. */
-  background-color: transparent;
-  transition: background-color 0.9s var(--ease-out);
+  padding: 0.375rem;
+  /* Dark charcoal in both themes: only the working screen is light (white, or charcoal on a dark screen). The sidebar and the docked chat
+     sit on it with .on-shell, which gives them the dark tokens. */
+  background-color: var(--shell);
 }
 
-/* The start: with the wave behind the conversation, the page and the sidebar on it are plain white (on a light screen), so the tint
-   of the page does not muddy the blue. Once the first message is sent the wave fades out and the page fades to its own colour. */
-.home[data-start] {
-  background-color: var(--bg-start);
+/* The working screen is a slightly smaller rounded box sitting inside the page, beside the sidebar. It is opaque, so the shell does not
+   show through its glass. */
+.home__screen.glass {
+  background: var(--screen);
 }
 
-/* The working screen is a slightly smaller rounded box sitting inside the page, beside the sidebar. */
 .home__screen {
   position: relative;
-  /* A stacking context of its own, so the backdrop can sit behind the screen's content and in front of its glass. */
   isolation: isolate;
   display: flex;
   flex: 1;
   flex-direction: column;
   min-width: 0;
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-screen);
   box-shadow: var(--shadow-md);
 }
 
@@ -43,7 +41,7 @@
   position: absolute;
   inset: 0 0 -3rem 0;
   z-index: -1;
-  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  border-radius: var(--radius-screen) var(--radius-screen) 0 0;
   pointer-events: none;
 }
 
@@ -239,7 +237,7 @@
 
 @media (max-width: 52rem) {
   .home {
-    padding: 0.5rem;
+    padding: 0.25rem;
   }
 
   .home__header {
@@ -312,78 +310,4 @@
 /* While the next answer is worked out the windows ripple (see useRipple). They are not dimmed, but they cannot be pressed. */
 .home__component--busy {
   pointer-events: none;
-}
-
-/*
- * The wave behind the conversation, before anything has been said: pale at the top, sweeping on a slow diagonal into deep blue at the
- * bottom, as in the reference. It is CSS only (no image), made of a few overlapping gradients on a layer larger than the screen that
- * drifts slowly. It fades out when the first message is sent, and comes back with a new chat.
- */
-.home__backdrop {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  overflow: hidden;
-  border-radius: inherit;
-  pointer-events: none;
-  opacity: 1;
-  transition:
-    opacity 0.9s var(--ease-out),
-    visibility 0s linear 0s;
-}
-
-.home__backdrop[data-gone] {
-  opacity: 0;
-  visibility: hidden;
-  transition:
-    opacity 0.9s var(--ease-out),
-    visibility 0s linear 0.9s;
-}
-
-.home__wave {
-  position: absolute;
-  inset: -12%;
-  background:
-    radial-gradient(70% 58% at 86% 104%, var(--wave-deep) 0%, transparent 72%),
-    radial-gradient(62% 46% at 24% 110%, var(--wave-light) 0%, transparent 72%),
-    radial-gradient(78% 40% at 56% 102%, var(--wave-mid) 0%, transparent 78%),
-    radial-gradient(34% 26% at 0% 44%, var(--wave-edge) 0%, transparent 72%),
-    linear-gradient(164deg, transparent 0%, transparent 42%, var(--wave-edge) 53%, var(--wave-mid) 66%, var(--wave-deep) 100%);
-  opacity: var(--wave-strength);
-  animation: home-wave 18s ease-in-out infinite alternate;
-}
-
-/* Grain over the wave, so the gradient has a fine paper-like texture and does not show steps. It is noise made by the browser from an SVG
-   filter (no image file), with its brightness turned into see-through speckles: dark on a light screen, light on a dark one. It lies
-   on the backdrop, not on the wave that drifts, so it holds still while the colour moves beneath it, and fades out with it. */
-.home__backdrop::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image: var(--grain);
-  background-size: 240px 240px;
-  opacity: calc(var(--grain-strength) * var(--wave-strength));
-  /* Only where the colour is: none in the white at the top, building up through the edge of the wave, as strong as it gets in the deep
-     blue. Speckle over white only dulls it. The angle and the stops are those of the wave's own edge. */
-  -webkit-mask-image: linear-gradient(164deg, transparent 44%, rgb(0 0 0 / 0.55) 58%, #000 78%);
-  mask-image: linear-gradient(164deg, transparent 44%, rgb(0 0 0 / 0.55) 58%, #000 78%);
-}
-
-[data-gone] .home__wave {
-  animation-play-state: paused;
-}
-
-@keyframes home-wave {
-  from {
-    transform: translate(-2.5%, 1.5%) rotate(-1.2deg) scale(1);
-  }
-  to {
-    transform: translate(2.5%, -2%) rotate(1.2deg) scale(1.06);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .home__wave {
-    animation: none;
-  }
 }

@@ -1,5 +1,5 @@
-/* The pictures of the introduction. Everything sits on the wave of the stage (Welcome.css), so what is solid or glass here has to read on
-   deep blue in both themes: cards are glass, and what is drawn on the paper of the sample invoice is the palette's own colours. */
+/* The pictures of the introduction. Everything sits on the quiet grey stage (Welcome.css): cards are glass, and what is drawn on the paper of
+   the sample invoice is the palette's own colours. */
 
 .scene {
   display: flex;
@@ -266,7 +266,7 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 0.875rem;
-  border: 1.5px dashed var(--glass-border);
+  border: 1.5px dashed var(--overlay-10);
   border-radius: var(--radius-pill);
   background: var(--glass-fill);
   color: var(--text);
@@ -396,7 +396,7 @@
   gap: 0.5rem;
   width: min(15rem, 100%);
   padding: 1.75rem 1.5rem 1.25rem;
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   color: var(--text);
   text-align: center;

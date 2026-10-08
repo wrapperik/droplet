@@ -19,10 +19,12 @@
   --white: #ffffff;
 
   /* Raw palette: dark companions */
-  --night: #0a1320; /* Dark page background, one step below Ink */
-  --haze: #a9b8cb; /* Dark secondary text */
+  --night: #18191c; /* Dark page background: a neutral charcoal, the same as the shell, with no blue in it */
+  --haze: #a9adb5; /* Dark secondary text: a neutral grey (7 on the dark canvas) */
   --sky: #7cc0f5; /* Dark accent for text and icons */
   --amber: #fbbf24; /* Dark outstanding */
+  --coal: #18191c; /* The shell around the working screen: a dark charcoal, in both themes, darker than the dark screen */
+  --charcoal: #232529; /* The working screen on a dark screen */
 
   /* Shape, motion, layout and type do not change with the theme */
   --radius-pill: 999px;
@@ -30,6 +32,7 @@
   --radius-md: 18px;
   --radius-lg: 24px;
   --radius-xl: 32px;
+  --radius-screen: 16px; /* The working screen beside the sidebar, and the board that fills it */
 
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --duration-fast: 150ms;
@@ -56,7 +59,8 @@
   --status-outstanding: var(--outstanding);
   --status-pending: #d6dde7; /* An asset still to do: a quiet grey, because orange reads as a warning */
   --on-pending: var(--slate); /* Icon inside it: 5.0 on the grey */
-  --bg-start: var(--white); /* The page behind the conversation before anything has been said */
+  --shell: var(--coal); /* Home's page, sidebar and docked chat: dark charcoal in both themes. What sits on it uses .on-shell. */
+  --screen: var(--white); /* The rounded working screen beside the sidebar */
   --on-status: var(--white); /* Icon inside a status circle */
 
   /* The founder's chat bubbles: a mid blue, lit from above. As light as it can be with white text still reading: 4.6 at the top, 5.9 at
@@ -107,17 +111,21 @@
   --shadow-lg: 0 4px 8px rgb(14 26 43 / 0.04), 0 24px 60px rgb(14 26 43 / 0.12);
 }
 
-/* Semantic tokens: dark. Set by the theme store through data-theme on <html>. */
-:root[data-theme='dark'] {
+/* Semantic tokens: dark. Set by the theme store through data-theme on <html>, and by .on-shell on anything that sits on the near-black
+   shell (the sidebar and the docked chat), so it reads on black in either theme. */
+:root[data-theme='dark'],
+.on-shell {
   color-scheme: dark;
 
   --bg: var(--night);
-  --bg-glow: rgb(31 143 224 / 0.14);
+  --bg-glow: transparent; /* No blue glow on a dark page */
   --text: var(--mist);
   --text-muted: var(--haze);
   --accent: var(--sky);
-  --accent-tint: rgb(31 143 224 / 0.26);
-  --accent-tint-soft: rgb(31 143 224 / 0.16);
+  /* Selected and hover fills are neutral on a dark screen: a blue wash over charcoal reads as a tint on everything. The accent colour itself
+     (Sky) still marks what is selected. */
+  --accent-tint: rgb(255 255 255 / 0.12);
+  --accent-tint-soft: rgb(255 255 255 / 0.07);
   --button: var(--droplet-blue);
   --on-button: var(--ink);
   --focus: var(--droplet-blue);
@@ -125,7 +133,7 @@
   --status-outstanding: var(--amber);
   --status-pending: rgb(255 255 255 / 0.2);
   --on-pending: var(--haze); /* About 6 on the grey over Night */
-  --bg-start: transparent; /* On a dark screen the page is the same before and after */
+  --screen: var(--charcoal);
   --on-status: var(--ink);
 
   /* Chat bubbles keep their blue in the dark theme, a touch brighter on top so the light still comes from above. */
@@ -136,13 +144,14 @@
 
   --overlay-06: rgb(255 255 255 / 0.07);
   --overlay-10: rgb(255 255 255 / 0.12);
-  --canvas: #16263b;
+  --canvas: #2a2c31; /* Windows on the charcoal screen: a neutral step lighter, with no blue in it */
   --scrim: rgb(0 0 0 / 0.55);
   --raised: rgb(255 255 255 / 0.16);
 
-  --glass-fill: rgb(18 32 52 / 0.62);
-  --glass-fill-strong: rgb(18 32 52 / 0.84);
-  --glass-fill-fallback: rgb(18 32 52 / 0.97);
+  /* Neutral grey glass, with no blue in it, a step lighter than the screen and the shell so menus stand off them. */
+  --glass-fill: rgb(46 48 53 / 0.62);
+  --glass-fill-strong: rgb(46 48 53 / 0.86);
+  --glass-fill-fallback: rgb(46 48 53 / 0.97);
   --glass-border: rgb(255 255 255 / 0.1);
   --intent-fill: var(--glass-fill); /* On a dark screen the glass is already right */
 
@@ -160,4 +169,10 @@
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.25), 0 4px 14px rgb(0 0 0 / 0.2);
   --shadow-md: 0 2px 4px rgb(0 0 0 / 0.25), 0 10px 30px rgb(0 0 0 / 0.3);
   --shadow-lg: 0 4px 8px rgb(0 0 0 / 0.3), 0 24px 60px rgb(0 0 0 / 0.45);
+}
+
+/* On the shell the page colour is the shell's, and text that only inherits its colour takes the shell's too. */
+.on-shell {
+  --bg: var(--shell);
+  color: var(--text);
 }

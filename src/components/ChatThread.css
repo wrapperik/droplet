@@ -6,13 +6,15 @@
   gap: 0.75rem;
   min-height: 0;
   margin: 0;
-  padding: 0.5rem 0.5rem 1rem;
+  /* More on the right, so the scrollbar a Mac draws over the content never sits on a bubble. */
+  padding: 0.5rem 0.875rem 1rem 0.5rem;
   list-style: none;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
 
 .thread__message {
+  position: relative; /* holds the time shown under it on hover */
   max-width: 92%;
   font-size: 0.9375rem;
   line-height: 1.5;
@@ -155,5 +157,82 @@
       opacity: 0;
       transform: translateY(4px);
     }
+  }
+}
+
+/* When a message was sent, and a copy button on Droplet's replies: shown just under the message while it is pointed at or focused, in the gap
+   before the next one, so nothing moves. */
+.thread__meta {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+  line-height: 1;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+/* A reply keeps a short row free under it for its time and copy button, as in most assistants, so they never sit on the next message. */
+.thread__message--droplet:not(.thread__message--pending) {
+  padding-bottom: 1.625rem;
+}
+
+.thread__message--droplet .thread__meta {
+  top: auto;
+  bottom: 0;
+}
+
+.thread__message--you .thread__meta {
+  right: 0;
+  left: auto;
+  padding-top: 0.25rem;
+}
+
+.thread__message:hover .thread__meta,
+.thread__message:focus-within .thread__meta {
+  opacity: 1;
+}
+
+.thread__time {
+  font-weight: 400;
+}
+
+.thread__copy {
+  display: grid;
+  place-items: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.thread__copy:hover,
+.thread__copy:focus-visible {
+  background: var(--overlay-06);
+  color: var(--text);
+}
+
+/* No hover on a touch screen: the copy button stays, the time does not. */
+@media (hover: none) {
+  .thread__message--droplet:not(.thread__message--pending) {
+    padding-bottom: 0.25rem;
+  }
+
+  .thread__meta {
+    position: static;
+    margin-top: 0.25rem;
+    opacity: 1;
+  }
+
+  .thread__time {
+    display: none;
   }
 }

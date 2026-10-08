@@ -8,38 +8,46 @@
   background: var(--scrim);
 }
 
+/* One quiet panel: a header that names the project, two tabs, and plain rows separated by hairlines. No cards inside it. */
 .brief {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  width: min(40rem, 100%);
-  max-height: min(46rem, 90dvh);
-  padding: 1.25rem;
-  border-radius: var(--radius-xl);
+  width: min(36rem, 100%);
+  max-height: min(44rem, 90dvh);
+  padding: 1.25rem 1.25rem 0.5rem;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
+  font-size: 0.875rem;
 }
 
 .brief__header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
 }
 
+.brief__project {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
 .brief__title {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: 1.125rem;
   font-weight: 600;
 }
 
 .brief__close {
   display: grid;
   place-items: center;
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 2rem;
+  height: 2rem;
   padding: 0;
   border: 0;
-  border-radius: 50%;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-muted);
 }
@@ -50,10 +58,34 @@
   color: var(--text);
 }
 
-.brief__lead {
-  margin: 0;
+.brief__tabs {
+  display: flex;
+  gap: 1.25rem;
+  margin-top: 0.875rem;
+  border-bottom: 1px solid var(--overlay-10);
+}
+
+.brief__tab {
+  margin-bottom: -1px;
+  padding: 0.5rem 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
   color: var(--text-muted);
-  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+.brief__tab:hover {
+  color: var(--text);
+}
+
+.brief__tab[aria-selected='true'] {
+  border-bottom-color: var(--text);
+  color: var(--text);
+}
+
+.brief__tab:focus-visible {
+  outline-offset: 2px;
 }
 
 .brief__body {
@@ -61,20 +93,28 @@
   flex-direction: column;
   gap: 1.25rem;
   min-height: 0;
-  padding: 0.5rem 0.25rem 0.25rem 0;
+  /* The scrollbar has a strip of its own on the right: on a Mac it is drawn over the content, so the words stop before it. The negative margin
+     keeps the words lined up with the header above. */
+  margin-right: -0.75rem;
+  padding: 1rem 1rem 1rem 0;
   overflow-y: auto;
+}
+
+.brief__lead {
+  margin: 0;
+  color: var(--text-muted);
 }
 
 .brief__section {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.25rem;
 }
 
 .brief__heading {
   margin: 0;
   color: var(--text-muted);
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -84,37 +124,40 @@
 .brief__earlier {
   margin: 0;
   color: var(--text-muted);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
 }
 
 .brief__list {
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
+/* A fact: its label above its words, the edit and forget buttons at the end, shown on hover or focus. */
 .brief__row {
   display: grid;
-  grid-template-columns: minmax(7rem, 11rem) 1fr auto;
-  align-items: start;
-  gap: 0.25rem 0.75rem;
-  padding: 0.5rem 0.75rem;
-  border-radius: var(--radius-lg);
-  background: var(--overlay-06);
-  font-size: 0.9375rem;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0.125rem 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--overlay-06);
+}
+
+.brief__row:last-child {
+  border-bottom: 0;
 }
 
 .brief__label {
+  grid-column: 1;
   color: var(--text-muted);
-  font-size: 0.875rem;
-  font-weight: 600;
+  font-size: 0.75rem;
 }
 
 .brief__value,
 .brief__edit {
+  grid-column: 1;
   display: flex;
   flex-direction: column;
   gap: 0.125rem;
@@ -123,11 +166,11 @@
 }
 
 .brief__edit {
+  grid-column: 1 / 3;
   flex-direction: row;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.375rem;
-  grid-column: 2 / 4;
 }
 
 .brief__edit .brief__input {
@@ -138,31 +181,49 @@
 .brief__ask {
   display: flex;
   align-items: center;
-  gap: 0.375rem;
+  gap: 0.25rem;
+}
+
+.brief__row > .brief__actions {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.brief__row:hover > .brief__actions,
+.brief__row:focus-within > .brief__actions {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .brief__row > .brief__actions {
+    opacity: 1;
+  }
 }
 
 .brief__ask {
-  grid-column: 2 / 4;
+  grid-column: 1 / 3;
   justify-content: flex-end;
   color: var(--text-muted);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
 }
 
 .brief__icon {
   display: grid;
   place-items: center;
-  width: 1.875rem;
-  height: 1.875rem;
+  width: 1.75rem;
+  height: 1.75rem;
   padding: 0;
   border: 0;
-  border-radius: 50%;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-muted);
 }
 
 .brief__icon:hover,
 .brief__icon:focus-visible {
-  background: var(--accent-tint-soft);
+  background: var(--overlay-06);
   color: var(--text);
 }
 
@@ -170,14 +231,14 @@
   padding: 0.3125rem 0.75rem;
   border: 1px solid var(--overlay-10);
   border-radius: var(--radius-pill);
-  background: var(--raised);
+  background: transparent;
   color: var(--text);
   font-size: 0.8125rem;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .brief__small:hover {
-  background: var(--accent-tint);
+  background: var(--overlay-06);
 }
 
 .brief__small--primary {
@@ -191,61 +252,6 @@
   opacity: 0.92;
 }
 
-.brief__input {
-  min-width: 0;
-  padding: 0.4375rem 0.75rem;
-  border: 1px solid var(--overlay-10);
-  border-radius: var(--radius-pill);
-  background: var(--raised);
-  color: var(--text);
-  font-size: 0.9375rem;
-}
-
-.brief__add {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.5rem;
-}
-
-.brief__field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  color: var(--text-muted);
-  font-size: 0.8125rem;
-  font-weight: 600;
-}
-
-.brief__field--wide {
-  flex: 1 1 14rem;
-}
-
-.brief__error {
-  margin: 0;
-  color: var(--status-outstanding);
-  font-size: 0.875rem;
-  font-weight: 500;
-}
-
-.brief__switch {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: 0.125rem 0.625rem;
-  padding: 0.5rem 0.75rem;
-  border-radius: var(--radius-lg);
-  background: var(--overlay-06);
-}
-
-.brief__switch label {
-  font-weight: 600;
-}
-
-.brief__switch .brief__detail {
-  grid-column: 2;
-}
-
 .brief__small--danger {
   border-color: transparent;
   background: var(--status-outstanding);
@@ -255,4 +261,138 @@
 .brief__small--danger:hover {
   background: var(--status-outstanding);
   opacity: 0.92;
+}
+
+.brief__input {
+  min-width: 0;
+  padding: 0.375rem 0.625rem;
+  border: 1px solid var(--overlay-10);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: 0.875rem;
+}
+
+.brief__input:focus-visible {
+  outline-offset: 0;
+}
+
+/* Adding a fact: a quiet link until it is pressed, then one row of what it is about and the words. */
+.brief__add-open {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  align-self: flex-start;
+  padding: 0.25rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.brief__add-open:hover,
+.brief__add-open:focus-visible {
+  color: var(--text);
+}
+
+.brief__adding {
+  gap: 0.5rem;
+}
+
+.brief__add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.brief__select {
+  flex: 0 1 11rem;
+}
+
+.brief__field--wide {
+  flex: 1 1 14rem;
+}
+
+.brief__add-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.375rem;
+}
+
+.brief__error {
+  margin: 0;
+  color: var(--status-outstanding);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.brief__switches {
+  display: flex;
+  flex-direction: column;
+}
+
+/* A switch: the words on the left, the toggle on the right. */
+.brief__switch {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--overlay-06);
+}
+
+.brief__switch:last-child {
+  border-bottom: 0;
+}
+
+.brief__switch-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.brief__switch label {
+  font-weight: 500;
+}
+
+.brief__toggle {
+  position: relative;
+  flex: none;
+  width: 2.25rem;
+  height: 1.25rem;
+  margin: 0;
+  border-radius: var(--radius-pill);
+  background: var(--overlay-10);
+  appearance: none;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.brief__toggle::after {
+  content: '';
+  position: absolute;
+  top: 0.125rem;
+  left: 0.125rem;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  background: var(--raised);
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.brief__toggle:checked {
+  background: var(--button);
+}
+
+.brief__toggle:checked::after {
+  background: var(--on-button);
+  transform: translateX(1rem);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brief__toggle,
+  .brief__toggle::after {
+    transition: none;
+  }
 }

@@ -29,3 +29,17 @@ describe('the screen when the board fills it', () => {
     for (const r of rules.filter((r) => /\.home__top::(before|after)/.test(r.selector))) expect(r.selector).toContain('[data-immersive]')
   })
 })
+
+describe('the shell round the working screen', () => {
+  const tokens = readFileSync('src/styles/tokens.css', 'utf8')
+
+  it('is near black, with an opaque screen on it', () => {
+    expect(rule('.home')?.body).toMatch(/background-color:\s*var\(--shell\)/)
+    expect(rule('.home__screen.glass')?.body).toMatch(/background:\s*var\(--screen\)/)
+  })
+
+  it('gives what sits on it the dark tokens in either theme', () => {
+    expect(tokens).toMatch(/:root\[data-theme='dark'\],\s*\.on-shell\s*\{/)
+    expect(tokens).toMatch(/\.on-shell\s*\{[^}]*--bg:\s*var\(--shell\)/)
+  })
+})

@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { AddCircleIcon, CheckIcon, ChevronsUpDownIcon, LibraryIcon, NotebookIcon } from '@solar-icons/react/linear'
+import { AddCircleIcon, CheckIcon, ChevronsUpDownIcon, LibraryIcon } from '@solar-icons/react/linear'
 import { useDismiss } from '../hooks/useDismiss.ts'
 import type { ProjectSummary } from '../lib/mockProjects.ts'
 import './ProjectSwitcher.css'
@@ -12,10 +12,9 @@ type Props = {
   onSelect: (id: string) => void
   onNewProject?: () => void
   // Opens the project brief: everything Droplet remembers about this business.
-  onOpenBrief?: () => void
 }
 
-export default function ProjectSwitcher({ projects, currentId, collapsed, onSelect, onNewProject, onOpenBrief }: Props) {
+export default function ProjectSwitcher({ projects, currentId, collapsed, onSelect, onNewProject }: Props) {
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
   const close = useCallback(() => setOpen(false), [])
@@ -34,9 +33,9 @@ export default function ProjectSwitcher({ projects, currentId, collapsed, onSele
         title={collapsed ? current.name : undefined}
         onClick={() => setOpen((value) => !value)}
       >
-        <LibraryIcon className="switcher__icon" size={28} aria-hidden="true" />
+        <LibraryIcon className="switcher__icon" size={20} aria-hidden="true" />
         <span className="switcher__name">{current.name}</span>
-        <ChevronsUpDownIcon className="switcher__chevron" size={18} aria-hidden="true" />
+        <ChevronsUpDownIcon className="switcher__chevron" size={16} aria-hidden="true" />
       </button>
 
       <AnimatePresence>
@@ -62,24 +61,12 @@ export default function ProjectSwitcher({ projects, currentId, collapsed, onSele
                   onSelect(project.id)
                 }}
               >
-                <LibraryIcon className="switcher__item-icon" size={24} aria-hidden="true" />
+                <LibraryIcon className="switcher__item-icon" size={20} aria-hidden="true" />
                 <span className="switcher__item-name">{project.name}</span>
-                {project.id === currentId && <CheckIcon size={18} aria-hidden="true" />}
+                {project.id === currentId && <CheckIcon size={16} aria-hidden="true" />}
               </button>
             ))}
             <hr className="switcher__divider" />
-            <button
-              type="button"
-              role="menuitem"
-              className="switcher__item"
-              onClick={() => {
-                setOpen(false)
-                onOpenBrief?.()
-              }}
-            >
-              <NotebookIcon size={22} aria-hidden="true" />
-              <span className="switcher__item-name">Project brief</span>
-            </button>
             <button
               type="button"
               role="menuitem"
@@ -89,7 +76,7 @@ export default function ProjectSwitcher({ projects, currentId, collapsed, onSele
                 onNewProject?.()
               }}
             >
-              <AddCircleIcon size={22} aria-hidden="true" />
+              <AddCircleIcon size={18} aria-hidden="true" />
               <span className="switcher__item-name">New project</span>
             </button>
           </motion.div>
