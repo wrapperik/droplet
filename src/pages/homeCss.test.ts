@@ -67,3 +67,9 @@ describe('the screen in Guide mode', () => {
     expect(guideCss).not.toMatch(/position:\s*sticky/)
   })
 })
+
+describe('the side chat', () => {
+  it('has room to read: at least 20rem, growing with the window to 26rem', () => {
+    expect(rule('.home__chat')?.body).toMatch(/width:\s*clamp\(20rem, 26vw, 26rem\)/)
+  })
+})

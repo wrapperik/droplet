@@ -199,15 +199,16 @@
 }
 
 
-/* With a workspace on screen the conversation lives beside it, straight on the page like the sidebar, not in the rounded box. */
+/* With a workspace on screen the conversation lives beside it, straight on the page like the sidebar, not in the rounded box. It grows with the
+   window, from 20rem on a small laptop to 26rem on a large screen, so a reply and its cards have room. */
 .home__chat {
   display: flex;
   flex: none;
   flex-direction: column;
   gap: 0.75rem;
-  width: 18.5rem;
+  width: clamp(20rem, 26vw, 26rem);
   min-height: 0;
-  padding: 0.5rem 0.25rem 0.25rem 0.5rem;
+  padding: 0.5rem 0.5rem 0.25rem 0.75rem;
 }
 
 .home__scrim {
