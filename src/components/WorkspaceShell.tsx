@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { CheckIcon, DisketteIcon, RestartIcon, UndoLeftIcon, UndoRightIcon } from '@solar-icons/react/linear'
 import {
@@ -16,11 +16,8 @@ import type { Heights, Placement } from '../lib/gridLayout.ts'
 import ComponentsMenu from './ComponentsMenu.tsx'
 import GridWorkspace, { type GridHandle, type Incoming, type WorkspaceItem } from './GridWorkspace.tsx'
 import ToolShelf, { type Outside, type ShelfHandle, type ShelfTool } from './ToolShelf.tsx'
+import { useUndoKeys } from '../hooks/useUndoKeys.ts'
 import './WorkspaceShell.css'
-
-// True when the key press belongs to a text field, which has its own undo.
-const inTextField = (target: EventTarget | null) =>
-  target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
 
 export type HeaderSlots = { start: HTMLElement | null; end: HTMLElement | null; shelf: HTMLElement | null }
 
@@ -92,22 +89,7 @@ export default function WorkspaceShell({
   }, [canRedo, onRedo])
 
   // Ctrl or Cmd with Z undoes, with Shift (or Y) redoes. A text field keeps its own undo.
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || event.altKey || inTextField(event.target)) return
-      const key = event.key.toLowerCase()
-      if (key === 'z') {
-        event.preventDefault()
-        if (event.shiftKey) redoStep()
-        else undoStep()
-      } else if (key === 'y') {
-        event.preventDefault()
-        redoStep()
-      }
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [undoStep, redoStep])
+  useUndoKeys(undoStep, redoStep)
 
   const moveTool = useCallback((id: string, before: string | null) => dispatch({ type: 'move_tool', id, before }), [dispatch])
   const resize = useCallback((id: string, value: number) => dispatch({ type: 'resize', id, value }), [dispatch])

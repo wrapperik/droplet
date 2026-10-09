@@ -286,3 +286,26 @@ describe('the answer, checked again in the browser', () => {
     expect(result).toMatchObject({ ok: false, kind: 'bad_response' })
   })
 })
+
+describe('Guide mode on the invoice', () => {
+  it('names the step on screen after the invoice, and only when there is one', () => {
+    const guided = buildUserContent({ intent: 'help', view: 'invoice', invoice, guide: { step: 'client', position: 3, of: 6 } })
+    expect(guided).toContain('<guide>\nStep 3 of 6: Client\n</guide>')
+    expect(guided.indexOf('<guide>')).toBeGreaterThan(guided.indexOf('</invoice>'))
+    expect(buildUserContent({ intent: 'help', view: 'invoice', invoice })).not.toContain('<guide>')
+  })
+
+  it('tells the composer what the guide is and that only the founder moves on', () => {
+    for (const prompt of [INVOICE_SYSTEM_PROMPT, systemPromptFor('invoice', 'base')]) {
+      expect(prompt).toContain('When there is a <guide> block, the founder is in Guide mode')
+      expect(prompt).toMatch(/You cannot move them to another step or finish the invoice/)
+    }
+    expect(SYSTEM_PROMPT).toMatch(/Guide mode \(the default\) shows the invoice one step at a time/)
+  })
+
+  it('accepts a guide in the request only with a step the guide has', () => {
+    expect(composeRequestSchema.safeParse({ intent: 'hi', guide: { step: 'lines', position: 4, of: 6 } }).success).toBe(true)
+    expect(composeRequestSchema.safeParse({ intent: 'hi', guide: { step: 'logo', position: 4, of: 6 } }).success).toBe(false)
+    expect(composeRequestSchema.safeParse({ intent: 'hi', guide: { step: 'lines', position: 9, of: 6 } }).success).toBe(false)
+  })
+})

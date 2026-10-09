@@ -1,6 +1,7 @@
 import { describeWorkspace } from './context.ts'
 import { describeBoard, describeTemplates } from './boardSnapshot.ts'
 import { describeInvoice } from './invoiceContext.ts'
+import { GUIDE_TITLES } from '../lib/invoiceGuide.ts'
 import { describeProject } from './journey.ts'
 import { describeLibrary } from './librarySnapshot.ts'
 import { NOTES_TITLES } from './digest.ts'
@@ -67,7 +68,8 @@ const APP_KNOWLEDGE = `What Droplet is, so that you can explain it and never pro
 - Droplet does not make logos or any images. A founder makes theirs in a free tool such as Canva or Adobe Express, and Droplet's part is to help them choose a direction, use the tool and be ready to use the result.
 - The plus beside the message bar opens a menu of five tasks (shape the business idea, build the brand, get a logo, make an invoice, write to a client). It is the familiar way in, and the founder can use it instead of talking to you. Choosing a task opens its workspace as it comes, with no AI.
 - A change receipt: under every reply that changes a workspace the app shows a card, built by the app, of exactly what changed and what was left out and why, with Undo this and Show me. So you need not list every change in your message: say what it means and why you did it. Never claim a change the receipt would not show.
-- Quick and Advanced: the founder chooses, in the menu beside the message box, how the next message is answered. Quick is the default. Advanced is a stronger model that can search the web, and there are only a few Advanced answers a day, which the menu shows. You cannot switch Advanced on or off, and you do not know how many are left, so never say how many.
+- Guide and Workspace: in the menu beside the message box the founder chooses how a task opens, and it stays until they change it. Guide mode (the default) shows the invoice one step at a time in the middle of the screen (their business, VAT, the client, what they are charging, the invoice details, then a review), with the page beside it; when they finish, it is saved once they confirm, closes, and a card in the chat shows it with Export PDF and Open. Workspace mode opens the whole workspace with every tool at once. The brand workspace and the board open as workspaces in both. You cannot change the mode.
+- Quick and Advanced: in the same menu, Advanced is a switch for the next message only. Quick is the default. Advanced is a stronger model that can search the web, and there are only a few Advanced answers a day, which the menu shows. You cannot switch Advanced on or off, and you do not know how many are left, so never say how many.
 - Memory: nothing is remembered unless the founder confirms it, and you cannot save, confirm or remember anything. You can propose facts about the business, which the founder chooses to remember. The founder has a project brief where they read, change and forget what is remembered. Droplet also keeps short memories of past chats (<earlier_chats>) and notes on the workspaces (<project_notes>, <from_your_notes>), which the founder can switch off, read and delete in the brief. A note on the board, a colour or an invoice line can be starred to keep it in mind: starred things are always in the notes. The palette is saved with the Save button, the business name and the offer from a note on the board, and the business, clients and invoices from the invoice's confirm step. <project> shows what is remembered.
 - Privacy: you are sent only what the task needs. Addresses, contact details and bank details, of the business or of a client, are never sent to you. Say so if the founder worries about it.
 - The app computes sums and contrast. You never calculate them.`
@@ -154,7 +156,8 @@ const INVOICE_ACTING = `Acting on the invoice
 - Dates are written YYYY-MM-DD. Work from today's date in <invoice>. "Due in 7, 14 or 30 days" and "due on receipt" are set_terms with those terms. Any other due date is set_terms with terms custom and the date. set_date changes the date of the invoice itself.
 - Only use set_vat_registered if the founder says whether they are registered for VAT.
 - You cannot change the invoice number, the founder's business details or bank details, or export, and you cannot save: those are in the toolbar and on the header. If asked, say where. Saving is the founder's choice, and they confirm what is remembered. If it matters, remind them to press Save.
-- After you act, say in one or two sentences what you did. If the invoice still needs something, ask for the first thing, using stillNeededBeforeExport.`
+- After you act, say in one or two sentences what you did. If the invoice still needs something, ask for the first thing, using stillNeededBeforeExport.
+- When there is a <guide> block, the founder is in Guide mode: the invoice is shown one step at a time, and <guide> names the step on screen. Help with that step first, and ask for what it needs. You can still fill in any part they tell you about, and it will be there when they reach it. You cannot move them to another step or finish the invoice: they press Continue, and Finish on the last step, which saves it once they confirm. If they ask, say so.`
 
 const BOARD_ACTING = `Acting on the board
 - The board is a large area where the founder thinks about their business on sticky notes, shapes, text, frames and arrows: ideas, names, offers, customers, decisions. Your job here is to help them think, not to think for them.
@@ -402,6 +405,7 @@ export function buildUserContent(request: ComposeRequest, errors?: string[], sea
   }
   if (request.view === 'invoice' && request.invoice) {
     parts.push(`<invoice>\n${JSON.stringify(describeInvoice(request.invoice), null, 1)}\n</invoice>`)
+    if (request.guide) parts.push(`<guide>\nStep ${request.guide.position} of ${request.guide.of}: ${GUIDE_TITLES[request.guide.step]}\n</guide>`)
   } else if (request.view === 'board' && request.board) {
     parts.push(`<board>\n${JSON.stringify(describeBoard(request.board), null, 1)}\n</board>`)
   } else {

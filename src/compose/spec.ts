@@ -8,6 +8,7 @@ import { projectSnapshotSchema } from './journey.ts'
 import { librarySnapshotSchema } from './librarySnapshot.ts'
 import { isScreenAction, SCREEN_WORKSPACES, screenActionSchemas, type ScreenAction } from './screenActions.ts'
 import { TASKS, type Task } from './taskNames.ts'
+import { GUIDE_STEPS } from '../lib/invoiceGuide.ts'
 
 export { TASKS, type Task }
 
@@ -207,6 +208,14 @@ export const composeRequestSchema = z.object({
   workspace: workspaceSnapshotSchema.optional(),
   // The invoice workspace, when it is the one on screen.
   invoice: invoiceSnapshotSchema.optional(),
+  // In Guide mode, the step of the invoice that is on screen. The founder moves on; the composer only helps with the step.
+  guide: z
+    .object({
+      step: z.enum(GUIDE_STEPS),
+      position: z.number().int().min(1).max(GUIDE_STEPS.length),
+      of: z.number().int().min(1).max(GUIDE_STEPS.length),
+    })
+    .optional(),
   // The board, when it is the one on screen.
   board: boardSnapshotSchema.optional(),
   memory: paletteSnapshotSchema.optional(),

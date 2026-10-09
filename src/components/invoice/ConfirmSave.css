@@ -95,3 +95,9 @@
 .confirm__cancel:hover {
   background: var(--overlay-06);
 }
+
+/* Opens upwards, above a button at the foot of the screen (the guide's Finish). */
+.confirm__note--above {
+  top: auto;
+  bottom: calc(100% + 0.5rem);
+}

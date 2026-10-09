@@ -13,6 +13,10 @@ import ChatThread, { type ThreadAction, type ThreadMessage } from '../components
 import IntentBar from '../components/IntentBar.tsx'
 import Library from '../components/Library.tsx'
 import InvoiceWorkspace from '../components/invoice/InvoiceWorkspace.tsx'
+import GuidedInvoice from '../components/invoice/GuidedInvoice.tsx'
+import InvoiceResultCard from '../components/InvoiceResultCard.tsx'
+import { GUIDE_STEPS, jumpTo, progressFor, resultMessage, stepIndex, type GuideProgress, type InvoiceResult } from '../lib/invoiceGuide.ts'
+import { useWorkMode } from '../store/workMode.ts'
 import PaletteWorkspace from '../components/PaletteWorkspace.tsx'
 import RippleGlow from '../components/RippleGlow.tsx'
 import Sidebar from '../components/Sidebar.tsx'
@@ -41,7 +45,7 @@ import { MAX_HISTORY_MESSAGES, isBoardAction, isInvoiceAction, isScreenAction, r
 import { useRipple } from '../hooks/useRipple.ts'
 import { requestComposition, requestSummary } from '../lib/composeClient.ts'
 import { useAdvancedAllowance } from '../lib/advancedAllowance.ts'
-import { byPinnedThenRecent, chatTitle, cleanTitle, hasFounderMessage, lastActive, loadChats, pinChat, removeChat, saveChats, storableMessages, upsertChat, type StoredChat } from '../lib/chatStore.ts'
+import { byPinnedThenRecent, chatHasBegun, chatTitle, cleanTitle, hasFounderMessage, lastActive, loadChats, pinChat, removeChat, saveChats, storableMessages, upsertChat, type StoredChat } from '../lib/chatStore.ts'
 import { loadBoard, openBoardForProject, saveBoard } from '../lib/boardStore.ts'
 import { docOf as boardDocOf, isBoardUnsaved, reduceBoard, type BoardAction, type BoardState } from '../lib/boardState.ts'
 import { exportBrandSheet } from '../lib/exportSheet.ts'
@@ -110,6 +114,11 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   const [invoice, setInvoice] = useState<InvoiceState | null>(null)
   // The board for shaping the business idea, once it has been opened. The founder and the composer both change it through `reduceBoard`.
   const [board, setBoard] = useState<BoardState | null>(null)
+  // Guide or Workspace, as the founder chose in the menu beside the message box. In Guide mode the invoice is shown one step at a time.
+  const workMode = useWorkMode((state) => state.mode)
+  // Where the founder is in the guided invoice. Kept here, so a visit to another workspace does not lose the place.
+  const [guide, setGuide] = useState<GuideProgress | null>(null)
+  const guideRef = useRef<GuideProgress | null>(null)
   // Which workspace is on screen. Each keeps its own state while another is shown.
   const [view, setView] = useState<WorkspaceView>('brand')
   // The library is shown in place of the workspaces, which keep their state while it is. Opening a workspace from it, or by asking, closes it.
@@ -246,6 +255,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
     leaveWorkspacesRef.current = leaveWorkspaces
     openFromLibraryRef.current = openFromLibrary
     chatIdRef.current = chatId
+    guideRef.current = guide
   })
 
   useRipple(canvasRef, composing)
@@ -261,7 +271,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   // for a conversation with no words from the founder, and nothing changes if what is kept is already what was said.
   useEffect(() => {
     const messages = storableMessages(thread)
-    if (!hasFounderMessage(messages)) return
+    if (!chatHasBegun(messages)) return
     const title = chatName || chatTitle(messages)
     void enqueueChats(async () => {
       const kept = await loadChats(currentProjectId)
@@ -327,6 +337,12 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   // The workspaces that are open, one of which is on screen, so the composer can switch to one by name.
   const openNow = (): View[] => [...(workspaceRef.current ? (['brand'] as const) : []), ...(invoiceRef.current ? (['invoice'] as const) : []), ...(boardRef.current ? (['board'] as const) : [])]
 
+  // The step of the guided invoice that is on screen, as the composer is told it.
+  const guideOf = (invoiceId: string) => {
+    const progress = progressFor(guideRef.current, invoiceId)
+    return { step: progress.step, position: stepIndex(progress.step) + 1, of: GUIDE_STEPS.length }
+  }
+
   // Opens a workspace and puts it on screen, for a reply that asks to be taken there. The refs are set at once, since the next
   // request is made before the screen has had a chance to catch up.
   const openWorkspaceFor = useCallback(
@@ -385,6 +401,8 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         ...(openNow().length > 0 ? { open: openNow() } : {}),
         ...(chatNameRef.current ? { chatTitle: chatNameRef.current } : {}),
         ...(view === 'invoice' && invoiceOpen ? { invoice: snapshotOfInvoice(invoiceOpen, memory, todayIso()) } : {}),
+        // In Guide mode the composer is told which step is on screen, so it helps with that one. It cannot move the founder on.
+        ...(view === 'invoice' && invoiceOpen && useWorkMode.getState().mode === 'guide' ? { guide: guideOf(invoiceDocOf(invoiceOpen).invoiceId) } : {}),
         ...(view === 'brand' && open
           ? { workspace: snapshotOfState(open, drawnRef.current.layout.length > 0 ? drawnRef.current.layout : null, saved ? (isUnsaved(docOf(open), saved) ? 'unsaved' : 'saved') : 'none') }
           : {}),
@@ -774,7 +792,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
     const messages = storableMessages(thread)
     // The open chat keeps its place until the founder sends something in it: then it is the most recent and goes to the top.
     const kept = chats.find((chat) => chat.id === chatId)
-    const open = hasFounderMessage(messages) ? [{ id: chatId, title: chatName || chatTitle(messages), updatedAt: lastActive(messages, kept?.updatedAt) ?? '', current: true, pinned: kept?.pinned }] : []
+    const open = chatHasBegun(messages) ? [{ id: chatId, title: chatName || chatTitle(messages), updatedAt: lastActive(messages, kept?.updatedAt) ?? '', current: true, pinned: kept?.pinned }] : []
     const others = chats.filter((chat) => chat.id !== chatId).map((chat) => ({ id: chat.id, title: chat.title, updatedAt: chat.updatedAt, current: false, pinned: chat.pinned }))
     return byPinnedThenRecent([...open, ...others])
   })()
@@ -881,6 +899,33 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
     setView('brand')
     setCollapsed(false)
   }, [])
+
+  // Only the invoice goes: a guided invoice that is finished. Another workspace that is open comes to the front, or the conversation has the whole screen.
+  const closeInvoice = useCallback(() => {
+    invoiceRef.current = null
+    setInvoice(null)
+    setGuide(null)
+    const other: WorkspaceView | null = workspaceRef.current ? 'brand' : boardRef.current ? 'board' : null
+    if (other) {
+      viewRef.current = other
+      spaceRef.current = other === 'board' ? 'ideation' : other
+      setView(other)
+    } else {
+      spaceRef.current = null
+      if (!libraryOpenRef.current) setCollapsed(false)
+    }
+  }, [])
+
+  // The guided invoice is finished: confirmed and saved. It closes, and the chat shows what was made, with a way to export it and open it again.
+  const finishGuided = useCallback(
+    (result: InvoiceResult) => {
+      closeInvoice()
+      setThread((current) => [...current, { ...message('droplet', resultMessage(result)), result }])
+      setLibraryVersion((count) => count + 1)
+      void refreshProject()
+    },
+    [closeInvoice, message, refreshProject],
+  )
 
   // Settles the question about unsaved work: its buttons go, and it says how it ended.
   const settleLeave = useCallback((id: number, text: string, actions?: ThreadAction[]) => {
@@ -1082,11 +1127,15 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         setInvoice(next)
       }
       if (!invoiceRef.current) return 'done'
-      // Your business details: the invoice with that step open, ready to edit.
+      // Your business details: the invoice with that step open, ready to edit. In Guide mode, the guide's own step.
+      const openId = invoiceDocOf(invoiceRef.current).invoiceId
       if (target.kind === 'business_details') {
         invoiceRef.current = reduceInvoice(invoiceRef.current, { type: 'batch', actions: [{ type: 'show', component: 'business' }, { type: 'expand_tool', id: 'business' }] })
         setInvoice(invoiceRef.current)
+        setGuide((current) => jumpTo(progressFor(current, openId), 'business'))
       }
+      // A saved invoice is whole, so the guide opens on its last step, where every step before it can be gone back to.
+      if (target.kind === 'invoice') setGuide({ invoiceId: openId, step: 'review', reached: GUIDE_STEPS.length - 1 })
       await openWorkspaceFor('invoice')
       return 'done'
     },
@@ -1095,16 +1144,39 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
     [currentProjectId, openWorkspaceFor],
   )
 
+  // The card of an invoice finished in Guide mode: export it from what is saved, or open it again.
+  const renderResult = useCallback(
+    (item: ThreadMessage) =>
+      item.result ? (
+        <InvoiceResultCard
+          projectId={currentProjectId}
+          result={item.result}
+          busy={composing}
+          onExport={async () => {
+            const outcome = await exportLibraryItem(currentProjectId, projectName(currentProjectId), { kind: 'invoice', id: item.result!.invoiceId })
+            setLibraryVersion((count) => count + 1)
+            return outcome.ok ? { ok: true, text: outcome.text } : { ok: false, text: `I could not export it. ${outcome.reason}` }
+          }}
+          onOpen={async () => {
+            if (busyRef.current) return
+            const outcome = await openFromLibrary({ kind: 'invoice', id: item.result!.invoiceId })
+            if (outcome === 'unsaved') setToast({ id: ++toastId.current, text: 'The invoice you have open has changes that are not saved. Save it or leave it first.' })
+          }}
+        />
+      ) : null,
+    [composing, currentProjectId, openFromLibrary, projectName],
+  )
+
   // The tip that offers the workspace menu is for the very start, before the founder has said anything.
   const bar = (isDocked: boolean) => (
-    <IntentBar docked={isDocked} busy={composing} showTip={!hasFounderMessage(thread)} allowance={allowance} onSubmitIntent={submitIntent} onChooseTask={chooseTask} />
+    <IntentBar docked={isDocked} busy={composing} showTip={!chatHasBegun(thread)} allowance={allowance} onSubmitIntent={submitIntent} onChooseTask={chooseTask} />
   )
   const chatBar = (isDocked: boolean) => (
     <ChatBar onFullScreen={isDocked ? backToChat : undefined} busy={composing} />
   )
 
   return (
-    <div className={docked ? 'home home--docked' : 'home'} data-start={(!docked && !hasFounderMessage(thread)) || undefined}>
+    <div className={docked ? 'home home--docked' : 'home'} data-start={(!docked && !chatHasBegun(thread)) || undefined}>
       <Sidebar
         projects={projects}
         currentProjectId={currentProjectId}
@@ -1162,13 +1234,13 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         <div className="home__shelf" ref={setShelfSlot} />
         </div>
 
-        <main ref={canvasRef} className={docked ? (shown === 'board' ? 'home__canvas home__canvas--board' : 'home__canvas') : 'home__canvas home__canvas--chat'} aria-busy={composing}>
+        <main ref={canvasRef} className={docked ? (shown === 'board' ? 'home__canvas home__canvas--board' : shown === 'invoice' && workMode === 'guide' ? 'home__canvas home__canvas--guide' : 'home__canvas') : 'home__canvas home__canvas--chat'} aria-busy={composing}>
           <h1 className="visually-hidden">Home</h1>
           {/* Before there is a workspace, the whole screen is the conversation. Droplet answers like any assistant until it is asked to build something. */}
           {!docked && (
             <div className="home__conversation">
               {chatBar(false)}
-              <ChatThread flight={flight} onFlightEnd={() => setFlight(null)} messages={thread} onAction={onThreadAction} onReply={submitIntent} done={doneSet} busy={composing} onToggle={toggleCheck} onOpenStep={openStep} onUndoReceipt={undoReceipt} onShowReceipt={showReceipt} onRememberFact={rememberFact} onDismissFact={dismissFact} />
+              <ChatThread flight={flight} onFlightEnd={() => setFlight(null)} messages={thread} onAction={onThreadAction} onReply={submitIntent} done={doneSet} busy={composing} onToggle={toggleCheck} onOpenStep={openStep} onUndoReceipt={undoReceipt} onShowReceipt={showReceipt} onRememberFact={rememberFact} onDismissFact={dismissFact} renderResult={renderResult} />
             </div>
           )}
           {/* One workspace at a time: the one on screen leaves before the other arrives, so their toolbars and header controls never overlap. */}
@@ -1211,6 +1283,24 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
                 className={composing ? 'home__component home__component--busy' : 'home__component'}
                 exit={{ opacity: 0, transition: { duration: 0.2 } }}
               >
+                {workMode === 'guide' ? (
+                  <GuidedInvoice
+                    key={`${currentProjectId}:${invoice.history.present.invoiceId}`}
+                    projectId={currentProjectId}
+                    projectName={projectName(currentProjectId)}
+                    state={invoice}
+                    dispatch={dispatchInvoice}
+                    progress={progressFor(guide, invoice.history.present.invoiceId)}
+                    onProgress={(next) => {
+                      guideRef.current = next
+                      setGuide(next)
+                    }}
+                    onFinished={finishGuided}
+                    saveSignal={invoiceSaveSignal}
+                    onConfirmed={invoiceConfirmed}
+                    headerSlots={{ start: headerStart, end: headerEnd, shelf: shelfSlot }}
+                  />
+                ) : (
                 <InvoiceWorkspace
                   key={`${currentProjectId}:${invoice.history.present.invoiceId}`}
                   projectId={currentProjectId}
@@ -1222,6 +1312,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
                   onConfirmed={invoiceConfirmed}
                   headerSlots={{ start: headerStart, end: headerEnd, shelf: shelfSlot }}
                 />
+                )}
               </motion.div>
             )}
             {board && shown === 'board' && (
@@ -1264,7 +1355,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
           onFocusCapture={() => void refreshProject()}
         >
           {chatBar(true)}
-          <ChatThread flight={flight} onFlightEnd={() => setFlight(null)} messages={thread} onAction={onThreadAction} onReply={submitIntent} done={doneSet} busy={composing} onToggle={toggleCheck} onOpenStep={openStep} onUndoReceipt={undoReceipt} onShowReceipt={showReceipt} onRememberFact={rememberFact} onDismissFact={dismissFact} />
+          <ChatThread flight={flight} onFlightEnd={() => setFlight(null)} messages={thread} onAction={onThreadAction} onReply={submitIntent} done={doneSet} busy={composing} onToggle={toggleCheck} onOpenStep={openStep} onUndoReceipt={undoReceipt} onShowReceipt={showReceipt} onRememberFact={rememberFact} onDismissFact={dismissFact} renderResult={renderResult} />
           {bar(true)}
         </motion.aside>
       )}

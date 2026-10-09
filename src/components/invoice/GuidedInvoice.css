@@ -1,0 +1,178 @@
+/* Guide mode fills the working screen and does not scroll as a whole: the row of steps at the top, a split view in the middle (the invoice large on
+   the left, the step on the right), and Back and Continue at the foot. Each half of the split view scrolls on its own, so the step stays in place
+   while the page is scrolled, and the foot is never over either of them. */
+.guide {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 100%;
+  max-width: 90rem;
+  height: 100%;
+  min-height: 0;
+  margin-inline: auto;
+}
+
+.guide__progress {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding-top: 0.25rem;
+}
+
+.guide__steps {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.guide__step {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem 0.25rem 0.25rem;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.guide__step:not(:disabled):hover {
+  background: var(--accent-tint-soft);
+  color: var(--text);
+}
+
+.guide__step[aria-current='step'] {
+  background: var(--accent-tint);
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* Not reached yet: there, so the founder sees what is coming, but not pressable. */
+.guide__step:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.guide__step-mark {
+  display: grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 1px solid var(--overlay-10);
+  border-radius: 50%;
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A step that is complete: a tick in a filled circle, the same mark as a resolved thing anywhere else. */
+.guide__step-mark[data-complete] {
+  border-color: transparent;
+  background: var(--status-resolved);
+  color: var(--on-status);
+}
+
+.guide__lead {
+  max-width: 34rem;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.guide__stage {
+  display: grid;
+  /* The page gets the larger share. The step never goes narrower than its fields need. */
+  grid-template-columns: minmax(0, 3fr) minmax(20rem, 2fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 1.25rem;
+  flex: 1;
+  min-height: 0;
+}
+
+/* The last step is mostly the invoice itself: the checklist is narrower, and the page wider still. */
+.guide__stage--review {
+  grid-template-columns: minmax(0, 2fr) minmax(18rem, 1fr);
+}
+
+/* A half of the split view: as tall as the space between the steps and the foot, scrolling on its own. A little padding keeps the cards'
+   shadows and focus rings from being cut off at its edges. */
+.guide__pane {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.25rem;
+}
+
+.guide__count {
+  margin: 0 0 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+/* Back, what is missing, and Continue, at the foot of the screen, below both halves. */
+.guide__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--overlay-10);
+}
+
+.guide__missing {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.8125rem;
+  color: var(--text);
+}
+
+.guide__missing p,
+.guide__missing ul {
+  margin: 0;
+}
+
+.guide__missing ul {
+  padding-left: 1.125rem;
+  color: var(--text-muted);
+}
+
+.guide__missing-title {
+  font-weight: 600;
+}
+
+/* Too narrow for the step and the page side by side: one column that scrolls as a whole, the step first and the page beneath it. */
+@container (max-width: 42rem) {
+  .guide__stage,
+  .guide__stage--review {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    overflow-y: auto;
+  }
+
+  .guide__pane {
+    overflow: visible;
+  }
+
+  .guide__pane--step {
+    order: -1;
+  }
+
+  .guide__step-name {
+    display: none;
+  }
+
+  .guide__step[aria-current='step'] .guide__step-name {
+    display: inline;
+  }
+}

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { MAX_CHATS, chatTitle, cleanTitle, whenLabel, hasFounderMessage, lastActive, loadChats, pinChat, removeChat, saveChats, storableMessages, upsertChat, type StoredChat } from './chatStore.ts'
+import { MAX_CHATS, chatHasBegun, chatSchema, chatTitle, cleanTitle, whenLabel, hasFounderMessage, lastActive, loadChats, pinChat, removeChat, saveChats, storableMessages, upsertChat, type StoredChat } from './chatStore.ts'
 
 const chat = (id: string, updatedAt: string, text = 'Hello'): StoredChat => ({ id, title: text, updatedAt, messages: [{ id: 1, from: 'you', text }] })
 
@@ -244,5 +244,30 @@ describe('pinning a chat', () => {
   it('keeps a pinned chat first when another is saved', () => {
     const chats = pinChat([chat('a', '2026-10-01T10:00:00.000Z')], 'a', true)
     expect(upsertChat(chats, chat('b', '2026-10-08T10:00:00.000Z')).map((entry) => entry.id)).toEqual(['a', 'b'])
+  })
+})
+
+describe('a chat with a finished task in it', () => {
+  const result = { invoiceId: 'inv-1', title: 'Invoice', number: 'INV-0007', client: 'Karoo Candles', totalCents: 255_000, issueDate: '2026-10-10', dueDate: '2026-10-24', lines: 1 }
+
+  it('is kept even when nothing was typed, and is called after what was finished', () => {
+    const messages = [{ id: 1, from: 'droplet' as const, text: 'Invoice INV-0007 for Karoo Candles is finished and saved.', result }]
+    expect(hasFounderMessage(messages)).toBe(false)
+    expect(chatHasBegun(messages)).toBe(true)
+    const greeting = [{ id: 1, from: 'droplet' as const, text: 'Hello' }]
+    expect(chatHasBegun(greeting)).toBe(false)
+    expect(chatTitle(messages)).toBe('Invoice INV-0007')
+  })
+
+  it('keeps the card with the message, and reads it back', () => {
+    const stored = storableMessages([{ id: 1, from: 'droplet', text: 'Finished.', result }])
+    expect(stored[0].result).toEqual(result)
+    const chat = { id: 'c1', title: 'Invoice INV-0007', updatedAt: '2026-10-10T08:00:00.000Z', messages: stored }
+    expect(chatSchema.parse(chat).messages[0].result).toEqual(result)
+  })
+
+  it('refuses a card that is not one', () => {
+    const chat = { id: 'c1', title: 'x', updatedAt: '2026-10-10T08:00:00.000Z', messages: [{ id: 1, from: 'droplet', text: 'x', result: { invoiceId: 'inv-1', totalCents: -5 } }] }
+    expect(chatSchema.safeParse(chat).success).toBe(false)
   })
 })

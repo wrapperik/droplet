@@ -3,6 +3,7 @@ import { blockSchema, MAX_BLOCKS, type ChatBlock } from '../compose/blocks.ts'
 import { groundingSchema, type Grounding } from '../compose/grounding.ts'
 import { summarySchema } from '../compose/background.ts'
 import { receiptSchema, type Receipt } from '../compose/receipt.ts'
+import { invoiceResultSchema, type InvoiceResult } from './invoiceGuide.ts'
 import { documentStorage } from './storage.ts'
 
 // The conversations of a project, kept in this browser so the founder can come back to one. Per project, newest first. Only what was
@@ -27,6 +28,8 @@ const messageSchema = z.object({
   receipt: receiptSchema.optional(),
   // A note from the app, not an answer from the model, so it is never sent to the model as part of the conversation.
   local: z.boolean().optional(),
+  // A task finished in Guide mode, kept so its card shows again: the invoice's number, client, dates and sums, never anything private.
+  result: invoiceResultSchema.optional(),
   // When it was sent or arrived (ISO). Shown under the message on hover. Older chats have none.
   at: z.string().max(40).optional(),
 })
@@ -51,7 +54,7 @@ export type StoredMessage = z.infer<typeof messageSchema>
 export type StoredChat = z.infer<typeof chatSchema>
 
 // What of a thread is worth keeping: the words, not the replies still being worked on, nor the buttons.
-export function storableMessages(thread: { id: number; from: StoredMessage['from']; text: string; question?: string; blocks?: ChatBlock[]; checks?: Record<string, boolean>; grounding?: Grounding; receipt?: Receipt; pending?: boolean; local?: boolean; at?: string }[]): StoredMessage[] {
+export function storableMessages(thread: { id: number; from: StoredMessage['from']; text: string; question?: string; blocks?: ChatBlock[]; checks?: Record<string, boolean>; grounding?: Grounding; receipt?: Receipt; result?: InvoiceResult; pending?: boolean; local?: boolean; at?: string }[]): StoredMessage[] {
   return thread
     .filter((item) => !item.pending && item.text.trim() !== '')
     .map((item) => ({
@@ -63,6 +66,7 @@ export function storableMessages(thread: { id: number; from: StoredMessage['from
       ...(item.checks && Object.keys(item.checks).length > 0 ? { checks: item.checks } : {}),
       ...(item.grounding ? { grounding: item.grounding } : {}),
       ...(item.receipt ? { receipt: item.receipt } : {}),
+      ...(item.result ? { result: item.result } : {}),
       ...(item.local ? { local: true } : {}),
       ...(item.at ? { at: item.at } : {}),
     }))
@@ -71,6 +75,9 @@ export function storableMessages(thread: { id: number; from: StoredMessage['from
 
 // A chat counts once the founder has said something in it.
 export const hasFounderMessage = (messages: { from: string }[]) => messages.some((item) => item.from === 'you')
+
+// A chat is worth keeping once the founder has said something in it, or finished something in it (a guided invoice, whose card is in the chat).
+export const chatHasBegun = (messages: { from: string; result?: unknown }[]) => hasFounderMessage(messages) || messages.some((item) => item.result !== undefined)
 
 // A title from the composer, tidied: one line, no quotation marks or markup, no full stop at the end, and not too long. Empty if nothing is left.
 export function cleanTitle(raw: string): string {
@@ -85,9 +92,11 @@ export function cleanTitle(raw: string): string {
 }
 
 // What a chat is called in the list when the composer has not named it: how it began, on one line.
-export function chatTitle(messages: { from: string; text: string }[]): string {
+export function chatTitle(messages: { from: string; text: string; result?: { title: string; number: string } }[]): string {
   const first = messages.find((item) => item.from === 'you')?.text.replace(/\s+/g, ' ').trim()
-  if (!first) return 'New chat'
+  // A chat where something was finished and nothing typed is called after what was finished.
+  const made = messages.find((item) => item.result)?.result
+  if (!first) return made ? `${made.title} ${made.number}`.trim() : 'New chat'
   return first.length > TITLE_LENGTH ? `${first.slice(0, TITLE_LENGTH - 1).trimEnd()}…` : first
 }
 

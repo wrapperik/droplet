@@ -146,6 +146,20 @@
   min-height: 100%;
 }
 
+/* The guided invoice fills the canvas and scrolls inside itself (each half of its split view on its own), so the canvas does not scroll. */
+.home__canvas--guide {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 1rem;
+}
+
+.home__canvas--guide > .home__component {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
 /* The board workspace: the board fills the whole screen, behind the header and the toolbar, with nothing round it. */
 .home__canvas--board {
   position: absolute;

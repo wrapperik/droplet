@@ -225,6 +225,12 @@ export const TEST_REQUESTS: TestRequest[] = [
     expect: { task: 'invoice', acts: false, asks: true },
   },
   {
+    id: 'invoice-guide-step',
+    why: 'Guide mode, on the client step: help with that step, fill in what was said, and do not claim to move the founder on',
+    request: { intent: 'It is for Karoo Candles', view: 'invoice', invoice, guide: { step: 'client', position: 3, of: 6 } },
+    expect: { task: 'invoice', acts: true, firstAction: ['set_client'], messageMustNotInclude: 'moved you' },
+  },
+  {
     id: 'invoice-undo',
     why: 'Undo on the invoice, on its own',
     request: { intent: 'Undo that', view: 'invoice', invoice: { ...invoice, canUndo: true } },

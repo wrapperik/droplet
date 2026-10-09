@@ -6,6 +6,7 @@ import { emptyBusiness, emptyClient, newContent, type InvoiceContent } from '../
 import { saveMemory } from '../lib/memoryStore.ts'
 import { emptyMemory, withBusiness, withClient, withInvoice } from '../lib/projectMemory.ts'
 import { savePalette } from '../lib/projectStore.ts'
+import { useWorkMode } from '../store/workMode.ts'
 import Home from './Home.tsx'
 
 // Home with the library, and the composer's server standing in. The files themselves are not made: what is asked for is recorded.
@@ -33,6 +34,8 @@ const seed = async () => {
 
 beforeEach(() => {
   window.localStorage.clear()
+  // The library's invoices open in Workspace mode here. Guide mode has tests of its own, in Home.test.tsx.
+  useWorkMode.setState({ mode: 'workspace' })
   asked = []
   answers = []
   exports.brandSheet.mockClear().mockResolvedValue(true)

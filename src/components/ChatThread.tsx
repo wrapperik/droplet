@@ -1,9 +1,10 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import { CheckIcon, CopyIcon } from '@solar-icons/react/linear'
 import type { ChatBlock } from '../compose/blocks.ts'
 import type { JourneyStep } from '../compose/journey.ts'
 import type { Grounding } from '../compose/grounding.ts'
 import type { Receipt } from '../compose/receipt.ts'
+import type { InvoiceResult } from '../lib/invoiceGuide.ts'
 import ChangeReceipt from './ChangeReceipt.tsx'
 import FactChips, { type ProposalView } from './FactChips.tsx'
 import type { FactKey } from '../lib/facts.ts'
@@ -50,6 +51,8 @@ export type ThreadMessage = {
   actions?: ThreadAction[]
   // A note from the app, not an answer from the model, so it is not sent to the model as part of the conversation.
   local?: boolean
+  // A task finished in Guide mode, shown as a card under the words: for now, an invoice.
+  result?: InvoiceResult
   // When it was sent or arrived (ISO), shown under it on hover or focus.
   at?: string
 }
@@ -78,12 +81,14 @@ type Props = {
   // message itself is there but not shown until it arrives. `onFlightEnd` says it has.
   flight?: { id: number; from: FlightOrigin } | null
   onFlightEnd?: () => void
+  // Draws the card of a finished task. The thread does not know how to export or open one, so whoever holds the project draws it.
+  renderResult?: (message: ThreadMessage) => ReactNode
 }
 
 const NO_STEPS: ReadonlySet<JourneyStep> = new Set()
 
 // The running conversation. It scrolls on its own, and follows the newest message.
-export default function ChatThread({ messages, onAction, onReply, done = NO_STEPS, busy, onToggle, onOpenStep, onUndoReceipt, onShowReceipt, onRememberFact, onDismissFact, flight, onFlightEnd }: Props) {
+export default function ChatThread({ messages, onAction, onReply, done = NO_STEPS, busy, onToggle, onOpenStep, onUndoReceipt, onShowReceipt, onRememberFact, onDismissFact, flight, onFlightEnd, renderResult }: Props) {
   const listRef = useRef<HTMLOListElement>(null)
 
   // Follow the newest message, including when a reply that was pending arrives in place and is taller than "Thinking".
@@ -128,6 +133,7 @@ export default function ChatThread({ messages, onAction, onReply, done = NO_STEP
               ) : (
                 message.text
               )}
+              {!message.pending && message.result && renderResult?.(message)}
               {!message.pending && message.blocks && message.blocks.length > 0 && (
                 <ChatBlocks blocks={message.blocks} checks={message.checks} done={done} busy={busy} onToggle={(block, item, checked) => onToggle?.(message.id, block, item, checked)} onOpen={onOpenStep} />
               )}

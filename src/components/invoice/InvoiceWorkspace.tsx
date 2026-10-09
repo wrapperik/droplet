@@ -1,53 +1,23 @@
 import { useCallback, useMemo, useState, type ReactNode } from 'react'
-import type { InvoiceContent } from '../../lib/invoice.ts'
 import { BillListIcon, BuildingsIcon, CalculatorIcon, CalendarIcon, CheckCircleIcon, SaleIcon, UserIcon } from '@solar-icons/react/linear'
 import { toolbarTools } from '../../lib/arrangement.ts'
 import { exportInvoice } from '../../lib/exportInvoice.ts'
-import { checkInvoice, stepsDone, type Issue } from '../../lib/invoiceReadiness.ts'
-import { resolveRoles } from '../../lib/palette.ts'
-import { starterBlocks } from '../../compose/fallback.ts'
-import { loadPalette } from '../../lib/projectStore.ts'
-import { newId } from '../../lib/ids.ts'
-import { duplicateInvoice, loadInvoice, openNewInvoice, openSavedInvoice, saveArrangement } from '../../lib/invoiceStore.ts'
-import { useLoaded } from '../../hooks/useLoaded.ts'
-import { loadMemory, saveMemory } from '../../lib/memoryStore.ts'
-import type { ProjectMemory } from '../../lib/memorySave.ts'
-import {
-  businessStatus,
-  clientStatus,
-  emptyMemory,
-  forgetBusiness,
-  forgetClient,
-  forgetInvoice,
-  markExported,
-  numbersInUse,
-  savedInvoice,
-  settingOn,
-  withBusiness,
-  withClient,
-  withInvoice,
-} from '../../lib/projectMemory.ts'
-import {
-  INVOICE_SPEC,
-  INVOICE_WINDOW_SIZES,
-  canRedoInvoice,
-  canUndoInvoice,
-  invoiceDocOf,
-  isInvoiceUnsaved,
-  type InvoiceAction,
-  type InvoiceState,
-} from '../../lib/invoiceState.ts'
+import { stepsDone, type Issue } from '../../lib/invoiceReadiness.ts'
+import { duplicateInvoice, openNewInvoice, openSavedInvoice } from '../../lib/invoiceStore.ts'
+import { forgetBusiness, forgetClient, forgetInvoice, markExported, settingOn } from '../../lib/projectMemory.ts'
+import { INVOICE_SPEC, INVOICE_WINDOW_SIZES, canRedoInvoice, canUndoInvoice, type InvoiceAction, type InvoiceState } from '../../lib/invoiceState.ts'
 import ExportButton from '../ExportButton.tsx'
 import type { WorkspaceItem } from '../GridWorkspace.tsx'
 import type { ShelfTool } from '../ToolShelf.tsx'
 import WorkspaceShell, { type HeaderSlots } from '../WorkspaceShell.tsx'
-import ConfirmSave, { type ConfirmItem } from './ConfirmSave.tsx'
+import ConfirmSave from './ConfirmSave.tsx'
 import InvoiceDocument from './InvoiceDocument.tsx'
 import { InvoicesWindow } from './InvoicesPanel.tsx'
 import LeaveDialog from './LeaveDialog.tsx'
 import { BusinessWindow, ClientWindow, DetailsWindow, TotalsWindow, VatWindow } from './InvoiceWindows.tsx'
 import LineItemsEditor from './LineItemsEditor.tsx'
 import { ReadyWindow } from './ReadyPanel.tsx'
+import { sameContent, useInvoiceMemory } from './useInvoiceMemory.ts'
 
 type Props = {
   projectId: string
@@ -76,75 +46,13 @@ const REASONS = {
   lines: 'What you are charging for. Each line is a quantity and a price, and the amounts are worked out for you.',
 }
 
-const sameContent = (a: InvoiceContent, b: InvoiceContent) => JSON.stringify(a) === JSON.stringify(b)
-
 // The invoice workspace: tools for the parts of an invoice in the toolbar, and windows for the document and the line items, on
 // the shared workspace shell. The document is drawn in the founder's confirmed palette. The project remembers the founder's
 // business, their clients and their invoices, so none is typed twice, but only what the founder confirms: Save opens a note of what
 // would be remembered, and nothing is kept unless it is confirmed. Leaving an invoice with unsaved changes asks first.
 export default function InvoiceWorkspace({ projectId, projectName, state, dispatch, onReplace, saveSignal, onConfirmed, headerSlots }: Props) {
-  // What the project remembers, how this workspace was arranged and the confirmed palette are read from storage, which takes a moment. Until
-  // they have arrived the bar says nothing and Save waits, so nothing is judged against what has not been read yet.
-  const { value: memory, loaded: memoryLoaded, set: setMemory } = useLoaded<ProjectMemory>(projectId, () => loadMemory(projectId), emptyMemory())
-  const { value: arrangementSave, loaded: arrangementLoaded, set: setArrangementSave } = useLoaded(projectId, () => loadInvoice(projectId), null)
-  const { value: paletteBlocks } = useLoaded(projectId, async () => (await loadPalette(projectId))?.blocks ?? starterBlocks(), starterBlocks())
-  const loaded = memoryLoaded && arrangementLoaded
-  const [saveFailed, setSaveFailed] = useState(false)
+  const { memory, doc, content, roles, saved, unsaved, hasChanges, saveStatus, business, client, number, items, persist, confirm, readiness } = useInvoiceMemory(projectId, state, onConfirmed)
   const [leaving, setLeaving] = useState<{ what: string; run: () => void | Promise<void> } | null>(null)
-
-  const doc = invoiceDocOf(state)
-  const { content } = doc
-  // How the invoice was when this workspace opened on it, so an invoice nobody has touched is not "changed".
-  const [opened] = useState(content)
-
-  // The brand: the palette the founder confirmed for this project, or the starter palette until there is one.
-  const roles = useMemo(() => resolveRoles(paletteBlocks), [paletteBlocks])
-
-  const saved = savedInvoice(memory, doc.invoiceId)
-  const unsaved = loaded && isInvoiceUnsaved(doc, saved, arrangementSave)
-  // Changes that would be lost on leaving: anything different from what was confirmed, or from a new invoice if none was.
-  const hasChanges = saved ? !sameContent(content, saved.content) : !sameContent(content, opened)
-  const saveStatus = !loaded ? '' : saveFailed ? 'Could not save' : !saved ? 'Not saved yet' : unsaved ? 'Unsaved changes' : 'All changes saved'
-
-  // What confirming would remember, so the founder sees it before anything is kept.
-  const business = businessStatus(memory, content.business)
-  const client = clientStatus(memory, content.client)
-  const number = content.details.number.trim() || 'this invoice'
-  const word = content.details.kind === 'quote' ? 'Quote' : 'Invoice'
-  const items: ConfirmItem[] = [
-    ...(business === 'new' || business === 'updated'
-      ? [{ id: 'business', label: 'Your business details', detail: business === 'new' ? `${content.business.name.trim()}, ready on every invoice from now on.` : 'Replaces what is remembered about your business.' }]
-      : []),
-    ...(client === 'new' || client === 'updated'
-      ? [{ id: 'client', label: content.client.name.trim(), detail: client === 'new' ? 'A new client, ready to pick next time.' : 'Replaces what is remembered about this client.' }]
-      : []),
-    ...(!saved || !sameContent(content, saved.content)
-      ? [{ id: 'invoice', label: `${word} ${number}`, detail: saved ? `A new version of it. It keeps its number.` : 'Kept with its number, so it can be opened again.' }]
-      : []),
-  ]
-
-  const persist = async (next: ProjectMemory) => {
-    if (await saveMemory(projectId, next)) {
-      setMemory(next)
-      return true
-    }
-    setSaveFailed(true)
-    return false
-  }
-
-  // Only what the founder ticked is remembered. How the workspace is arranged is not a memory, so it is kept with it.
-  const confirm = async (ids: string[]) => {
-    const now = new Date().toISOString()
-    let next = memory
-    if (ids.includes('business')) next = withBusiness(next, content.business, now)
-    if (ids.includes('client')) next = withClient(next, content.client, now, newId())
-    if (ids.includes('invoice')) next = withInvoice(next, doc.invoiceId, content, now)
-    const remembered = next === memory || (await persist(next))
-    const arrangement = await saveArrangement(projectId, doc)
-    if (arrangement) setArrangementSave(arrangement)
-    setSaveFailed(!remembered || arrangement === null)
-    if (remembered && arrangement !== null) onConfirmed?.()
-  }
 
   // Leaving saves nothing, so an invoice with changes asks first.
   const guard = (what: string, run: () => void | Promise<void>) => (hasChanges ? setLeaving({ what, run }) : run())
@@ -162,8 +70,6 @@ export default function InvoiceWorkspace({ projectId, projectName, state, dispat
 
   const reason = (id: keyof typeof REASONS) => doc.reasons[id] ?? REASONS[id]
 
-  // What the invoice still needs, in code, from what is on it.
-  const readiness = useMemo(() => checkInvoice(content, { usedNumbers: numbersInUse(memory, doc.invoiceId) }), [content, memory, doc.invoiceId])
 
   // Goes to the part of the workspace that fixes something: a tool is shown as a window if it is in the toolbar (or brought back
   // if it was hidden), then the first thing that needs doing in it is focused.

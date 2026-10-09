@@ -10,6 +10,7 @@ import { loadNotes } from '../lib/notesStore.ts'
 import { loadPalette } from '../lib/projectStore.ts'
 import { setDocumentStorage, type DocumentStorage } from '../lib/storage.ts'
 import { slowMemoryStorage } from '../test/slowStorage.ts'
+import { useWorkMode } from '../store/workMode.ts'
 import Home from './Home.tsx'
 
 // Home with the composer's server standing in: what is asked of it is recorded, and what it says back is what the test decides.
@@ -32,6 +33,8 @@ const opening = (task: string, message: string, quote: string) => ({ outcome: 'v
 
 beforeEach(() => {
   window.localStorage.clear()
+  // Most of these tests are of Workspace mode, where the invoice opens with every tool at once. Guide mode has tests of its own.
+  useWorkMode.setState({ mode: 'workspace' })
   asked = []
   answers = []
   summaries = []
@@ -1349,6 +1352,140 @@ describe('a reply that searched the web', () => {
     await say(user, 'What does CIPC charge?')
     await screen.findByRole('link', { name: 'cipc.co.za' })
     await waitFor(async () => expect((await loadChatsFor())[0].messages.find((item) => item.from === 'droplet')?.grounding).toEqual(grounding))
+  })
+})
+
+describe('Guide mode', () => {
+  beforeEach(() => useWorkMode.setState({ mode: 'guide' }))
+
+  const continueOn = (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole('button', { name: 'Continue' }))
+  const onStep = (title: string) => expect(screen.getByRole('region', { name: title })).toBeInTheDocument()
+
+  it('opens the invoice one step at a time, with the page beside it and no toolbar', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await pickTask(user, /Make an invoice/)
+    expect(await screen.findByText('Step 1 of 6')).toBeInTheDocument()
+    onStep('Your business')
+    expect(screen.getByRole('complementary', { name: 'Preview' })).toHaveTextContent('INV-0001')
+    expect(screen.queryByRole('toolbar', { name: 'Tools' })).not.toBeInTheDocument()
+    // the steps ahead are shown, but cannot be skipped to
+    const steps = within(screen.getByRole('navigation', { name: 'Invoice steps' })).getAllByRole('button')
+    expect(steps.map((step) => step.textContent)).toEqual(['1Business', '2VAT', '3Client', '4Items', '5Details', '6Review'])
+    expect(steps[0]).toHaveAttribute('aria-current', 'step')
+    expect(steps[2]).toBeDisabled()
+  })
+
+  it('does not move on while the step is missing something required, and says what', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await pickTask(user, /Make an invoice/)
+    await screen.findByText('Step 1 of 6')
+    await continueOn(user)
+    expect(screen.getByRole('alert')).toHaveTextContent('Add your business name.')
+    onStep('Your business')
+    await user.type(screen.getByLabelText('Business name'), 'Kindred Gifting')
+    // what was missing goes as soon as it is filled in
+    expect(screen.getByRole('alert')).not.toHaveTextContent('Add your business name.')
+    await continueOn(user)
+    expect(await screen.findByText('Step 2 of 6')).toBeInTheDocument()
+    onStep('VAT')
+    // Back, and forward again from the row of steps, as far as the founder got
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(await screen.findByText('Step 1 of 6')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^Step 2, VAT/ }))
+    expect(await screen.findByText('Step 2 of 6')).toBeInTheDocument()
+  })
+
+  it('tells the composer which step is on screen', async () => {
+    const user = userEvent.setup()
+    answers = [reply('invoice', 'Who is it for?')]
+    renderHome()
+    await pickTask(user, /Make an invoice/)
+    await screen.findByText('Step 1 of 6')
+    await say(user, 'help me with this')
+    await screen.findByText('Who is it for?')
+    expect(asked[0]).toMatchObject({ view: 'invoice', guide: { step: 'business', position: 1, of: 6 } })
+  })
+
+  it('tells the composer nothing about a guide in Workspace mode', async () => {
+    const user = userEvent.setup()
+    useWorkMode.setState({ mode: 'workspace' })
+    answers = [reply('invoice', 'Who is it for?')]
+    renderHome()
+    await pickTask(user, /Make an invoice/)
+    await say(user, 'help me with this')
+    await screen.findByText('Who is it for?')
+    expect(asked[0]).not.toHaveProperty('guide')
+  })
+
+  it('shows what the composer fills in, on the step it belongs to', async () => {
+    const user = userEvent.setup()
+    answers = [reply('invoice', 'Added.', [{ type: 'set_client', name: 'Karoo Candles' }])]
+    renderHome()
+    await pickTask(user, /Make an invoice/)
+    await screen.findByText('Step 1 of 6')
+    await say(user, 'It is for Karoo Candles')
+    await screen.findByText('Added.')
+    expect(screen.getByRole('complementary', { name: 'Preview' })).toHaveTextContent('Karoo Candles')
+  })
+
+  it('switches to the whole workspace, on the same invoice, when the founder changes the mode', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await pickTask(user, /Make an invoice/)
+    await user.type(await screen.findByLabelText('Business name'), 'Kindred Gifting')
+    await user.click(screen.getByRole('button', { name: /Choose how Droplet works/ }))
+    await user.click(screen.getByRole('menuitemradio', { name: /Workspace/ }))
+    expect(await screen.findByRole('toolbar', { name: 'Tools' })).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Invoice INV-0001/)).toHaveTextContent('Kindred Gifting')
+  })
+
+  it('finishes only once the founder confirms, then closes and shows the invoice in the chat', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await pickTask(user, /Make an invoice/)
+    await user.type(await screen.findByLabelText('Business name'), 'Kindred Gifting')
+    await continueOn(user)
+    await screen.findByText('Step 2 of 6')
+    await continueOn(user)
+    await user.type(await screen.findByLabelText('Client or company name'), 'Karoo Candles')
+    await continueOn(user)
+    await screen.findByText('Step 4 of 6')
+    await user.type(screen.getByLabelText('Description'), 'Soy candles')
+    await user.clear(screen.getByLabelText('Quantity'))
+    await user.type(screen.getByLabelText('Quantity'), '30')
+    await user.type(screen.getByLabelText('Price each, in rand'), '85')
+    await continueOn(user)
+    await screen.findByText('Step 5 of 6')
+    await continueOn(user)
+    expect(await screen.findByText('Step 6 of 6')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Finish' }))
+    const note = await screen.findByRole('dialog', { name: 'Save to DuckStack' })
+    // cancelling keeps nothing and leaves the guide where it was
+    await user.click(within(note).getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByText('Step 6 of 6')).toBeInTheDocument()
+    expect((await loadMemory('duckstack')).invoices).toHaveLength(0)
+
+    await user.click(screen.getByRole('button', { name: 'Finish' }))
+    await user.click(within(await screen.findByRole('dialog', { name: 'Save to DuckStack' })).getByRole('button', { name: 'Save and finish' }))
+    expect(await screen.findByText(/Invoice INV-0001 for Karoo Candles is finished and saved\./)).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByText('Step 6 of 6')).not.toBeInTheDocument())
+    const card = screen.getByRole('region', { name: 'Invoice INV-0001' })
+    expect(card).toHaveTextContent('Karoo Candles')
+    expect(card).toHaveTextContent(/2[\s\u00a0]550,00/)
+    expect(within(card).getByRole('button', { name: 'Export PDF' })).toBeInTheDocument()
+    expect(within(card).getByRole('button', { name: 'Open' })).toBeInTheDocument()
+    const memory = await loadMemory('duckstack')
+    expect(memory.invoices).toHaveLength(1)
+    expect(memory.business?.details.name).toBe('Kindred Gifting')
+    // the card is kept with the chat
+    await waitFor(async () => expect((await loadChatsFor())[0]?.messages.find((item) => item.result)?.result).toMatchObject({ number: 'INV-0001', client: 'Karoo Candles', totalCents: 255_000 }))
+
+    // Open brings it back, on its last step
+    await user.click(within(card).getByRole('button', { name: 'Open' }))
+    expect(await screen.findByText('Step 6 of 6')).toBeInTheDocument()
   })
 })
 
