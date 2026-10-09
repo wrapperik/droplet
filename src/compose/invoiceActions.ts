@@ -173,25 +173,27 @@ const quoted = (text: string) => `\u201c${text.trim().slice(0, 40)}\u201d`
 // One line of the receipt for an action that was applied, from the lines before and after it. It names what was set and never shows an address,
 // a contact or any detail of the client: only which details were set.
 function describeChange(action: InvoiceTurnAction, before: Line[], after: Line[]): Change | null {
-  const window = (id: string, how: 'changed' | 'added' = 'changed') => [{ kind: 'window' as const, id, how }]
+  // The fields a change was made in, by what they hold, so Show me finds them in the workspace's windows and in the guide alike.
+  const fields = (...ids: string[]) => ids.map((id) => ({ kind: 'field' as const, id, how: 'changed' as const }))
   const lineAt = (number: number) => ({ number, line: after[number - 1] })
   switch (action.type) {
     case 'set_client': {
       const parts = Object.entries(action)
         .filter(([key, value]) => key !== 'type' && value !== undefined)
         .map(([key]) => (key === 'name' && action.name ? `the name (${quoted(action.name)})` : (CLIENT_FIELDS[key] ?? key)))
-      return { kind: 'changed', text: `Client: set ${parts.join(', ')}`, focus: window('client') }
+      const keys = Object.keys(action).filter((key) => key !== 'type' && action[key as keyof typeof action] !== undefined && key in CLIENT_FIELDS)
+      return { kind: 'changed', text: `Client: set ${parts.join(', ')}`, focus: fields(...keys.map((key) => `client.${key}`)) }
     }
     case 'use_saved_client':
-      return { kind: 'changed', text: `Used the saved client ${quoted(action.name)}`, focus: window('client') }
+      return { kind: 'changed', text: `Used the saved client ${quoted(action.name)}`, focus: fields('client.name') }
     case 'set_terms':
-      return { kind: 'changed', text: `Payment terms set to ${action.terms === 'custom' ? `due on ${action.customDueDate}` : TERMS_WORDS[action.terms] ?? action.terms}`, focus: window('details') }
+      return { kind: 'changed', text: `Payment terms set to ${action.terms === 'custom' ? `due on ${action.customDueDate}` : TERMS_WORDS[action.terms] ?? action.terms}`, focus: fields('details.terms', ...(action.terms === 'custom' ? ['details.customDueDate'] : [])) }
     case 'set_date':
-      return { kind: 'changed', text: `Invoice date set to ${action.date}`, focus: window('details') }
+      return { kind: 'changed', text: `Invoice date set to ${action.date}`, focus: fields('details.issueDate') }
     case 'set_note':
-      return { kind: 'changed', text: action.note.trim() === '' ? 'Cleared the note' : 'Set the note on the invoice', focus: window('details') }
+      return { kind: 'changed', text: action.note.trim() === '' ? 'Cleared the note' : 'Set the note on the invoice', focus: fields('details.notes') }
     case 'set_vat_registered':
-      return { kind: 'changed', text: action.registered ? 'Turned VAT on: the business is registered for it' : 'Turned VAT off: the business is not registered for it', focus: window('vat') }
+      return { kind: 'changed', text: action.registered ? 'Turned VAT on: the business is registered for it' : 'Turned VAT off: the business is not registered for it', focus: fields('vat.registered') }
     case 'add_line': {
       const added = after.find((line) => !before.some((other) => other.id === line.id)) ?? after.find((line, index) => before[index] && before[index].id === line.id && JSON.stringify(before[index]) !== JSON.stringify(line))
       const number = added ? after.indexOf(added) + 1 : after.length

@@ -1,6 +1,7 @@
 import { newContent, type InvoiceContent } from './invoice.ts'
 import { checkInvoice } from './invoiceReadiness.ts'
-import { GUIDE_STEPS, advance, back, goTo, invoiceResultOf, invoiceResultSchema, jumpTo, progressFor, resultMessage, startGuide, stepBlockers, stepOfFix } from './invoiceGuide.ts'
+import { invoiceDocOf, openInvoiceWorkspace } from './invoiceState.ts'
+import { GUIDE_STEPS, advance, back, changedSteps, goTo, revealActions, stepsOfTargets, stepToShow, invoiceResultOf, invoiceResultSchema, jumpTo, progressFor, resultMessage, startGuide, stepBlockers, stepOfFix } from './invoiceGuide.ts'
 
 const blank = (): InvoiceContent => newContent('2026-10-10', 'INV-0007')
 
@@ -93,5 +94,52 @@ describe('the finished invoice in the chat', () => {
     const text = resultMessage(invoiceResultOf('inv-1', complete()))
     expect(text).toBe('Invoice INV-0007 for Pretoria Print Works is finished and saved. Export the PDF from the card to share it, or tell me what to do next.')
     expect(text).not.toMatch(/R\s?\d/)
+  })
+})
+
+describe('showing what Droplet changed', () => {
+  it('names the parts of the invoice that differ, in the guide\'s order', () => {
+    const before = blank()
+    const after = { ...before, client: { ...before.client, name: 'Karoo Candles' }, lines: [{ id: 1, description: 'Soy candles', quantity: 30, unitCents: null }] }
+    expect(changedSteps(before, after)).toEqual(['client', 'lines'])
+    expect(changedSteps(before, before)).toEqual([])
+    expect(changedSteps(before, { ...before, details: { ...before.details, terms: '7' } })).toEqual(['terms'])
+  })
+
+  it('counts the VAT number and the VAT switch as the VAT step, and the rest of the business as the business', () => {
+    const before = blank()
+    expect(changedSteps(before, { ...before, vatRegistered: true })).toEqual(['vat'])
+    expect(changedSteps(before, { ...before, business: { ...before.business, vatNumber: '4123456789' } })).toEqual(['vat'])
+    expect(changedSteps(before, { ...before, business: { ...before.business, name: 'Kindred Gifting' } })).toEqual(['business'])
+  })
+
+  it('moves the guide to the first part that changed, unless the founder is already on one of them', () => {
+    expect(stepToShow('business', ['client', 'lines'])).toBe('client')
+    expect(stepToShow('lines', ['client', 'lines'])).toBeNull()
+    expect(stepToShow('business', [])).toBeNull()
+  })
+
+  it('opens the windows of the parts that changed in the workspace, and shows one that was hidden', () => {
+    const doc = invoiceDocOf(openInvoiceWorkspace(blank()))
+    expect(revealActions(doc, ['client', 'lines'])).toEqual([{ type: 'expand_tool', id: 'client' }])
+    expect(revealActions({ ...doc, hidden: ['terms'] }, ['terms'])).toEqual([{ type: 'show', component: 'terms' }, { type: 'expand_tool', id: 'terms' }])
+    expect(revealActions({ ...doc, expanded: [...doc.expanded, 'client'] }, ['client'])).toEqual([])
+    expect(revealActions(doc, ['review'])).toEqual([])
+  })
+})
+
+describe('the parts a change touched', () => {
+  it('reads a field by what it holds, a line as the items, and a window as its own part, in the guide\'s order', () => {
+    expect(
+      stepsOfTargets([
+        { kind: 'line', id: 3 },
+        { kind: 'field', id: 'client.name' },
+        { kind: 'field', id: 'details.terms' },
+        { kind: 'field', id: 'vat.registered' },
+        { kind: 'window', id: 'business' },
+        { kind: 'item', id: 'n1' },
+      ]),
+    ).toEqual(['business', 'vat', 'client', 'lines', 'terms'])
+    expect(stepsOfTargets([{ kind: 'field', id: 'nowhere.name' }])).toEqual([])
   })
 })

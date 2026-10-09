@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { arrivalDelays, MAX_DELAY_MS, prepareArrival, revealTargets, selectorFor, STEP_MS } from './arrival.ts'
+import { arrivalDelays, clearMarks, markTargets, MAX_DELAY_MS, prepareArrival, revealTargets, selectorFor, STEP_MS } from './arrival.ts'
 
 describe('when each change starts', () => {
   it('is a beat apart, from the first at once', () => {
@@ -240,5 +240,35 @@ describe('Show me', () => {
   it('finds nothing and breaks nothing when what changed is not on screen', () => {
     expect(revealTargets([{ kind: 'item', id: 'nowhere', how: 'added' }])).toBe(0)
     expect(revealTargets([])).toBe(0)
+  })
+})
+
+describe('the marks Show me leaves', () => {
+  it('marks each thing that changed and is still there, brings the first into view, and clears on asking', async () => {
+    document.body.innerHTML = '<input data-field="client.name" /><div class="lines__row" data-line-id="2"></div>'
+    const field = document.querySelector<HTMLElement>('[data-field="client.name"]')!
+    field.scrollIntoView = vi.fn()
+    const found = await markTargets([
+      { kind: 'field', id: 'client.name', how: 'changed' },
+      { kind: 'line', id: 2, how: 'added' },
+      { kind: 'line', id: 9, how: 'removed' },
+    ])
+    expect(found).toBe(2)
+    expect(field).toHaveAttribute('data-shown')
+    expect(document.querySelector('.lines__row')).toHaveAttribute('data-shown')
+    expect(field.scrollIntoView).toHaveBeenCalled()
+    clearMarks()
+    expect(document.querySelectorAll('[data-shown]')).toHaveLength(0)
+  })
+
+  it('waits for a thing that is not on screen yet, such as a step of the guide that is coming in', async () => {
+    document.body.innerHTML = ''
+    const marking = markTargets([{ kind: 'field', id: 'details.terms', how: 'changed' }])
+    const select = document.createElement('select')
+    select.setAttribute('data-field', 'details.terms')
+    setTimeout(() => document.body.append(select), 50)
+    expect(await marking).toBe(1)
+    expect(select).toHaveAttribute('data-shown')
+    clearMarks()
   })
 })

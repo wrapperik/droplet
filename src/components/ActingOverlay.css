@@ -1,0 +1,66 @@
+/* While Droplet acts on the workspace: the whole working screen goes soft behind a thin veil, with the loader in the middle. */
+.acting {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--screen) 35%, transparent);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+/* Without a backdrop blur the veil is nearly opaque instead, so the loader still reads. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .acting {
+    background: color-mix(in srgb, var(--screen) 85%, transparent);
+  }
+}
+
+/* Nine squares of 10px in a 3 by 3 grid, 10px apart, each fading in after the one before (adapted from JkHuger on Uiverse.io). The colour is the
+   thinking indicator's: black on a light screen, white on a dark one. */
+.acting__loader {
+  position: relative;
+  width: 50px;
+  height: 50px;
+}
+
+.acting__square {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  margin-top: -5px;
+  margin-left: -5px;
+  background: var(--loader);
+  animation: acting-square 675ms ease-in-out infinite;
+  animation-delay: var(--delay);
+}
+
+.acting__square--1 { --delay: 0ms; margin-top: -25px; margin-left: -25px; animation-direction: alternate; }
+.acting__square--2 { --delay: 75ms; margin-top: -25px; animation-direction: alternate; }
+.acting__square--3 { --delay: 150ms; margin-top: -25px; margin-left: 15px; }
+.acting__square--4 { --delay: 225ms; margin-left: -25px; }
+.acting__square--5 { --delay: 300ms; }
+.acting__square--6 { --delay: 375ms; margin-left: 15px; }
+.acting__square--7 { --delay: 450ms; margin-top: 15px; margin-left: -25px; }
+.acting__square--8 { --delay: 525ms; margin-top: 15px; }
+.acting__square--9 { --delay: 600ms; margin-top: 15px; margin-left: 15px; }
+
+@keyframes acting-square {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .acting__square {
+    animation: none;
+  }
+}

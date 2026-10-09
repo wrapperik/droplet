@@ -33,6 +33,8 @@ export function selectorFor(target: FocusTarget): string {
       return `[data-item-id="${id}"]`
     case 'window':
       return `.gw__item[data-id="${id}"]`
+    case 'field':
+      return `[data-field="${id}"]`
   }
 }
 
@@ -159,6 +161,40 @@ export function prepareArrival(targets: FocusTarget[], root: ParentNode = docume
 
 // A row of the invoice keeps its place in the list while it goes, so it closes up. Anything else leaves where it stood.
 const isRow = (element: HTMLElement) => element.classList.contains('lines__row')
+
+// Show me, kept: each thing that changed gets a blue border that draws in and then stays (`data-shown`, styled in global.css), until the founder sends
+// another message or presses somewhere else on the screen (`clearMarks`). What it marks may not be on screen yet (a step of the guide coming in, a
+// window opening), so it looks again on each frame for up to a second. The first one found is brought into view. Says how many it found.
+const marked = new Set<HTMLElement>()
+const MARK_WAIT_MS = 1000
+
+export function clearMarks() {
+  for (const element of marked) element.removeAttribute('data-shown')
+  marked.clear()
+}
+
+export function markTargets(targets: FocusTarget[], root: ParentNode = document): Promise<number> {
+  clearMarks()
+  const shown = targets.filter((entry) => entry.how !== 'removed')
+  const started = Date.now()
+  return new Promise((resolve) => {
+    const look = () => {
+      const elements = shown.map((entry) => find(entry, root)).filter((element): element is HTMLElement => element !== null)
+      const waited = Date.now() - started
+      if (elements.length < shown.length && waited < MARK_WAIT_MS && typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(look)
+        return
+      }
+      for (const element of elements) {
+        element.setAttribute('data-shown', '')
+        marked.add(element)
+      }
+      elements[0]?.scrollIntoView?.({ block: 'center', inline: 'center', behavior: prefersReducedMotion() ? 'auto' : 'smooth' })
+      resolve(elements.length)
+    }
+    look()
+  })
+}
 
 // Show me: the first thing that changed is brought into view, and each thing gets its ring in turn. Nothing moves or emerges: it is all there already.
 export function revealTargets(targets: FocusTarget[], root: ParentNode = document) {

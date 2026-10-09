@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import { computeTotals, dueDateOf, lineIsBlank, type InvoiceContent } from './invoice.ts'
 import type { Issue, Readiness } from './invoiceReadiness.ts'
+import { toolbarTools, type Arrangement } from './arrangement.ts'
+import type { InvoiceAction } from './invoiceState.ts'
 
 // Guide mode for the invoice: one part of the invoice at a time, in the middle of the screen, in a fixed order, until it is finished.
 // The order is the app's, never the model's, so a founder always knows what comes next. A step is left only when the founder presses
@@ -80,6 +82,57 @@ export function goTo(progress: GuideProgress, step: GuideStepId): GuideProgress 
 // Something outside the guide sends the founder to a step (a Fix button on the checklist, or Edit in the library). It counts as reached.
 export function jumpTo(progress: GuideProgress, step: GuideStepId): GuideProgress {
   return { ...progress, step, reached: Math.max(progress.reached, stepIndex(step)) }
+}
+
+// The parts of the invoice that differ between two versions of it, in the guide's order, so a change Droplet made can be shown where it was made.
+// Worked out from the invoice itself, so an undo or a redo is covered as well as each action. The VAT number belongs to the VAT step.
+export function changedSteps(before: InvoiceContent, after: InvoiceContent): GuideStepId[] {
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+  const { vatNumber: vatBefore, ...businessBefore } = before.business
+  const { vatNumber: vatAfter, ...businessAfter } = after.business
+  const changed: Record<GuideStepId, boolean> = {
+    business: !same(businessBefore, businessAfter),
+    vat: before.vatRegistered !== after.vatRegistered || vatBefore !== vatAfter,
+    client: !same(before.client, after.client),
+    lines: !same(before.lines, after.lines),
+    terms: !same(before.details, after.details),
+    review: false,
+  }
+  return GUIDE_STEPS.filter((step) => changed[step])
+}
+
+// In Guide mode, the step to show after Droplet changed the invoice: the first part it changed, unless the founder is already looking at one of them.
+export function stepToShow(current: GuideStepId, changed: GuideStepId[]): GuideStepId | null {
+  if (changed.length === 0 || changed.includes(current)) return null
+  return changed[0]
+}
+
+// The parts of the invoice the things a change touched belong to, in the guide's order: a field by what it holds (`client.name` is the client),
+// a line of the invoice is the items, and a window is its own part.
+const PART_OF_FIELD: Record<string, GuideStepId> = { business: 'business', vat: 'vat', client: 'client', details: 'terms' }
+
+export function stepsOfTargets(targets: { kind: string; id: string | number }[]): GuideStepId[] {
+  const parts = new Set<GuideStepId>()
+  for (const target of targets) {
+    if (target.kind === 'line') parts.add('lines')
+    else if (target.kind === 'field') {
+      const part = PART_OF_FIELD[String(target.id).split('.')[0]]
+      if (part) parts.add(part)
+    } else if (target.kind === 'window' && (GUIDE_STEPS as readonly string[]).includes(String(target.id))) parts.add(target.id as GuideStepId)
+  }
+  return GUIDE_STEPS.filter((step) => parts.has(step))
+}
+
+// In Workspace mode, what opens the windows of the parts Droplet changed, so each change is on screen to edit: a tool in the toolbar becomes its
+// window, and a window that was hidden is shown. Nothing when they are all open already.
+export function revealActions(arrangement: Arrangement, changed: GuideStepId[]): InvoiceAction[] {
+  const inBar = toolbarTools({ ...arrangement, hidden: [] })
+  return changed
+    .filter((step) => step !== 'review')
+    .flatMap((id): InvoiceAction[] => [
+      ...(arrangement.hidden.includes(id) ? [{ type: 'show' as const, component: id }] : []),
+      ...(inBar.includes(id) ? [{ type: 'expand_tool' as const, id }] : []),
+    ])
 }
 
 // A finished invoice, as the card in the chat shows it. Only the number, the client's name, the dates and the sums: never an address, a

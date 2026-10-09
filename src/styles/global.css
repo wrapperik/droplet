@@ -90,3 +90,34 @@ button {
   color: var(--text-muted);
   text-align: center;
 }
+
+/* Show me: what a reply changed gets a border in the focus blue that draws in from a little way out and then stays, until the founder sends another
+   message or presses somewhere else on the screen (see markTargets in src/lib/arrival.ts). */
+[data-shown] {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  animation: shown-in 450ms var(--ease-out) both;
+}
+
+@keyframes shown-in {
+  from {
+    outline-color: transparent;
+    outline-offset: 12px;
+  }
+
+  60% {
+    outline-color: var(--focus);
+    outline-offset: 0;
+  }
+
+  to {
+    outline-color: var(--focus);
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-shown] {
+    animation: none;
+  }
+}

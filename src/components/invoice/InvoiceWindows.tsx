@@ -13,10 +13,11 @@ import './InvoiceWindows.css'
 
 type Dispatch = (action: InvoiceAction) => void
 
-type TextFieldProps = { label: string; value: string; onChange: (value: string) => void; hint?: string; maxLength?: number; type?: string; multiline?: boolean; placeholder?: string }
+// `field` names what the control holds (`client.name`), so Show me can find it and mark it.
+type TextFieldProps = { label: string; value: string; onChange: (value: string) => void; hint?: string; maxLength?: number; type?: string; multiline?: boolean; placeholder?: string; field?: string }
 
 // A text field whose label is its own, so a screen reader reads it and a click on the label focuses it.
-function TextField({ label, value, onChange, hint, maxLength = 120, type = 'text', multiline, placeholder }: TextFieldProps) {
+function TextField({ label, value, onChange, hint, maxLength = 120, type = 'text', multiline, placeholder, field }: TextFieldProps) {
   const id = useId()
   return (
     <div className="field">
@@ -24,9 +25,9 @@ function TextField({ label, value, onChange, hint, maxLength = 120, type = 'text
         {label}
       </label>
       {multiline ? (
-        <textarea id={id} className="field__input field__input--area" rows={3} value={value} maxLength={maxLength} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+        <textarea id={id} data-field={field} className="field__input field__input--area" rows={3} value={value} maxLength={maxLength} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
       ) : (
-        <input id={id} className="field__input" type={type} value={value} maxLength={maxLength} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} autoComplete="off" />
+        <input id={id} data-field={field} className="field__input" type={type} value={value} maxLength={maxLength} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} autoComplete="off" />
       )}
       {hint && <span className="field__hint">{hint}</span>}
     </div>
@@ -67,20 +68,20 @@ export function BusinessWindow({ business, status, onForget, dispatch, reason }:
   return (
     <ToolWindow title="Your business" reason={reason}>
       <div className="fields">
-        <TextField label="Business name" value={business.name} maxLength={80} onChange={(name) => set({ name })} />
-        <TextField label="Address" value={business.address} maxLength={300} multiline onChange={(address) => set({ address })} />
+        <TextField label="Business name" field="business.name" value={business.name} maxLength={80} onChange={(name) => set({ name })} />
+        <TextField label="Address" field="business.address" value={business.address} maxLength={300} multiline onChange={(address) => set({ address })} />
         <div className="fields__pair">
-          <TextField label="Email" type="email" value={business.email} onChange={(email) => set({ email })} />
-          <TextField label="Phone" type="tel" value={business.phone} maxLength={40} onChange={(phone) => set({ phone })} />
+          <TextField label="Email" field="business.email" type="email" value={business.email} onChange={(email) => set({ email })} />
+          <TextField label="Phone" field="business.phone" type="tel" value={business.phone} maxLength={40} onChange={(phone) => set({ phone })} />
         </div>
-        <TextField label="VAT number" value={business.vatNumber} maxLength={30} hint="Only if you are registered for VAT." onChange={(vatNumber) => set({ vatNumber })} />
+        <TextField label="VAT number" field="vat.vatNumber" value={business.vatNumber} maxLength={30} hint="Only if you are registered for VAT." onChange={(vatNumber) => set({ vatNumber })} />
         <h3 className="fields__group">How you get paid</h3>
-        <TextField label="Account holder" value={business.accountHolder} maxLength={80} onChange={(accountHolder) => set({ accountHolder })} />
+        <TextField label="Account holder" field="business.accountHolder" value={business.accountHolder} maxLength={80} onChange={(accountHolder) => set({ accountHolder })} />
         <div className="fields__pair">
-          <TextField label="Bank" value={business.bankName} maxLength={60} onChange={(bankName) => set({ bankName })} />
-          <TextField label="Branch code" value={business.branchCode} maxLength={20} onChange={(branchCode) => set({ branchCode })} />
+          <TextField label="Bank" field="business.bankName" value={business.bankName} maxLength={60} onChange={(bankName) => set({ bankName })} />
+          <TextField label="Branch code" field="business.branchCode" value={business.branchCode} maxLength={20} onChange={(branchCode) => set({ branchCode })} />
         </div>
-        <TextField label="Account number" value={business.accountNumber} maxLength={30} onChange={(accountNumber) => set({ accountNumber })} />
+        <TextField label="Account number" field="business.accountNumber" value={business.accountNumber} maxLength={30} onChange={(accountNumber) => set({ accountNumber })} />
       </div>
       <Remembered what="your business details" status={status} onForget={onForget} />
       <p className="fields__note">Kept on this device only.</p>
@@ -138,13 +139,13 @@ export function ClientWindow({ client, status, remembered, onForget, dispatch, r
         </div>
       )}
       <div className="fields">
-        <TextField label="Client or company name" value={client.name} maxLength={80} onChange={(name) => set({ name })} />
-        <TextField label="Contact person" value={client.contact} maxLength={80} onChange={(contact) => set({ contact })} />
-        <TextField label="Address" value={client.address} maxLength={300} multiline onChange={(address) => set({ address })} />
-        <TextField label="Email" type="email" value={client.email} onChange={(email) => set({ email })} />
+        <TextField label="Client or company name" field="client.name" value={client.name} maxLength={80} onChange={(name) => set({ name })} />
+        <TextField label="Contact person" field="client.contact" value={client.contact} maxLength={80} onChange={(contact) => set({ contact })} />
+        <TextField label="Address" field="client.address" value={client.address} maxLength={300} multiline onChange={(address) => set({ address })} />
+        <TextField label="Email" field="client.email" type="email" value={client.email} onChange={(email) => set({ email })} />
         <div className="fields__pair">
-          <TextField label="Their VAT number" value={client.vatNumber} maxLength={30} onChange={(vatNumber) => set({ vatNumber })} />
-          <TextField label="Their reference" value={client.reference} maxLength={60} hint="Such as a purchase order number." onChange={(reference) => set({ reference })} />
+          <TextField label="Their VAT number" field="client.vatNumber" value={client.vatNumber} maxLength={30} onChange={(vatNumber) => set({ vatNumber })} />
+          <TextField label="Their reference" field="client.reference" value={client.reference} maxLength={60} hint="Such as a purchase order number." onChange={(reference) => set({ reference })} />
         </div>
       </div>
       <Remembered what="this client" status={status} onForget={savedHere ? () => onForget(savedHere.id) : undefined} />
@@ -160,13 +161,13 @@ export function DetailsWindow({ details, dispatch, reason }: { details: InvoiceD
   return (
     <ToolWindow title="Invoice details" reason={reason}>
       <div className="fields">
-        <TextField label="Invoice number" value={details.number} maxLength={40} hint="It stays the same if you change the invoice and send it again." onChange={(number) => set({ number })} />
-        <TextField label="Date" type="date" value={details.issueDate} maxLength={10} onChange={(issueDate) => set({ issueDate })} />
+        <TextField label="Invoice number" field="details.number" value={details.number} maxLength={40} hint="It stays the same if you change the invoice and send it again." onChange={(number) => set({ number })} />
+        <TextField label="Date" field="details.issueDate" type="date" value={details.issueDate} maxLength={10} onChange={(issueDate) => set({ issueDate })} />
         <div className="field">
           <label className="field__label" htmlFor={termsId}>
             Payment is due
           </label>
-          <select id={termsId} className="field__input" value={details.terms} onChange={(event) => set({ terms: event.target.value as InvoiceDetails['terms'] })}>
+          <select id={termsId} data-field="details.terms" className="field__input" value={details.terms} onChange={(event) => set({ terms: event.target.value as InvoiceDetails['terms'] })}>
             {TERMS.map((terms) => (
               <option key={terms.id} value={terms.id}>
                 {terms.label}
@@ -175,8 +176,8 @@ export function DetailsWindow({ details, dispatch, reason }: { details: InvoiceD
           </select>
           <span className="field__hint">{due ? `That is ${formatDate(due)}.` : 'Choose a date below.'}</span>
         </div>
-        {details.terms === 'custom' && <TextField label="Due date" type="date" value={details.customDueDate} maxLength={10} onChange={(customDueDate) => set({ customDueDate })} />}
-        <TextField label="Note" value={details.notes} maxLength={1000} multiline placeholder="Thank you, or what the payment is for." onChange={(notes) => set({ notes })} />
+        {details.terms === 'custom' && <TextField label="Due date" field="details.customDueDate" type="date" value={details.customDueDate} maxLength={10} onChange={(customDueDate) => set({ customDueDate })} />}
+        <TextField label="Note" field="details.notes" value={details.notes} maxLength={1000} multiline placeholder="Thank you, or what the payment is for." onChange={(notes) => set({ notes })} />
       </div>
     </ToolWindow>
   )
@@ -189,7 +190,7 @@ export function VatWindow({ content, dispatch, reason }: { content: InvoiceConte
   return (
     <ToolWindow title="VAT" reason={reason}>
       <div className="vat">
-        <label className="vat__switch" htmlFor={id}>
+        <label className="vat__switch" htmlFor={id} data-field="vat.registered">
           <input id={id} type="checkbox" role="switch" checked={vatRegistered} onChange={(event) => dispatch({ type: 'set_vat_registered', value: event.target.checked })} />
           <span>I am registered for VAT</span>
         </label>
@@ -198,7 +199,7 @@ export function VatWindow({ content, dispatch, reason }: { content: InvoiceConte
             ? `The document is a tax invoice. It charges ${percentLabel(VAT_RATE_BP)} VAT on the subtotal and shows your VAT number.`
             : 'The document is a plain invoice with no VAT. Turn this on only if SARS has given you a VAT number.'}
         </p>
-        {vatRegistered && <TextField label="Your VAT number" value={business.vatNumber} maxLength={30} onChange={(vatNumber) => dispatch({ type: 'set_business', patch: { vatNumber } })} />}
+        {vatRegistered && <TextField label="Your VAT number" field="vat.vatNumber" value={business.vatNumber} maxLength={30} onChange={(vatNumber) => dispatch({ type: 'set_business', patch: { vatNumber } })} />}
       </div>
     </ToolWindow>
   )

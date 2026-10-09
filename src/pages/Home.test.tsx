@@ -118,6 +118,19 @@ describe('asking Droplet to fill in the invoice', () => {
     expect(screen.getByLabelText('Price each, in rand')).toHaveValue('')
   })
 
+  it('opens the window of the part it changed, so the change is on screen to edit, and Undo leaves it open', async () => {
+    const user = userEvent.setup()
+    answers = [reply('invoice', 'Set.', [{ type: 'set_client', name: 'Karoo Candles' }])]
+    renderHome()
+    await pickTask(user, /Make an invoice/)
+    expect(screen.queryByLabelText('Client or company name')).not.toBeInTheDocument()
+    await say(user, 'It is for Karoo Candles')
+    await screen.findByText('Set.')
+    expect(await screen.findByLabelText('Client or company name')).toHaveValue('Karoo Candles')
+    await user.click(screen.getByRole('button', { name: 'Undo this' }))
+    expect(screen.getByLabelText('Client or company name')).toHaveValue('')
+  })
+
   it('refuses the whole answer, and changes nothing, when it holds a price the founder did not write', async () => {
     const user = userEvent.setup()
     answers = [
@@ -756,14 +769,16 @@ describe('the light while Droplet works', () => {
     await waitFor(() => expect(screen.getByText('Done.')).toBeInTheDocument())
   })
 
-  it('is shown over a workspace while the composer works on it', async () => {
+  // The blue light was taken out: nothing goes over the workspace while the composer only thinks. The loader shows only as a reply's changes land.
+  it('is not shown over a workspace while the composer works on it any more', async () => {
     const user = userEvent.setup()
     let release: () => void = () => {}
     vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => { release = () => resolve(new Response(JSON.stringify(reply('brand', 'Done.')), { status: 200, headers: { 'content-type': 'application/json' } })) })))
     const { container } = renderHome()
     await pickTask(user, /Build the brand/)
     await say(user, 'Warmer please')
-    expect(container.querySelector('.glow')).not.toBeNull()
+    expect(container.querySelector('.glow')).toBeNull()
+    expect(container.querySelector('.acting')).toBeNull()
     release()
     await waitFor(() => expect(screen.getByText('Done.')).toBeInTheDocument())
   })
@@ -1355,6 +1370,34 @@ describe('a reply that searched the web', () => {
   })
 })
 
+describe('the screen while Droplet works', () => {
+  it('puts nothing over the workspace while Droplet is only thinking: no blue light and no loader', async () => {
+    const user = userEvent.setup()
+    let answer: (body: unknown) => void = () => undefined
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init: { method?: string; body: string }) => {
+        if (init.method === 'GET') return new Response(JSON.stringify({ allowance: allowanceNow }), { status: 200 })
+        const sent = JSON.parse(init.body) as { kind?: string }
+        if (sent.kind) return new Response(JSON.stringify({ kind: sent.kind, answeredBy: 'base', summary: null, digest: null }), { status: 200 })
+        return new Promise<Response>((resolve) => {
+          answer = (body) => resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }))
+        })
+      }),
+    )
+    const { container } = renderHome()
+    await pickTask(user, /Make an invoice/)
+    await say(user, 'Bill Karoo Candles')
+    expect(await screen.findByText('Thinking')).toBeInTheDocument()
+    expect(container.querySelector('.acting')).toBeNull()
+    expect(container.querySelector('.glow')).toBeNull()
+    answer(reply('invoice', 'Done.', [{ type: 'set_client', name: 'Karoo Candles' }]))
+    await screen.findByText('Done.')
+    expect(screen.getByLabelText(/^Invoice INV-0001/)).toHaveTextContent('Karoo Candles')
+    await waitFor(() => expect(container.querySelector('.acting')).toBeNull())
+  })
+})
+
 describe('Guide mode', () => {
   beforeEach(() => useWorkMode.setState({ mode: 'guide' }))
 
@@ -1428,6 +1471,30 @@ describe('Guide mode', () => {
     await say(user, 'It is for Karoo Candles')
     await screen.findByText('Added.')
     expect(screen.getByRole('complementary', { name: 'Preview' })).toHaveTextContent('Karoo Candles')
+  })
+
+  it('goes to the step Droplet changed, and Show me marks the field it changed even after the founder has moved away', async () => {
+    const user = userEvent.setup()
+    answers = [reply('invoice', 'I set the client.', [{ type: 'set_client', name: 'Niel Pretorius' }])]
+    renderHome()
+    await pickTask(user, /Make an invoice/)
+    await screen.findByText('Step 1 of 6')
+    await say(user, 'It is for Niel Pretorius')
+    await screen.findByText('I set the client.')
+    // the change is shown where it can be edited
+    expect(await screen.findByText('Step 3 of 6')).toBeInTheDocument()
+    expect(screen.getByLabelText('Client or company name')).toHaveValue('Niel Pretorius')
+    await user.click(screen.getByRole('button', { name: /^Step 1, Your business/ }))
+    expect(await screen.findByText('Step 1 of 6')).toBeInTheDocument()
+    const receipt = screen.getByRole('region', { name: /Changed on the invoice/ })
+    await user.click(within(receipt).getByRole('button', { name: 'Show me' }))
+    expect(await screen.findByText('Step 3 of 6')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText('Client or company name')).toHaveAttribute('data-shown'))
+    // pressing into the marked field keeps the mark; pressing elsewhere on the screen clears it
+    await user.click(screen.getByLabelText('Client or company name'))
+    expect(screen.getByLabelText('Client or company name')).toHaveAttribute('data-shown')
+    await user.click(screen.getByLabelText('Contact person'))
+    expect(screen.getByLabelText('Client or company name')).not.toHaveAttribute('data-shown')
   })
 
   it('switches to the whole workspace, on the same invoice, when the founder changes the mode', async () => {
@@ -1815,18 +1882,24 @@ describe('the change receipt', () => {
 
   it('brings what changed into view and outlines it with Show me', async () => {
     const user = userEvent.setup()
-    renderHome()
+    const { container } = renderHome()
     await pickTask(user, /Shape the business idea/)
     answers = [reply('ideation', 'One idea.', [{ type: 'add_note', text: 'Pet Pals' }])]
     await say(user, 'an idea')
     await screen.findByText('One idea.')
     const mine = pink()[0]
     mine.scrollIntoView = vi.fn()
-    // the ring of the arrival is over by now, or never ran here: clear any outline so Show me's own is what is seen
-    mine.style.outline = ''
     await user.click(within(card()).getByRole('button', { name: 'Show me' }))
-    await waitFor(() => expect(mine.style.outline).toContain('2px solid'))
+    // a blue border that stays (styled by data-shown), until a press elsewhere on the screen or a new message
+    await waitFor(() => expect(mine).toHaveAttribute('data-shown'))
     expect(mine.scrollIntoView).toHaveBeenCalled()
+    await user.pointer({ keys: '[MouseLeft]', target: container.querySelector('.home__header')! })
+    expect(mine).not.toHaveAttribute('data-shown')
+    await user.click(within(card()).getByRole('button', { name: 'Show me' }))
+    await waitFor(() => expect(mine).toHaveAttribute('data-shown'))
+    answers = [reply('chat', 'Sure.')]
+    await say(user, 'thanks')
+    expect(mine).not.toHaveAttribute('data-shown')
   })
 
   it('keeps the receipt with the saved chat, the lines and how Undo this ended, and not the buttons', async () => {

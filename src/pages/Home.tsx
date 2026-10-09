@@ -15,15 +15,15 @@ import Library from '../components/Library.tsx'
 import InvoiceWorkspace from '../components/invoice/InvoiceWorkspace.tsx'
 import GuidedInvoice from '../components/invoice/GuidedInvoice.tsx'
 import InvoiceResultCard from '../components/InvoiceResultCard.tsx'
-import { GUIDE_STEPS, jumpTo, progressFor, resultMessage, stepIndex, type GuideProgress, type InvoiceResult } from '../lib/invoiceGuide.ts'
+import { GUIDE_STEPS, changedSteps, jumpTo, progressFor, resultMessage, revealActions, stepIndex, stepsOfTargets, stepToShow, type GuideProgress, type InvoiceResult } from '../lib/invoiceGuide.ts'
 import { useWorkMode } from '../store/workMode.ts'
 import PaletteWorkspace from '../components/PaletteWorkspace.tsx'
-import RippleGlow from '../components/RippleGlow.tsx'
+import ActingOverlay from '../components/ActingOverlay.tsx'
 import Sidebar from '../components/Sidebar.tsx'
 import Wordmark from '../components/Wordmark.tsx'
 import { applyTurnActions } from '../compose/applyActions.ts'
 import { buildReceipt, focusOf, type Change, type FocusTarget, type Receipt, type ReceiptWorkspace } from '../compose/receipt.ts'
-import { prepareArrival, revealTargets, type Arrival } from '../lib/arrival.ts'
+import { clearMarks, markTargets, prepareArrival, type Arrival } from '../lib/arrival.ts'
 import type { ProposalView } from '../components/FactChips.tsx'
 import ProjectBrief from '../components/ProjectBrief.tsx'
 import Toast, { type ToastMessage } from '../components/Toast.tsx'
@@ -42,7 +42,7 @@ import type { InvoiceTurnAction } from '../compose/invoiceSpec.ts'
 import { founderTextOf } from '../compose/rules.ts'
 import { paletteSnapshotOf, snapshotOfState } from '../compose/snapshot.ts'
 import { MAX_HISTORY_MESSAGES, isBoardAction, isInvoiceAction, isScreenAction, routedTo, type Mode, type PaletteAction, type View } from '../compose/spec.ts'
-import { useRipple } from '../hooks/useRipple.ts'
+import { actingDelay, pause } from '../lib/acting.ts'
 import { requestComposition, requestSummary } from '../lib/composeClient.ts'
 import { useAdvancedAllowance } from '../lib/advancedAllowance.ts'
 import { byPinnedThenRecent, chatHasBegun, chatTitle, cleanTitle, hasFounderMessage, lastActive, loadChats, pinChat, removeChat, saveChats, storableMessages, upsertChat, type StoredChat } from '../lib/chatStore.ts'
@@ -126,6 +126,8 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   // Bumped when something outside the library changed what it lists, so it reads again.
   const [libraryVersion, setLibraryVersion] = useState(0)
   const [composing, setComposing] = useState(false)
+  // Droplet is acting on the workspace on screen: the screen goes soft with a loader on it, and what it did lands when this ends.
+  const [acting, setActing] = useState(false)
   // Where the founder's Advanced allowance stands, as the server last said.
   const [allowance, setAllowance] = useAdvancedAllowance()
   // The two ends of the header, where the workspace puts its controls beside the logo.
@@ -216,8 +218,6 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   // made and left again without a word.
   const spaceRef = useRef<TaskId | null>(null)
   const sentInRef = useRef<TaskId | null | undefined>(undefined)
-  // The canvas, whose windows ripple while Droplet works.
-  const canvasRef = useRef<HTMLElement>(null)
 
   // The latest values, readable inside an async request without going stale.
   const workspaceRef = useRef<WorkspaceState | null>(null)
@@ -258,7 +258,6 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
     guideRef.current = guide
   })
 
-  useRipple(canvasRef, composing)
 
   // What a reply changed arrives in order once the screen has changed. Prepared before, played now, once.
   useLayoutEffect(() => {
@@ -336,6 +335,12 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
 
   // The workspaces that are open, one of which is on screen, so the composer can switch to one by name.
   const openNow = (): View[] => [...(workspaceRef.current ? (['brand'] as const) : []), ...(invoiceRef.current ? (['invoice'] as const) : []), ...(boardRef.current ? (['board'] as const) : [])]
+
+  // The moment before a reply's changes land: the screen goes soft, with the loader on it. It is cleared once the request ends, whatever happens.
+  const actOnScreen = async () => {
+    setActing(true)
+    await pause(actingDelay())
+  }
 
   // The step of the guided invoice that is on screen, as the composer is told it.
   const guideOf = (invoiceId: string) => {
@@ -468,26 +473,62 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
       const historyTurn = result.turn.actions.some((action) => action.type === 'undo' || action.type === 'redo')
       if (view === 'invoice' && invoiceOpen) {
         // Applied to the invoice as it is now, which may have changed while the composer was thinking.
-        const base = invoiceRef.current ?? invoiceOpen
         const actions = result.turn.actions.filter((action): action is InvoiceTurnAction => isInvoiceAction(action) || action.type === 'undo' || action.type === 'redo')
-        const applied = applyInvoiceTurnActions({
-          base,
-          actions,
-          clients: memory.clients.map((client) => ({ name: client.client.name, client: client.client })),
-          founderText: founderTextOf({ intent: text, history }),
-        })
+        const apply = (base: InvoiceState) =>
+          applyInvoiceTurnActions({
+            base,
+            actions,
+            clients: memory.clients.map((client) => ({ name: client.client.name, client: client.client })),
+            founderText: founderTextOf({ intent: text, history }),
+          })
+        let base = invoiceRef.current ?? invoiceOpen
+        let applied = apply(base)
+        // Something will change: the screen goes soft while Droplet acts, and the change lands as it clears. Worked out again if the invoice moved meanwhile.
+        if (applied.state !== base) {
+          await actOnScreen()
+          if (invoiceRef.current && invoiceRef.current !== base) {
+            base = invoiceRef.current
+            applied = apply(base)
+          }
+        }
+        // What changed is shown where it can be edited: the parts of the invoice that differ, worked out from the invoice itself.
+        const changedParts = changedSteps(invoiceDocOf(base).content, invoiceDocOf(applied.state).content)
+        const guided = useWorkMode.getState().mode === 'guide'
+        // In Workspace mode the windows of those parts open first, as a step of their own, so Undo this takes back the change and leaves them open.
+        const reveal = guided ? [] : revealActions(invoiceDocOf(base), changedParts)
+        if (reveal.length > 0) {
+          base = reduceInvoice(base, { type: 'batch', actions: reveal })
+          applied = apply(base)
+        }
         if (applied.state !== base) {
           arrivalRef.current = prepareArrival(focusOf(applied.changes))
           invoiceRef.current = applied.state
           setInvoice(applied.state)
+          // In Guide mode the guide goes to the first part that changed, unless the founder is already on one of them.
+          if (guided) {
+            const progress = progressFor(guideRef.current, invoiceDocOf(applied.state).invoiceId)
+            const to = stepToShow(progress.step, changedParts)
+            if (to) {
+              guideRef.current = jumpTo(progress, to)
+              setGuide(guideRef.current)
+            }
+          }
         }
         done = { workspace: 'invoice', changes: applied.changes, skipped: applied.skipped, before: invoiceDocOf(base), after: invoiceDocOf(applied.state) }
       } else if (view === 'board' && boardOpen) {
         // Applied to the board as it is now, which may have changed while the composer was thinking. The places are found here, in code, from the
         // board as it is, and never from the model.
-        const base = boardRef.current ?? boardOpen
         const actions = result.turn.actions.filter((action): action is BoardTurnAction => isBoardAction(action) || action.type === 'undo' || action.type === 'redo')
-        const applied = applyBoardTurnActions({ base, actions, view: boardHandleRef.current?.viewMiddle() ?? { x: 2400, y: 1600 } })
+        const apply = (base: BoardState) => applyBoardTurnActions({ base, actions, view: boardHandleRef.current?.viewMiddle() ?? { x: 2400, y: 1600 } })
+        let base = boardRef.current ?? boardOpen
+        let applied = apply(base)
+        if (applied.state !== base) {
+          await actOnScreen()
+          if (boardRef.current && boardRef.current !== base) {
+            base = boardRef.current
+            applied = apply(base)
+          }
+        }
         if (applied.state !== base) {
           arrivalRef.current = prepareArrival(focusOf(applied.changes))
           boardRef.current = applied.state
@@ -499,12 +540,20 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         done = { workspace: 'board', changes: applied.changes, skipped: applied.skipped, before: boardDocOf(base), after: boardDocOf(applied.state) }
       } else {
         // Applied to the workspace as it is now, which may have changed while the model was thinking.
-        const applied = applyTurnActions({
-          base: workspaceRef.current,
-          open: (blocks) => openWorkspace(blocks, saved),
-          actions: result.turn.actions.filter((action): action is PaletteAction => !isInvoiceAction(action) && !isBoardAction(action) && !isScreenAction(action)),
-          env: drawnRef.current,
-        })
+        const apply = () =>
+          applyTurnActions({
+            base: workspaceRef.current,
+            open: (blocks) => openWorkspace(blocks, saved),
+            actions: result.turn.actions.filter((action): action is PaletteAction => !isInvoiceAction(action) && !isBoardAction(action) && !isScreenAction(action)),
+            env: drawnRef.current,
+          })
+        let applied = apply()
+        // Only a palette that is on screen goes soft: one this reply opens arrives in its own way.
+        if (view === 'brand' && workspaceRef.current && applied.state && applied.state !== workspaceRef.current) {
+          const before = workspaceRef.current
+          await actOnScreen()
+          if (workspaceRef.current !== before) applied = apply()
+        }
         const wasState = workspaceRef.current
         const skipped: { action: { type: string }; reason: string }[] = [...applied.skipped]
         const changes = [...applied.changes]
@@ -524,6 +573,8 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         // A workspace opened by this reply has nothing earlier to go back to, so only one that was open can be undone.
         done = { workspace: 'brand', changes, skipped, before: wasState ? docOf(wasState) : null, after: applied.state && !applied.opened ? docOf(applied.state) : null }
       }
+      // What the reply did has landed, so the screen clears in the same moment and the changes arrive as it does.
+      setActing(false)
       // The screen actions come last, after the workspace's own: go back to a workspace that is open, or close them all and return to the full chat.
       const screen = result.turn.actions.find(isScreenAction)
       if (screen?.type === 'switch_to') {
@@ -599,6 +650,8 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
     async (text: string, mode: Mode = 'base', from?: FlightOrigin) => {
       if (busyRef.current) return
       busyRef.current = true
+      // What Show me marked is for the reply it belonged to: a new message clears it.
+      clearMarks()
       const pending = message('droplet', '', true)
       // The conversation so far, without the reply still being worked on.
       const history = threadRef.current
@@ -628,6 +681,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         sentInRef.current = spaceRef.current
       } finally {
         setComposing(false)
+        setActing(false)
         busyRef.current = false
       }
     },
@@ -713,14 +767,31 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
       if (!live || busyRef.current) return
       const open = { brand: workspaceRef.current, invoice: invoiceRef.current, board: boardRef.current }[live.workspace] !== null
       if (!open) return settleReceipt(messageId, 'That workspace is closed now.')
-      const switching = onScreen() !== live.workspace
-      if (switching) {
+      if (onScreen() !== live.workspace) {
         viewRef.current = live.workspace
         spaceRef.current = live.workspace === 'board' ? 'ideation' : live.workspace
         changeView(live.workspace)
       }
-      // Once it is on screen, if it had to be brought there.
-      window.setTimeout(() => revealTargets(live.targets), switching ? 120 : 0)
+      // On the invoice, the part that changed is brought on screen first: in Guide mode the guide goes to its step, and in Workspace mode its window opens.
+      if (live.workspace === 'invoice' && invoiceRef.current) {
+        const parts = stepsOfTargets(live.targets)
+        if (useWorkMode.getState().mode === 'guide') {
+          const progress = progressFor(guideRef.current, invoiceDocOf(invoiceRef.current).invoiceId)
+          const to = stepToShow(progress.step, parts)
+          if (to) {
+            guideRef.current = jumpTo(progress, to)
+            setGuide(guideRef.current)
+          }
+        } else {
+          const reveal = revealActions(invoiceDocOf(invoiceRef.current), parts)
+          if (reveal.length > 0) {
+            invoiceRef.current = reduceInvoice(invoiceRef.current, { type: 'batch', actions: reveal })
+            setInvoice(invoiceRef.current)
+          }
+        }
+      }
+      // Each thing that changed gets a blue border that draws in and stays, once it is on screen, until another message or a press elsewhere.
+      void markTargets(live.targets)
     },
     // onScreen only reads refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1205,7 +1276,14 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
       />
       {mobileOpen && <div className="home__scrim" onClick={() => setMobileOpen(false)} aria-hidden="true" />}
 
-      <div className="home__screen glass glass--strong" data-immersive={(docked && shown === 'board') || undefined}>
+      {/* A press anywhere on the screen but on a thing Show me marked clears the marks. */}
+      <div
+        className="home__screen glass glass--strong"
+        data-immersive={(docked && shown === 'board') || undefined}
+        onPointerDown={(event) => {
+          if (!(event.target instanceof Element && event.target.closest('[data-shown]'))) clearMarks()
+        }}
+      >
         <ChatGlow />
         {/* The header and the toolbar, together: over a board that fills the screen they are lit from below by a gradual blur. */}
         <div className="home__top" ref={topRef}>
@@ -1234,7 +1312,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         <div className="home__shelf" ref={setShelfSlot} />
         </div>
 
-        <main ref={canvasRef} className={docked ? (shown === 'board' ? 'home__canvas home__canvas--board' : shown === 'invoice' && workMode === 'guide' ? 'home__canvas home__canvas--guide' : 'home__canvas') : 'home__canvas home__canvas--chat'} aria-busy={composing}>
+        <main className={docked ? (shown === 'board' ? 'home__canvas home__canvas--board' : shown === 'invoice' && workMode === 'guide' ? 'home__canvas home__canvas--guide' : 'home__canvas') : 'home__canvas home__canvas--chat'} aria-busy={composing}>
           <h1 className="visually-hidden">Home</h1>
           {/* Before there is a workspace, the whole screen is the conversation. Droplet answers like any assistant until it is asked to build something. */}
           {!docked && (
@@ -1339,8 +1417,9 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
             {bar(false)}
           </motion.footer>
         )}
-        {/* The blue light that travels out from the middle of the canvas while Droplet works, with the ripple of the windows. */}
-        <RippleGlow active={composing && docked} />
+        {/* Only while Droplet acts on the workspace on screen, not while it thinks or talks: the screen goes soft with a loader on it. The blue orbs
+            (RippleGlow) and the ripple of the windows (useRipple) used to show for every message; both are kept, unused, to bring back. */}
+        <ActingOverlay active={acting} />
       </div>
 
       {docked && (

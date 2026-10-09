@@ -7,7 +7,8 @@ import { z } from 'zod'
 // A change also says which things on screen it touched (`focus`), so "Show me" can bring them into view and the arrival can play on each.
 
 // Where a thing is on screen: a colour on the palette, a line of the invoice, an item of the board, or a whole window.
-export type FocusTarget = { kind: 'block' | 'line' | 'item' | 'window'; id: string | number; how: 'added' | 'changed' | 'moved' | 'removed' }
+// A field is one control in a form, named by what it holds (`client.name`, `details.terms`), so Show me can find it whichever way the invoice is shown.
+export type FocusTarget = { kind: 'block' | 'line' | 'item' | 'window' | 'field'; id: string | number; how: 'added' | 'changed' | 'moved' | 'removed' }
 
 export type Change = {
   // A thing was added or taken away, or something about it changed. Only an addition and a removal are marked with a sign.
