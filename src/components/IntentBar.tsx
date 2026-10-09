@@ -5,6 +5,7 @@ import { useDismiss } from '../hooks/useDismiss.ts'
 import { describeAllowance } from '../lib/advancedAllowance.ts'
 import type { Allowance, Mode } from '../compose/spec.ts'
 import type { TaskId } from '../lib/tasks.ts'
+import { useWorkMode } from '../store/workMode.ts'
 import type { FlightOrigin } from './FlyingMessage.tsx'
 import ModeMenu from './ModeMenu.tsx'
 import TaskMenu from './TaskMenu.tsx'
@@ -29,8 +30,12 @@ export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false
   const [text, setText] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
   const [modeOpen, setModeOpen] = useState(false)
-  // Quick unless the founder picks Advanced, and only for the next message. The app never switches it on.
-  const [mode, setMode] = useState<Mode>('base')
+  // Quick unless the founder switches Advanced on, and only for the next message. The app never switches it on.
+  const [advanced, setAdvanced] = useState(false)
+  const mode: Mode = advanced ? 'advanced' : 'base'
+  // Guide or Workspace: how a task opens. It stays until the founder changes it.
+  const workMode = useWorkMode((state) => state.mode)
+  const setWorkMode = useWorkMode((state) => state.setMode)
   const wrapRef = useRef<HTMLDivElement>(null)
   const chipRef = useRef<HTMLButtonElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -46,7 +51,7 @@ export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false
   const [wasExhausted, setWasExhausted] = useState(exhausted)
   if (exhausted !== wasExhausted) {
     setWasExhausted(exhausted)
-    if (exhausted) setMode('base')
+    if (exhausted) setAdvanced(false)
   }
 
   // The bar moves into the side panel when a workspace appears, so keep the cursor in it.
@@ -65,12 +70,11 @@ export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false
     if (from) onSubmitIntent?.(text.trim(), mode, from)
     else onSubmitIntent?.(text.trim(), mode)
     setText('')
-    setMode('base')
+    setAdvanced(false)
   }
 
-  const chooseMode = (next: Mode) => {
+  const closeModes = () => {
     setModeOpen(false)
-    setMode(next)
     inputRef.current?.focus()
   }
 
@@ -83,7 +87,21 @@ export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false
   return (
     <div className={docked ? 'intent intent--docked' : 'intent'} ref={wrapRef}>
       <AnimatePresence>{menuOpen && <TaskMenu onSelect={choose} />}</AnimatePresence>
-      <AnimatePresence>{modeOpen && <ModeMenu mode={mode} allowance={allowance} onSelect={chooseMode} />}</AnimatePresence>
+      <AnimatePresence>{modeOpen && (
+          <ModeMenu
+            workMode={workMode}
+            onWorkMode={(next) => {
+              setWorkMode(next)
+              closeModes()
+            }}
+            advanced={advanced}
+            onAdvanced={(on) => {
+              setAdvanced(on)
+              closeModes()
+            }}
+            allowance={allowance}
+          />
+        )}</AnimatePresence>
 
       <form ref={formRef} className="intent__bar glass" onSubmit={submit}>
         <button
@@ -99,8 +117,8 @@ export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false
         >
           <AddIcon size={22} aria-hidden="true" />
         </button>
-        {mode === 'advanced' && (
-          <button type="button" className="intent__pill" onClick={() => setMode('base')} aria-label="Advanced is on for your next message. Turn it off">
+        {advanced && (
+          <button type="button" className="intent__pill" onClick={() => setAdvanced(false)} aria-label="Advanced is on for your next message. Turn it off">
             Advanced
             <CloseCircleIcon size={16} aria-hidden="true" />
           </button>
@@ -118,7 +136,7 @@ export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false
         <button
           type="button"
           className="intent__mode"
-          aria-label="Choose how I answer"
+          aria-label={`Choose how Droplet works. ${workMode === 'guide' ? 'Guide' : 'Workspace'} mode is on.`}
           aria-haspopup="menu"
           aria-expanded={modeOpen}
           onClick={() => {

@@ -1354,15 +1354,15 @@ describe('a reply that searched the web', () => {
 
 describe('Quick and Advanced', () => {
   const chooseAdvanced = async (user: ReturnType<typeof userEvent.setup>) => {
-    await user.click(screen.getByRole('button', { name: 'Choose how I answer' }))
-    await user.click(screen.getByRole('menuitemradio', { name: /Advanced/ }))
+    await user.click(screen.getByRole('button', { name: /Choose how Droplet works/ }))
+    await user.click(screen.getByRole('menuitemcheckbox', { name: /Advanced/ }))
   }
 
   it('asks the server how many Advanced answers are left before anything is said, and shows the count in the menu', async () => {
     const user = userEvent.setup()
     allowanceNow = { advancedLeft: 7, advancedLimit: 10, resetsAt: null }
     renderHome()
-    await user.click(screen.getByRole('button', { name: 'Choose how I answer' }))
+    await user.click(screen.getByRole('button', { name: /Choose how Droplet works/ }))
     expect(await screen.findByText('Searches the web · 7 of 10 left today')).toBeInTheDocument()
   })
 
@@ -1388,8 +1388,8 @@ describe('Quick and Advanced', () => {
     await chooseAdvanced(user)
     await say(user, 'What does CIPC charge?')
     await screen.findByText('About R175.')
-    await user.click(screen.getByRole('button', { name: 'Choose how I answer' }))
-    const row = screen.getByRole('menuitemradio', { name: /Advanced/ })
+    await user.click(screen.getByRole('button', { name: /Choose how Droplet works/ }))
+    const row = screen.getByRole('menuitemcheckbox', { name: /Advanced/ })
     expect(row).toHaveAttribute('aria-disabled', 'true')
     expect(row).toHaveTextContent(/None left today/)
   })
@@ -1401,8 +1401,8 @@ describe('Quick and Advanced', () => {
     await chooseAdvanced(user)
     await say(user, 'What does CIPC charge?')
     expect(await screen.findByText(/Advanced is busy today, so I answered with Quick\./)).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Choose how I answer' }))
-    expect(screen.getByRole('menuitemradio', { name: /Advanced/ })).toHaveTextContent('10 of 10 left today')
+    await user.click(screen.getByRole('button', { name: /Choose how Droplet works/ }))
+    expect(screen.getByRole('menuitemcheckbox', { name: /Advanced/ })).toHaveTextContent('10 of 10 left today')
   })
 
   it('says plainly when none are left, takes the count from the refusal, and the message is not lost to a silent failure', async () => {
@@ -1421,16 +1421,16 @@ describe('Quick and Advanced', () => {
     await chooseAdvanced(user)
     await say(user, 'What does CIPC charge?')
     expect(await screen.findByText(/You have used your 10 Advanced answers for today/)).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Choose how I answer' }))
-    expect(screen.getByRole('menuitemradio', { name: /Advanced/ })).toHaveAttribute('aria-disabled', 'true')
+    await user.click(screen.getByRole('button', { name: /Choose how Droplet works/ }))
+    expect(screen.getByRole('menuitemcheckbox', { name: /Advanced/ })).toHaveAttribute('aria-disabled', 'true')
   })
 
   it('still offers Advanced, without a count, when the server cannot say where the allowance stands', async () => {
     const user = userEvent.setup()
     allowanceNow = null
     renderHome()
-    await user.click(screen.getByRole('button', { name: 'Choose how I answer' }))
-    const row = screen.getByRole('menuitemradio', { name: /Advanced/ })
+    await user.click(screen.getByRole('button', { name: /Choose how Droplet works/ }))
+    const row = screen.getByRole('menuitemcheckbox', { name: /Advanced/ })
     expect(row).toHaveTextContent('Searches the web')
     expect(row).not.toHaveAttribute('aria-disabled')
   })

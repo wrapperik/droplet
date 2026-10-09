@@ -1,24 +1,33 @@
 import { useEffect, useRef, type KeyboardEvent } from 'react'
 import { motion } from 'framer-motion'
-import { BoltIcon, GlobalIcon } from '@solar-icons/react/linear'
+import { GlobalIcon, SignpostIcon, WidgetIcon } from '@solar-icons/react/linear'
 import { describeAllowance } from '../lib/advancedAllowance.ts'
-import type { Allowance, Mode } from '../compose/spec.ts'
+import type { WorkMode } from '../lib/workMode.ts'
+import type { Allowance } from '../compose/spec.ts'
 import './ModeMenu.css'
 
 type Props = {
-  mode: Mode
+  workMode: WorkMode
+  onWorkMode: (mode: WorkMode) => void
+  // Advanced (a stronger model that searches the web) for the next message only.
+  advanced: boolean
+  onAdvanced: (on: boolean) => void
   allowance: Allowance | null
-  onSelect: (mode: Mode) => void
 }
 
-// Quick or Advanced, for the next message only. Quick is the default; Advanced is the founder's choice and is never switched on by the app. When no
-// Advanced answers are left the row stays, disabled, and says when one comes back.
-export default function ModeMenu({ mode, allowance, onSelect }: Props) {
+const MODES: { id: WorkMode; label: string; hint: string; Icon: typeof SignpostIcon }[] = [
+  { id: 'guide', label: 'Guide', hint: 'One step at a time', Icon: SignpostIcon },
+  { id: 'workspace', label: 'Workspace', hint: 'Every tool at once', Icon: WidgetIcon },
+]
+
+// How Droplet works: Guide or Workspace, which stays until it is changed, and below them Advanced, for the next message only. Advanced is the
+// founder's choice and is never switched on by the app. When no Advanced answers are left the row stays, disabled, and says when one comes back.
+export default function ModeMenu({ workMode, onWorkMode, advanced, onAdvanced, allowance }: Props) {
   const listRef = useRef<HTMLDivElement>(null)
-  const advanced = describeAllowance(allowance)
+  const search = describeAllowance(allowance)
 
   useEffect(() => {
-    listRef.current?.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus()
+    listRef.current?.querySelector<HTMLButtonElement>('[role="menuitemradio"][aria-checked="true"]')?.focus()
   }, [])
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -35,36 +44,42 @@ export default function ModeMenu({ mode, allowance, onSelect }: Props) {
       ref={listRef}
       className="mode-menu glass glass--strong"
       role="menu"
-      aria-label="How Droplet answers your next message"
+      aria-label="How Droplet works"
       onKeyDown={onKeyDown}
-      initial={{ opacity: 0, y: 8 }}
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 8 }}
-      transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+      exit={{ opacity: 0, y: 6 }}
+      transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
     >
-      <button type="button" role="menuitemradio" aria-checked={mode === 'base'} className="mode-menu__item" onClick={() => onSelect('base')}>
-        <BoltIcon size={22} aria-hidden="true" />
-        <span className="mode-menu__text">
-          <span className="mode-menu__label">Quick</span>
-          <span className="mode-menu__hint">Fast, from what it knows</span>
-        </span>
-      </button>
+      <div role="group" aria-label="Mode">
+        {MODES.map(({ id, label, hint, Icon }) => (
+          <button key={id} type="button" role="menuitemradio" aria-checked={workMode === id} className="mode-menu__item" onClick={() => onWorkMode(id)}>
+            <Icon size={18} aria-hidden="true" />
+            <span className="mode-menu__text">
+              <span className="mode-menu__label">{label}</span>
+              <span className="mode-menu__hint">{hint}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+      <div className="mode-menu__divider" role="separator" />
       {/* aria-disabled and not disabled, so it can still be reached and its reason read out */}
       <button
         type="button"
-        role="menuitemradio"
-        aria-checked={mode === 'advanced'}
-        aria-disabled={advanced.exhausted || undefined}
-        className="mode-menu__item"
+        role="menuitemcheckbox"
+        aria-checked={advanced}
+        aria-disabled={search.exhausted || undefined}
+        className="mode-menu__item mode-menu__item--switch"
         onClick={() => {
-          if (!advanced.exhausted) onSelect('advanced')
+          if (!search.exhausted) onAdvanced(!advanced)
         }}
       >
-        <GlobalIcon size={22} aria-hidden="true" />
+        <GlobalIcon size={18} aria-hidden="true" />
         <span className="mode-menu__text">
           <span className="mode-menu__label">Advanced</span>
-          <span className="mode-menu__hint">{advanced.text}</span>
+          <span className="mode-menu__hint">{search.text}</span>
         </span>
+        <span className="mode-menu__switch" aria-hidden="true" />
       </button>
     </motion.div>
   )
