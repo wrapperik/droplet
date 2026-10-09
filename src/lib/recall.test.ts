@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ChatSummary } from '../compose/background.ts'
 import type { StoredChat } from './chatStore.ts'
-import { MAX_EARLIER_CHARS, MAX_EARLIER_CHATS, needsSummary, selectEarlierChats, welcomeBack, wordsOf } from './recall.ts'
+import { MAX_EARLIER_CHARS, MAX_EARLIER_CHATS, needsSummary, selectEarlierChats, wordsOf } from './recall.ts'
 
 const summary = (over: Partial<ChatSummary> = {}): ChatSummary => ({ task: 'chat', subject: 'Pricing the gift boxes', decided: ['settled on R450 a box'], open: ['whether to offer a discount'], ...over })
 const chat = (id: string, updatedAt: string, over: Partial<StoredChat> = {}): StoredChat => ({ id, title: `Chat ${id}`, updatedAt, messages: [{ id: 1, from: 'you', text: 'hello there my friend, how are you' }], ...over })
@@ -76,43 +76,5 @@ describe('the memories sent with a message', () => {
   it('are none when there is none, and none for chats without a memory', () => {
     expect(selectEarlierChats([], { intent: 'hello' })).toEqual([])
     expect(selectEarlierChats([none], { intent: 'hello' })).toEqual([])
-  })
-})
-
-describe('welcoming a founder back', () => {
-  const input = { projectName: 'DuckStack', facts: { 'business.name': 'Kindred Gifting' } as const, summary: summary({ task: 'brand', subject: 'Naming and the first colours', decided: ['settled the name', 'started on colours'], open: ['the palette is not saved'] }), hasPalette: false, invoices: 0, boardItems: 0 }
-
-  it('says where they left off and what is not saved, in the business\'s name', () => {
-    const welcome = welcomeBack(input)
-    expect(welcome.text).toBe('Welcome back to Kindred Gifting. Last time you settled the name and started on colours, and the palette is not saved yet.')
-    expect(welcome.question).toBe('Shall we carry on?')
-    expect(welcome.replies).toEqual(['Carry on with the colours', 'Something else'])
-  })
-
-  it('uses the project\'s name when the business has none, and leaves out the saved note when it is saved', () => {
-    const welcome = welcomeBack({ ...input, facts: {}, hasPalette: true })
-    expect(welcome.text).toBe('Welcome back to DuckStack. Last time you settled the name and started on colours, and the palette is not saved.')
-  })
-
-  it('offers the step that goes with what the chat was about', () => {
-    expect(welcomeBack({ ...input, summary: summary({ task: 'invoice' }) }).replies[0]).toBe('Carry on with the invoice')
-    expect(welcomeBack({ ...input, summary: summary({ task: 'ideation' }) }).replies[0]).toBe('Carry on with the board')
-    expect(welcomeBack({ ...input, summary: summary({ task: 'logo' }) }).replies[0]).toBe('Carry on with the logo')
-  })
-
-  it('says an invoice or a board is not saved when it is not, from what is saved', () => {
-    expect(welcomeBack({ ...input, summary: summary({ task: 'invoice', decided: ['started an invoice'], open: [] }) }).text).toMatch(/and the invoice is not saved yet\.$/)
-    expect(welcomeBack({ ...input, summary: summary({ task: 'invoice', decided: ['started an invoice'], open: [] }), invoices: 1 }).text).not.toMatch(/not saved/)
-    expect(welcomeBack({ ...input, summary: summary({ task: 'ideation', decided: ['jotted ideas'], open: [] }) }).text).toMatch(/nothing from the board is saved yet\.$/)
-  })
-
-  it('falls back to what the chat was about when nothing was decided, and offers only Something else when there is no step', () => {
-    const welcome = welcomeBack({ ...input, summary: summary({ task: 'chat', subject: 'Pricing the gift boxes', decided: [], open: [] }), hasPalette: true })
-    expect(welcome.text).toBe('Welcome back to Kindred Gifting. Last time you were on pricing the gift boxes.')
-    expect(welcome.replies).toEqual(['Something else'])
-  })
-
-  it('has no em dashes and says nothing of the founder\'s that was not written down', () => {
-    expect(welcomeBack(input).text).not.toMatch(/—|–/)
   })
 })

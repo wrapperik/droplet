@@ -3,8 +3,8 @@
   gap: 0.25rem;
   height: 100dvh;
   padding: 0.375rem;
-  /* Dark charcoal in both themes: only the working screen is light (white, or charcoal on a dark screen). The sidebar and the docked chat
-     sit on it with .on-shell, which gives them the dark tokens. */
+  /* White on a light screen, dark charcoal on a dark one (--shell). The sidebar and the docked chat sit on it with .on-shell, which
+     sets the page colour to the shell's; their text and fills follow the theme. */
   background-color: var(--shell);
 }
 
@@ -173,6 +173,17 @@
   justify-content: center;
   padding: 1rem 1.5rem 2rem;
 }
+
+/* A chat with nothing said in it (`data-start` on .home) has its message bar and the tip above it a little above the middle of the screen, under
+   the greeting (which is drawn just above them). They are laid out out of the flow there, so the screen's own layout does not move, and when
+   the first message is sent the footer goes back into the flow at the bottom: the footer is a layout-animated element (see Home), so it
+   glides between the two places. */
+.home[data-start] .home__footer {
+  position: absolute;
+  inset: 36% 0 auto;
+  z-index: 2;
+}
+
 
 /* With a workspace on screen the conversation lives beside it, straight on the page like the sidebar, not in the rounded box. */
 .home__chat {

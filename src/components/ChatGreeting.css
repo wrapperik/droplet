@@ -1,0 +1,35 @@
+/* Drawn just above the message bar, inside the footer that holds it (`.home__footer`, which is out of the flow while the chat is empty), so
+   the two always sit together wherever the footer is. It takes no presses. */
+.chat-greeting {
+  position: absolute;
+  inset: auto 0 100%;
+  margin: 0;
+  padding: 0 1.5rem 1rem;
+  color: var(--text);
+  font-size: clamp(1.75rem, 3.2vw, 2.5rem);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-align: center;
+  text-wrap: balance;
+  pointer-events: none;
+  animation: chat-greeting-in 0.8s var(--ease-out) both;
+}
+
+@keyframes chat-greeting-in {
+  from {
+    opacity: 0;
+    filter: blur(8px);
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-greeting {
+    animation: none;
+  }
+}

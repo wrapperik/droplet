@@ -292,6 +292,24 @@ describe('the start of the conversation', () => {
     expect(screen.getByRole('button', { name: 'Choose a task' })).toBeInTheDocument()
   })
 
+  it('greets the founder by the time of day over an empty chat, and not once something has been said', async () => {
+    const user = userEvent.setup()
+    const clock = vi.spyOn(Date.prototype, 'getHours').mockReturnValue(9)
+    renderHome()
+    expect(screen.getByRole('heading', { name: 'Good morning, Megan' })).toBeInTheDocument()
+    clock.mockRestore()
+    answers = [reply('chat', 'Hello.')]
+    await say(user, 'Hi')
+    await screen.findByText('Hello.')
+    expect(screen.queryByRole('heading', { name: /Good morning/ })).not.toBeInTheDocument()
+  })
+
+  it('has no welcome-back message for a returning founder', async () => {
+    renderHome()
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    expect(screen.queryByText(/Welcome back/)).not.toBeInTheDocument()
+  })
+
   it('keeps the tip while a workspace is open and nothing has been said', async () => {
     const user = userEvent.setup()
     renderHome()
@@ -1939,47 +1957,6 @@ describe('looking back at past chats', () => {
     expect(sent).toHaveLength(1)
     expect(sent[0].when).toMatch(/^\d{4}-\d{2}-\d{2}$/)
     expect(sent[0].text).toBe('About: Naming the business; Decided: settled on the name Kindred Gifting; Still open: the colours are not chosen yet')
-  })
-
-  it('welcomes a founder back to a new chat, from what was written down, and as a message from the app', async () => {
-    const user = userEvent.setup()
-    summaryAnswer = memory
-    answers = [reply('chat', 'Lovely name.'), reply('chat', 'Right.')]
-    renderHome()
-    await say(user, idea)
-    await screen.findByText('Lovely name.')
-    await newChat(user)
-    expect(await screen.findByText(/Welcome back to DuckStack\. Last time you settled on the name Kindred Gifting, and nothing from the board is saved yet\./)).toBeInTheDocument()
-    expect(screen.getByText('Shall we carry on?')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Something else' })).toBeInTheDocument()
-    // it is not Droplet's words as far as the composer is concerned
-    await say(user, 'Something about colours')
-    await screen.findByText('Right.')
-    expect(JSON.stringify((asked[1] as unknown as { history?: unknown }).history ?? [])).not.toMatch(/Welcome back/)
-  })
-
-  it('sends a tapped reply to the welcome as the founder\'s own message', async () => {
-    const user = userEvent.setup()
-    summaryAnswer = { ...memory, task: 'brand', decided: ['started on the colours'], open: [] }
-    answers = [reply('chat', 'Lovely.'), reply('chat', 'On it.')]
-    renderHome()
-    await say(user, idea)
-    await screen.findByText('Lovely.')
-    await newChat(user)
-    await user.click(await screen.findByRole('button', { name: 'Carry on with the colours' }))
-    await screen.findByText('On it.')
-    expect(asked[1].intent).toBe('Carry on with the colours')
-  })
-
-  it('does not welcome back to a project with nothing written down, or when looking back is off', async () => {
-    const user = userEvent.setup()
-    answers = [reply('chat', 'Lovely name.')]
-    renderHome()
-    await say(user, idea)
-    await screen.findByText('Lovely name.')
-    await newChat(user)
-    await new Promise((resolve) => setTimeout(resolve, 80))
-    expect(screen.queryByText(/Welcome back/)).not.toBeInTheDocument()
   })
 
   it('does not write down a chat that was deleted', async () => {

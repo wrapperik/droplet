@@ -1,10 +1,8 @@
-import { summaryLines, type ChatSummary } from '../compose/background.ts'
+import { summaryLines } from '../compose/background.ts'
 import type { Task } from '../compose/taskNames.ts'
-import type { FactKey } from './facts.ts'
 import type { StoredChat } from './chatStore.ts'
 
-// Droplet looking back at earlier chats: which of them are worth a short memory, which memories go with a message, and the line that greets a founder who
-// comes back. Pure functions, so every rule can be tested. Words are matched, not meanings (for now).
+// Droplet looking back at earlier chats: which of them are worth a short memory, and which memories go with a message. Pure functions, so every rule can be tested. Words are matched, not meanings (for now).
 
 const MIN_FOUNDER_CHARS = 20
 
@@ -50,54 +48,3 @@ export function selectEarlierChats(chats: StoredChat[], options: { currentChatId
   }
   return picked
 }
-
-// ---- Welcome back ----
-
-export type WelcomeInput = {
-  projectName: string
-  facts: Partial<Record<FactKey, string>>
-  summary: ChatSummary
-  hasPalette: boolean
-  invoices: number
-  boardItems: number
-}
-
-const lower = (text: string) => text.charAt(0).toLowerCase() + text.slice(1)
-
-// What a returning founder is greeted with, built in code from what was written down, and never by the model: where they left off, and what is saved. It
-// is a message from the app, not Droplet's words, so it is never sent to the composer.
-export function welcomeBack(input: WelcomeInput): { text: string; question: string; replies: string[] } {
-  const name = (input.facts['business.name'] ?? input.projectName).trim() || 'your project'
-  const done = input.summary.decided.slice(0, 2).map(lower)
-  const left = input.summary.open.slice(0, 1).map(lower)
-  const lastTime = done.length > 0 ? `Last time you ${done.join(' and ')}` : `Last time you were on ${lower(input.summary.subject)}`
-  const state =
-    input.summary.task === 'brand' && !input.hasPalette ? ', and the palette is not saved yet'
-    : input.summary.task === 'invoice' && input.invoices === 0 ? ', and the invoice is not saved yet'
-    : input.summary.task === 'ideation' && input.boardItems === 0 ? ', and nothing from the board is saved yet'
-    : left.length > 0 ? `, and ${left[0]}`
-    : ''
-  const next = nextStep(input)
-  return {
-    text: `Welcome back to ${name}. ${lastTime}${state}.`,
-    question: 'Shall we carry on?',
-    replies: [...(next ? [`Carry on with ${next}`] : []), 'Something else'],
-  }
-}
-
-// The step to offer, from what the memory was about and what is already in the project.
-function nextStep(input: WelcomeInput): string | null {
-  switch (input.summary.task) {
-    case 'brand':
-      return 'the colours'
-    case 'invoice':
-      return 'the invoice'
-    case 'ideation':
-      return 'the board'
-    case 'logo':
-      return 'the logo'
-    default:
-      return input.hasPalette ? null : 'the colours'
-  }
-}
-

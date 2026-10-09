@@ -33,13 +33,15 @@ describe('the screen when the board fills it', () => {
 describe('the shell round the working screen', () => {
   const tokens = readFileSync('src/styles/tokens.css', 'utf8')
 
-  it('is near black, with an opaque screen on it', () => {
+  it('is the page, with an opaque screen on it', () => {
     expect(rule('.home')?.body).toMatch(/background-color:\s*var\(--shell\)/)
     expect(rule('.home__screen.glass')?.body).toMatch(/background:\s*var\(--screen\)/)
   })
 
-  it('gives what sits on it the dark tokens in either theme', () => {
-    expect(tokens).toMatch(/:root\[data-theme='dark'\],\s*\.on-shell\s*\{/)
+  it('is white on a light screen and near black on a dark one, and what sits on it follows the theme', () => {
+    expect(tokens).toMatch(/--shell:\s*var\(--white\)/)
+    expect(tokens).toMatch(/:root\[data-theme='dark'\]\s*\{[^}]*--shell:\s*var\(--coal\)/)
+    expect(tokens).not.toMatch(/:root\[data-theme='dark'\],\s*\.on-shell/)
     expect(tokens).toMatch(/\.on-shell\s*\{[^}]*--bg:\s*var\(--shell\)/)
   })
 })

@@ -50,6 +50,18 @@
   background: var(--intent-fill);
 }
 
+/* A hairline and a soft shadow, so the bar and the tip keep their shape on a white screen. The hover and focus shadows (below and above) still
+   win while they apply. */
+.intent .intent__chip,
+.intent .intent__bar {
+  border-color: var(--intent-edge);
+}
+
+.intent .intent__chip:not(:hover),
+.intent .intent__bar:not(:focus-within) {
+  box-shadow: var(--intent-shadow);
+}
+
 .intent__bar {
   display: flex;
   align-items: center;

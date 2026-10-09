@@ -59,7 +59,7 @@
   --status-outstanding: var(--outstanding);
   --status-pending: #d6dde7; /* An asset still to do: a quiet grey, because orange reads as a warning */
   --on-pending: var(--slate); /* Icon inside it: 5.0 on the grey */
-  --shell: var(--coal); /* Home's page, sidebar and docked chat: dark charcoal in both themes. What sits on it uses .on-shell. */
+  --shell: var(--white); /* Home's page, sidebar and docked chat: white on a light screen, dark charcoal on a dark one. What sits on it uses .on-shell. */
   --screen: var(--white); /* The rounded working screen beside the sidebar */
   --on-status: var(--white); /* Icon inside a status circle */
 
@@ -93,6 +93,8 @@
   --note-white: #ffffff;
   --note-ink: var(--ink);
   --intent-fill: rgb(255 255 255 / 0.94); /* The message bar and the tip above it: nearly solid, so they read clearly over the wave */
+  --intent-edge: rgb(14 26 43 / 0.16); /* A hairline round the message bar and the tip, so white on a white screen still has an outline (an outline, not text) */
+  --intent-shadow: 0 1px 2px rgb(14 26 43 / 0.04), 0 6px 18px rgb(14 26 43 / 0.06);
 
   /* The wave behind the conversation before anything has been said: pale where it meets the page, deepening to a royal blue. */
   --wave-edge: #8fd3f6;
@@ -111,11 +113,11 @@
   --shadow-lg: 0 4px 8px rgb(14 26 43 / 0.04), 0 24px 60px rgb(14 26 43 / 0.12);
 }
 
-/* Semantic tokens: dark. Set by the theme store through data-theme on <html>, and by .on-shell on anything that sits on the near-black
-   shell (the sidebar and the docked chat), so it reads on black in either theme. */
-:root[data-theme='dark'],
-.on-shell {
+/* Semantic tokens: dark. Set by the theme store through data-theme on <html>. The shell (the sidebar and the docked chat) follows the theme:
+   white in the light theme, so what sits on it uses the light tokens there, and near-black in the dark one. */
+:root[data-theme='dark'] {
   color-scheme: dark;
+  --shell: var(--coal);
 
   --bg: var(--night);
   --bg-glow: transparent; /* No blue glow on a dark page */
@@ -154,6 +156,8 @@
   --glass-fill-fallback: rgb(46 48 53 / 0.97);
   --glass-border: rgb(255 255 255 / 0.1);
   --intent-fill: var(--glass-fill); /* On a dark screen the glass is already right */
+  --intent-edge: rgb(255 255 255 / 0.22);
+  --intent-shadow: 0 1px 2px rgb(0 0 0 / 0.2), 0 6px 18px rgb(0 0 0 / 0.25);
 
   /* The same wave on a dark screen: it glows out of the dark instead of covering it, so the text on top keeps its contrast. */
   --wave-edge: rgb(60 170 240 / 0.26);

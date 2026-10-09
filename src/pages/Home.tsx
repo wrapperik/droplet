@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { AnimatePresence, motion } from 'framer-motion'
 import { HamburgerMenuIcon } from '@solar-icons/react/linear'
 import ChatBar from '../components/ChatBar.tsx'
+import ChatGreeting from '../components/ChatGreeting.tsx'
 import type { ChatEntry } from '../components/ChatList.tsx'
 import type { BoardHandle } from '../components/board/BoardCanvas.tsx'
 import BoardWorkspace from '../components/board/BoardWorkspace.tsx'
@@ -57,7 +58,7 @@ import { loadMemory, saveMemory } from '../lib/memoryStore.ts'
 import { currentFacts, factStatus, forgetFact, settingOn, withFact } from '../lib/projectMemory.ts'
 import { MAX_CHAT_MESSAGES } from '../compose/background.ts'
 import type { Task } from '../compose/taskNames.ts'
-import { needsSummary, selectEarlierChats, welcomeBack } from '../lib/recall.ts'
+import { needsSummary, selectEarlierChats } from '../lib/recall.ts'
 import { keepNotes } from '../lib/notesKeeper.ts'
 import { loadNotes } from '../lib/notesStore.ts'
 import { notesForRequest } from '../lib/notes.ts'
@@ -260,38 +261,6 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
       await saveChats(currentProjectId, upsertChat(kept, { id: chatId, title, ...(chatName ? { named: true } : {}), updatedAt: lastActive(messages, there?.updatedAt) ?? new Date().toISOString(), messages, ...memory }))
     })
   }, [thread, chatId, chatName, currentProjectId, enqueueChats])
-
-  // A founder who comes back to a project with history is greeted where they left off. It is built in code from what was written down about the last chat
-  // and what is saved, and it is a message from the app, never sent to the composer as Droplet's words.
-  const welcomedRef = useRef(new Set<string>())
-  // Memories of chats that are being written down, and a count that moves when one is done, so the greeting is made once they are.
-  const pendingSummariesRef = useRef(0)
-  const [recallTick, setRecallTick] = useState(0)
-  useEffect(() => {
-    if (thread.length > 0 || welcomedRef.current.has(chatId) || pendingSummariesRef.current > 0) return
-    let current = true
-    void (async () => {
-      const memory = await loadMemory(currentProjectId)
-      if (!settingOn(memory, 'recall')) return
-      const last = (await enqueueChats(() => loadChats(currentProjectId))).find((chat) => chat.summary && chat.id !== chatId)
-      if (!last?.summary) return
-      const [palette, board] = await Promise.all([loadPalette(currentProjectId), loadBoard(currentProjectId)])
-      if (!current || threadRef.current.length > 0 || welcomedRef.current.has(chatId)) return
-      welcomedRef.current.add(chatId)
-      const welcome = welcomeBack({
-        projectName: projectName(currentProjectId),
-        facts: currentFacts(memory),
-        summary: last.summary,
-        hasPalette: palette !== null,
-        invoices: memory.invoices.length,
-        boardItems: board?.items.length ?? 0,
-      })
-      setThread([{ id: nextMessageId.current++, from: 'droplet', text: welcome.text, at: new Date().toISOString(), local: true, question: welcome.question, replies: welcome.replies }])
-    })()
-    return () => {
-      current = false
-    }
-  }, [chatId, currentProjectId, thread.length, recallTick, enqueueChats, projectName])
 
   // Droplet's notes on the project are brought up to date after the founder saves: the index at once, and a digest in the background. Nothing waits for it,
   // and nothing is done when the founder has switched the notes off.
@@ -803,16 +772,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
     (left: { id: string; projectId: string; thread: ThreadMessage[] }) => {
       const messages = storableMessages(left.thread)
       if (!hasFounderMessage(messages)) return
-      // The greeting for the next chat waits for this, so it is about the chat that was just left and not an older one.
-      pendingSummariesRef.current += 1
-      void (async () => {
-        try {
-          await summarise()
-        } finally {
-          pendingSummariesRef.current -= 1
-          setRecallTick((tick) => tick + 1)
-        }
-      })()
+      void summarise()
       async function summarise() {
         if (!settingOn(await loadMemory(left.projectId), 'recall')) return
         // After the chat has been saved, so it is read as it was left.
@@ -1266,7 +1226,13 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
           </AnimatePresence>
         </main>
 
-        {!docked && <footer className="home__footer">{bar(false)}</footer>}
+        {/* The bar sits in the middle of an empty chat and at the bottom of one that has begun: the footer's own position is animated between the two. */}
+        {!docked && (
+          <motion.footer className="home__footer" layout="position" transition={{ type: 'spring', stiffness: 220, damping: 30, mass: 0.9 }}>
+            {thread.length === 0 && <ChatGreeting name={userName} />}
+            {bar(false)}
+          </motion.footer>
+        )}
         {/* The blue light that travels out from the middle of the canvas while Droplet works, with the ripple of the windows. */}
         <RippleGlow active={composing && docked} />
       </div>
