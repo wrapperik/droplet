@@ -21,16 +21,24 @@
   overflow-wrap: anywhere;
 }
 
-/* The founder's own words sit in a mid blue bubble on the right, lit from above; Droplet's replies in plain text on the left. */
+/* The founder's own words sit in the message bar's own style, on the right: the same nearly solid fill, hairline and soft shadow
+   (--intent-fill, --intent-edge, --intent-shadow), so a message looks like the bar it came out of. Droplet's replies are plain text on the left. */
 .thread__message--you {
   align-self: flex-end;
   padding: 0.625rem 1rem;
-  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);
-  background: linear-gradient(to bottom, var(--bubble-top), var(--bubble-bottom));
-  box-shadow:
-    inset 0 1px 0 var(--bubble-highlight),
-    var(--shadow-sm);
-  color: var(--on-bubble);
+  border-radius: var(--radius-lg);
+  color: var(--text);
+}
+
+.thread__message--you.glass {
+  background: var(--intent-fill);
+  border-color: var(--intent-edge);
+  box-shadow: var(--intent-shadow);
+}
+
+/* While the copy of it is on its way from the bar, the message is in its place but not shown, so the thread does not move when it arrives. */
+.thread__message[data-flying] {
+  visibility: hidden;
 }
 
 .thread__message--droplet {
@@ -41,7 +49,7 @@
   color: var(--text);
 }
 
-/* Droplet is thinking: the mark hopping, with a word beside it. */
+/* Droplet is thinking: a squeezing jelly blob, with a word beside it. */
 .thread__message--pending {
   padding: 0.125rem 0;
 }

@@ -1145,8 +1145,13 @@ describe('with storage that takes its time', () => {
     const menuitem = await screen.findByRole('menuitem', { name: /Build the brand/ })
     await user.click(menuitem)
     // chosen again before the first has arrived
-    await user.click(screen.getByRole('button', { name: 'Choose a task' }))
-    await user.click(await screen.findByRole('menuitem', { name: /Build the brand/ }))
+    // The bar moves into the side panel when the workspace arrives, so a press made in that moment can land on the bar that is going: press again until
+    // the menu is there.
+    const again = await waitFor(async () => {
+      await user.click(screen.getByRole('button', { name: 'Choose a task' }))
+      return screen.getByRole('menuitem', { name: /Build the brand/ })
+    })
+    await user.click(again)
     expect(await screen.findByRole('region', { name: 'Palette' })).toBeInTheDocument()
     await waitFor(() => expect(slow.calls.filter((call) => call === 'read duckstack/palette').length).toBeGreaterThanOrEqual(1))
     expect(screen.getAllByRole('region', { name: 'Palette' })).toHaveLength(1)

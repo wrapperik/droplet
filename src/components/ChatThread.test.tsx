@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event'
 import { vi } from 'vitest'
 import ChatThread, { type ThreadMessage } from './ChatThread.tsx'
 import DropletLoader from './DropletLoader.tsx'
+import ThinkingDots from './ThinkingDots.tsx'
+import JellyLoader from './JellyLoader.tsx'
 
 describe('DropletLoader', () => {
   it('is decoration: hidden from screen readers and not focusable', () => {
@@ -58,22 +60,62 @@ describe('DropletLoader', () => {
   })
 })
 
+describe('ThinkingDots', () => {
+  it('is decoration: hidden from screen readers', () => {
+    const { container } = render(<ThinkingDots />)
+    expect(container.firstElementChild).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('draws four circles, each with a dot and a ring', () => {
+    const { container } = render(<ThinkingDots />)
+    expect(container.querySelectorAll('.thinking__circle')).toHaveLength(4)
+    expect(container.querySelectorAll('.thinking__dot')).toHaveLength(4)
+    expect(container.querySelectorAll('.thinking__outline')).toHaveLength(4)
+  })
+
+  it('takes a size', () => {
+    const { container } = render(<ThinkingDots size="2rem" />)
+    expect(container.firstElementChild).toHaveStyle({ '--thinking-size': '2rem' })
+  })
+})
+
+describe('JellyLoader', () => {
+  it('is decoration: hidden from screen readers', () => {
+    const { container } = render(<JellyLoader />)
+    expect(container.firstElementChild).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('points its blob at its own filter, so two on screen do not share one', () => {
+    const { container } = render(
+      <>
+        <JellyLoader />
+        <JellyLoader />
+      </>,
+    )
+    const ids = [...container.querySelectorAll('filter')].map((filter) => filter.id)
+    expect(new Set(ids).size).toBe(2)
+    for (const id of ids) expect(id).not.toContain(':')
+    const used = [...container.querySelectorAll<HTMLElement>('.jelly')].map((jelly) => jelly.style.getPropertyValue('--jelly-filter'))
+    expect(used).toEqual(ids.map((id) => `url(#${id})`))
+  })
+})
+
 describe('ChatThread', () => {
   const messages: ThreadMessage[] = [
     { id: 1, from: 'you', text: 'How should I price my boxes?' },
     { id: 2, from: 'droplet', text: '', pending: true },
   ]
 
-  it('shows the loader and the word "Thinking" while a reply is pending', () => {
+  it('shows the jelly loader and the word "Thinking" while a reply is pending', () => {
     const { container } = render(<ChatThread messages={messages} />)
     expect(screen.getByText('Thinking')).toBeInTheDocument()
-    expect(container.querySelector('.thread__message--pending .loader')).not.toBeNull()
+    expect(container.querySelector('.thread__message--pending .jelly')).not.toBeNull()
   })
 
   it('shows the reply, and no loader, once it arrives', () => {
     const { container } = render(<ChatThread messages={[messages[0], { id: 2, from: 'droplet', text: 'Start from your costs.' }]} />)
     expect(screen.getByText('Start from your costs.')).toBeInTheDocument()
-    expect(container.querySelector('.loader')).toBeNull()
+    expect(container.querySelector('.jelly')).toBeNull()
     expect(screen.queryByText('Thinking')).toBeNull()
   })
 

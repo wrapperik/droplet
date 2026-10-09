@@ -9,7 +9,12 @@ import FactChips, { type ProposalView } from './FactChips.tsx'
 import type { FactKey } from '../lib/facts.ts'
 import ChatBlocks from './ChatBlocks.tsx'
 import WebSources from './WebSources.tsx'
-import DropletLoader from './DropletLoader.tsx'
+// Older thinking indicators are kept: the rippling mark in DropletLoader.tsx and the four pulsing circles in ThinkingDots.tsx.
+// To bring one back, import it here and swap it for JellyLoader below.
+// import DropletLoader from './DropletLoader.tsx'
+// import ThinkingDots from './ThinkingDots.tsx'
+import JellyLoader from './JellyLoader.tsx'
+import FlyingMessage, { type FlightOrigin } from './FlyingMessage.tsx'
 import RichText from './RichText.tsx'
 import { whenLabel } from '../lib/chatStore.ts'
 import './ChatThread.css'
@@ -69,12 +74,16 @@ type Props = {
   // Remember, or Not now, was pressed on a fact Droplet offered.
   onRememberFact?: (messageId: number, key: FactKey) => void
   onDismissFact?: (messageId: number, key: FactKey) => void
+  // A message the founder just sent is on its way from the bar to its place here: the shape that carries it is drawn over the screen, and the
+  // message itself is there but not shown until it arrives. `onFlightEnd` says it has.
+  flight?: { id: number; from: FlightOrigin } | null
+  onFlightEnd?: () => void
 }
 
 const NO_STEPS: ReadonlySet<JourneyStep> = new Set()
 
 // The running conversation. It scrolls on its own, and follows the newest message.
-export default function ChatThread({ messages, onAction, onReply, done = NO_STEPS, busy, onToggle, onOpenStep, onUndoReceipt, onShowReceipt, onRememberFact, onDismissFact }: Props) {
+export default function ChatThread({ messages, onAction, onReply, done = NO_STEPS, busy, onToggle, onOpenStep, onUndoReceipt, onShowReceipt, onRememberFact, onDismissFact, flight, onFlightEnd }: Props) {
   const listRef = useRef<HTMLOListElement>(null)
 
   // Follow the newest message, including when a reply that was pending arrives in place and is taller than "Thinking".
@@ -101,11 +110,17 @@ export default function ChatThread({ messages, onAction, onReply, done = NO_STEP
         const replies = index === messages.length - 1 && message.from === 'droplet' && !message.pending && message.question ? (message.replies ?? []) : []
         return (
           <Fragment key={message.id}>
-            <li className={`thread__message thread__message--${message.from}${message.pending ? ' thread__message--pending' : ''}`}>
+            <li
+              className={`thread__message thread__message--${message.from}${message.from === 'you' ? ' glass' : ''}${message.pending ? ' thread__message--pending' : ''}`}
+              data-message-id={message.id}
+              data-flying={flight?.id === message.id ? '' : undefined}
+            >
               <span className="visually-hidden">{message.from === 'you' ? 'You: ' : 'Droplet: '}</span>
               {message.pending ? (
                 <span className="thread__pending">
-                  <DropletLoader />
+                  {/* <DropletLoader /> */}
+                  {/* <ThinkingDots /> */}
+                  <JellyLoader />
                   Thinking
                 </span>
               ) : message.from === 'droplet' ? (
@@ -167,6 +182,9 @@ export default function ChatThread({ messages, onAction, onReply, done = NO_STEP
           </Fragment>
         )
       })}
+      {flight && messages.some((message) => message.id === flight.id) && (
+        <FlyingMessage messageId={flight.id} text={messages.find((message) => message.id === flight.id)?.text ?? ''} from={flight.from} onEnd={() => onFlightEnd?.()} />
+      )}
     </ol>
   )
 }

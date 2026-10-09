@@ -1,0 +1,147 @@
+/*
+ * Four circles, each pulsing a little after the one before. Adapted from "Li-Deheng" on Uiverse.io.
+ *
+ * Per circle: the circle itself swells and fades (circle-keys), the dot inside shrinks to nothing and back (dot-keys), and a ring
+ * spreads out from the middle and fades (outline-keys). The ring is a few hundred milliseconds behind the dot so it reads as the
+ * dot's pulse leaving it. Everything is sized from --thinking-size, so the whole thing scales.
+ */
+.thinking {
+  --thinking-size: 0.875rem;
+  --color: var(--text-muted);
+  --animation: 2s ease-in-out infinite;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  /* The circles swell to 1.5 times their size, so leave that room at the sides instead of crowding the word beside them. */
+  padding-inline: calc(var(--thinking-size) * 0.25);
+}
+
+.thinking__circle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  box-sizing: border-box;
+  width: var(--thinking-size);
+  height: var(--thinking-size);
+  border: solid 2px var(--color);
+  border-radius: 50%;
+  margin: 0 calc(var(--thinking-size) * 0.5);
+  background-color: transparent;
+  animation: thinking-circle var(--animation);
+}
+
+.thinking__dot {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: calc(var(--thinking-size) * 0.8);
+  height: calc(var(--thinking-size) * 0.8);
+  border-radius: 50%;
+  background-color: var(--color);
+  animation: thinking-dot var(--animation);
+}
+
+.thinking__outline {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: var(--thinking-size);
+  height: var(--thinking-size);
+  border-radius: 50%;
+  animation: thinking-outline var(--animation);
+}
+
+.thinking__circle:nth-child(2) {
+  animation-delay: 0.3s;
+}
+
+.thinking__circle:nth-child(3) {
+  animation-delay: 0.6s;
+}
+
+.thinking__circle:nth-child(4) {
+  animation-delay: 0.9s;
+}
+
+.thinking__circle:nth-child(2) .thinking__dot {
+  animation-delay: 0.3s;
+}
+
+.thinking__circle:nth-child(3) .thinking__dot {
+  animation-delay: 0.6s;
+}
+
+.thinking__circle:nth-child(4) .thinking__dot {
+  animation-delay: 0.9s;
+}
+
+.thinking__circle:nth-child(1) .thinking__outline {
+  animation-delay: 0.9s;
+}
+
+.thinking__circle:nth-child(2) .thinking__outline {
+  animation-delay: 1.2s;
+}
+
+.thinking__circle:nth-child(3) .thinking__outline {
+  animation-delay: 1.5s;
+}
+
+.thinking__circle:nth-child(4) .thinking__outline {
+  animation-delay: 1.8s;
+}
+
+@keyframes thinking-circle {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.5);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes thinking-dot {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes thinking-outline {
+  0% {
+    transform: scale(0);
+    outline: solid var(--thinking-size) var(--color);
+    outline-offset: 0;
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    outline: solid 0 transparent;
+    outline-offset: var(--thinking-size);
+    opacity: 0;
+  }
+}
+
+/* Reduced motion: four still circles, each with its dot. */
+@media (prefers-reduced-motion: reduce) {
+  .thinking__circle,
+  .thinking__dot,
+  .thinking__outline {
+    animation: none;
+  }
+
+  .thinking__outline {
+    display: none;
+  }
+}

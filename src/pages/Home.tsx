@@ -2,6 +2,9 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { AnimatePresence, motion } from 'framer-motion'
 import { HamburgerMenuIcon } from '@solar-icons/react/linear'
 import ChatBar from '../components/ChatBar.tsx'
+import ChatGlow from '../components/ChatGlow.tsx'
+import type { FlightOrigin } from '../components/FlyingMessage.tsx'
+import { FLIGHT_MS } from '../lib/flight.ts'
 import ChatGreeting from '../components/ChatGreeting.tsx'
 import type { ChatEntry } from '../components/ChatList.tsx'
 import type { BoardHandle } from '../components/board/BoardCanvas.tsx'
@@ -152,6 +155,14 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
     setChatName(name)
   }, [])
   const nextMessageId = useRef(1)
+  // The message that is on its way from the bar to the thread, if one is, and where it started.
+  const [flight, setFlight] = useState<{ id: number; from: FlightOrigin } | null>(null)
+  // However the flight goes (the thread it was in went away meanwhile, say), it is cleared a little after it should have ended, so it never starts again.
+  useEffect(() => {
+    if (!flight) return
+    const timer = window.setTimeout(() => setFlight(null), FLIGHT_MS + 800)
+    return () => window.clearTimeout(timer)
+  }, [flight])
   // What the project holds: the saved palette, what the project remembers and the saved board. Used for what the composer is told and for
   // the ticks on a plan.
   const readProject = useCallback(
@@ -567,7 +578,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   )
 
   const submitIntent = useCallback(
-    async (text: string, mode: Mode = 'base') => {
+    async (text: string, mode: Mode = 'base', from?: FlightOrigin) => {
       if (busyRef.current) return
       busyRef.current = true
       const pending = message('droplet', '', true)
@@ -584,7 +595,10 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
       const space = spaceRef.current
       const moved = space !== null && sentInRef.current !== undefined && sentInRef.current !== space
       sentInRef.current = space
-      setThread((current) => [...current, ...(moved ? [message('divider', `Switched workspace to ${SPACE_NAMES[space]}`)] : []), message('you', text), pending])
+      const you = message('you', text)
+      // A message typed in the bar comes out of the top of it and settles into the thread (see FlyingMessage); a tapped reply has no bar to come from.
+      if (from && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) setFlight({ id: you.id, from })
+      setThread((current) => [...current, ...(moved ? [message('divider', `Switched workspace to ${SPACE_NAMES[space]}`)] : []), you, pending])
       setComposing(true)
       try {
         // A tap on an Open button is exactly one of the Open phrases. The workspace is opened here, in code, so the composer is asked once with it
@@ -1120,6 +1134,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
       {mobileOpen && <div className="home__scrim" onClick={() => setMobileOpen(false)} aria-hidden="true" />}
 
       <div className="home__screen glass glass--strong" data-immersive={(docked && shown === 'board') || undefined}>
+        <ChatGlow />
         {/* The header and the toolbar, together: over a board that fills the screen they are lit from below by a gradual blur. */}
         <div className="home__top" ref={topRef}>
         <header className="home__header">
@@ -1153,7 +1168,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
           {!docked && (
             <div className="home__conversation">
               {chatBar(false)}
-              <ChatThread messages={thread} onAction={onThreadAction} onReply={submitIntent} done={doneSet} busy={composing} onToggle={toggleCheck} onOpenStep={openStep} onUndoReceipt={undoReceipt} onShowReceipt={showReceipt} onRememberFact={rememberFact} onDismissFact={dismissFact} />
+              <ChatThread flight={flight} onFlightEnd={() => setFlight(null)} messages={thread} onAction={onThreadAction} onReply={submitIntent} done={doneSet} busy={composing} onToggle={toggleCheck} onOpenStep={openStep} onUndoReceipt={undoReceipt} onShowReceipt={showReceipt} onRememberFact={rememberFact} onDismissFact={dismissFact} />
             </div>
           )}
           {/* One workspace at a time: the one on screen leaves before the other arrives, so their toolbars and header controls never overlap. */}
@@ -1249,7 +1264,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
           onFocusCapture={() => void refreshProject()}
         >
           {chatBar(true)}
-          <ChatThread messages={thread} onAction={onThreadAction} onReply={submitIntent} done={doneSet} busy={composing} onToggle={toggleCheck} onOpenStep={openStep} onUndoReceipt={undoReceipt} onShowReceipt={showReceipt} onRememberFact={rememberFact} onDismissFact={dismissFact} />
+          <ChatThread flight={flight} onFlightEnd={() => setFlight(null)} messages={thread} onAction={onThreadAction} onReply={submitIntent} done={doneSet} busy={composing} onToggle={toggleCheck} onOpenStep={openStep} onUndoReceipt={undoReceipt} onShowReceipt={showReceipt} onRememberFact={rememberFact} onDismissFact={dismissFact} />
           {bar(true)}
         </motion.aside>
       )}

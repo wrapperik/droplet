@@ -1,0 +1,136 @@
+/*
+ * The glow behind an empty chat. Three orbs, each a radial gradient with no edge of its own, move only by `transform` (so they are drawn on the
+ * graphics card and nothing is repainted), on closed paths of 19, 27 and 23 seconds, so they come round to where they began and never fall into one
+ * rhythm. Nothing is blurred or filtered. Each orb falls off over nine small steps along an eased curve, so a soft gradient (above all on a dark
+ * ground) shows no rings.
+ *
+ * Strong while nothing has been said (`data-start` on .home), a quiet wash once something has, gone when a workspace or the library is open (it is
+ * hidden then and its motion is paused, so it costs nothing). The colours are tokens (--glow-*), light and dark.
+ */
+.chat-glow {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.9s ease,
+    visibility 0s 0.9s;
+}
+
+.home:not(.home--docked) .chat-glow {
+  opacity: 0.4;
+  visibility: visible;
+  transition: opacity 0.9s ease;
+}
+
+.home[data-start] .chat-glow {
+  opacity: 1;
+}
+
+.home--docked .chat-glow__orb {
+  animation-play-state: paused;
+}
+
+.chat-glow__orb {
+  --orb: var(--glow-core);
+  position: absolute;
+  aspect-ratio: 1.3;
+  border-radius: 50%;
+  background: radial-gradient(
+    closest-side,
+    var(--orb) 0%,
+    color-mix(in srgb, var(--orb) 90%, transparent) 10%,
+    color-mix(in srgb, var(--orb) 72%, transparent) 20%,
+    color-mix(in srgb, var(--orb) 52%, transparent) 30%,
+    color-mix(in srgb, var(--orb) 34%, transparent) 40%,
+    color-mix(in srgb, var(--orb) 19%, transparent) 50%,
+    color-mix(in srgb, var(--orb) 9%, transparent) 60%,
+    color-mix(in srgb, var(--orb) 3%, transparent) 70%,
+    transparent 82%
+  );
+  will-change: transform;
+}
+
+/* The wide, pale halo that fills most of the screen, centred on the greeting and the message bar (a little above the middle, a little left). */
+.chat-glow__orb--halo {
+  --orb: var(--glow-halo);
+  top: -10%;
+  left: 5%;
+  width: 84%;
+  animation: chat-glow-halo 27s ease-in-out infinite;
+}
+
+/* The core, brighter and smaller, centred on the bar and the greeting above it. */
+.chat-glow__orb--core {
+  top: 6%;
+  left: 19%;
+  width: 52%;
+  animation: chat-glow-core 19s ease-in-out infinite;
+}
+
+/* A small second light that wanders round the upper right, so the glow is never a single blob. */
+.chat-glow__orb--accent {
+  --orb: var(--glow-accent);
+  top: 6%;
+  left: 52%;
+  width: 40%;
+  animation: chat-glow-accent 23s ease-in-out infinite;
+}
+
+/* Closed paths: the first and last frames are the same, so the loop has no seam. Distances are shares of the orb's own size. */
+@keyframes chat-glow-halo {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(4%, -5%) scale(1.05);
+  }
+  66% {
+    transform: translate(-5%, 3%) scale(0.97);
+  }
+}
+
+@keyframes chat-glow-core {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  25% {
+    transform: translate(10%, -6%) scale(1.08);
+  }
+  50% {
+    transform: translate(2%, 9%) scale(0.95);
+  }
+  75% {
+    transform: translate(-11%, 2%) scale(1.04);
+  }
+}
+
+@keyframes chat-glow-accent {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  40% {
+    transform: translate(-30%, 22%) scale(1.12);
+  }
+  70% {
+    transform: translate(-8%, 44%) scale(0.92);
+  }
+}
+
+/* Reduced motion: the glow stays, still. */
+@media (prefers-reduced-motion: reduce) {
+  .chat-glow {
+    transition: none;
+  }
+
+  .chat-glow__orb {
+    animation: none;
+  }
+}

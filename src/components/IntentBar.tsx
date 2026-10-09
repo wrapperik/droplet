@@ -5,13 +5,14 @@ import { useDismiss } from '../hooks/useDismiss.ts'
 import { describeAllowance } from '../lib/advancedAllowance.ts'
 import type { Allowance, Mode } from '../compose/spec.ts'
 import type { TaskId } from '../lib/tasks.ts'
+import type { FlightOrigin } from './FlyingMessage.tsx'
 import ModeMenu from './ModeMenu.tsx'
 import TaskMenu from './TaskMenu.tsx'
 import './IntentBar.css'
 
 type Props = {
   // The mode is the founder's choice for this message only.
-  onSubmitIntent?: (text: string, mode: Mode) => void
+  onSubmitIntent?: (text: string, mode: Mode, from?: FlightOrigin) => void
   onChooseTask?: (id: TaskId) => void
   // Sits in the side panel beside a thread instead of centred beneath the workspace.
   docked?: boolean
@@ -33,6 +34,7 @@ export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false
   const wrapRef = useRef<HTMLDivElement>(null)
   const chipRef = useRef<HTMLButtonElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const formRef = useRef<HTMLFormElement>(null)
   const close = useCallback(() => {
     setMenuOpen(false)
     setModeOpen(false)
@@ -57,7 +59,11 @@ export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false
   const submit = (event: FormEvent) => {
     event.preventDefault()
     if (!canSend) return
-    onSubmitIntent?.(text.trim(), mode)
+    // Where the bar is, so the message can come out of its top. A bar with no size (a test, a hidden one) gives the message nothing to come out of.
+    const box = formRef.current?.getBoundingClientRect()
+    const from = box && box.width > 0 ? { left: box.left, top: box.top, width: box.width, height: box.height } : undefined
+    if (from) onSubmitIntent?.(text.trim(), mode, from)
+    else onSubmitIntent?.(text.trim(), mode)
     setText('')
     setMode('base')
   }
@@ -79,23 +85,7 @@ export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false
       <AnimatePresence>{menuOpen && <TaskMenu onSelect={choose} />}</AnimatePresence>
       <AnimatePresence>{modeOpen && <ModeMenu mode={mode} allowance={allowance} onSelect={chooseMode} />}</AnimatePresence>
 
-      {showTip && (
-        <button
-          ref={chipRef}
-          type="button"
-          className="intent__chip glass"
-          aria-haspopup="menu"
-          aria-expanded={menuOpen}
-          onClick={() => setMenuOpen((value) => !value)}
-        >
-          <span className="intent__chip-icon" aria-hidden="true">
-            <ReplyIcon size={18} />
-          </span>
-          Show me a menu of available workspaces
-        </button>
-      )}
-
-      <form className="intent__bar glass" onSubmit={submit}>
+      <form ref={formRef} className="intent__bar glass" onSubmit={submit}>
         <button
           type="button"
           className="intent__plus"
@@ -142,6 +132,22 @@ export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false
           <ReplyIcon size={22} aria-hidden="true" />
         </button>
       </form>
+
+      {showTip && (
+        <button
+          ref={chipRef}
+          type="button"
+          className="intent__chip glass"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen((value) => !value)}
+        >
+          <span className="intent__chip-icon" aria-hidden="true">
+            <ReplyIcon size={18} />
+          </span>
+          Show me a menu of available workspaces
+        </button>
+      )}
     </div>
   )
 }

@@ -62,13 +62,7 @@
   --shell: var(--white); /* Home's page, sidebar and docked chat: white on a light screen, dark charcoal on a dark one. What sits on it uses .on-shell. */
   --screen: var(--white); /* The rounded working screen beside the sidebar */
   --on-status: var(--white); /* Icon inside a status circle */
-
-  /* The founder's chat bubbles: a mid blue, lit from above. As light as it can be with white text still reading: 4.6 at the top, 5.9 at
-     the bottom (AA is 4.5), so a lighter blue than this would need dark text. */
-  --bubble-top: color-mix(in srgb, var(--droplet-blue) 65%, var(--deep-water));
-  --bubble-bottom: color-mix(in srgb, var(--droplet-blue) 38%, var(--deep-water));
-  --bubble-highlight: rgb(255 255 255 / 0.22); /* A thin light edge along the top */
-  --on-bubble: var(--white);
+  --loader: #000000; /* The thinking indicator: pure black on a light screen, pure white on a dark one */
 
   --overlay-06: rgb(14 26 43 / 0.06); /* Quiet fills: icon wells, active nav item */
   --overlay-10: rgb(14 26 43 / 0.1); /* Hairlines and dividers */
@@ -95,6 +89,11 @@
   --intent-fill: rgb(255 255 255 / 0.94); /* The message bar and the tip above it: nearly solid, so they read clearly over the wave */
   --intent-edge: rgb(14 26 43 / 0.16); /* A hairline round the message bar and the tip, so white on a white screen still has an outline (an outline, not text) */
   --intent-shadow: 0 1px 2px rgb(14 26 43 / 0.04), 0 6px 18px rgb(14 26 43 / 0.06);
+  /* The glow behind an empty chat (ChatGlow): the core in Droplet Blue and a wide, pale halo in Ripple. Text on the strongest point is Ink (about 11) and
+     Slate (about 4.7). */
+  --glow-core: rgb(31 143 224 / 0.25);
+  --glow-halo: rgb(207 233 251 / 0.8);
+  --glow-accent: rgb(11 79 138 / 0.14);
 
   /* The wave behind the conversation before anything has been said: pale where it meets the page, deepening to a royal blue. */
   --wave-edge: #8fd3f6;
@@ -137,12 +136,7 @@
   --on-pending: var(--haze); /* About 6 on the grey over Night */
   --screen: var(--charcoal);
   --on-status: var(--ink);
-
-  /* Chat bubbles keep their blue in the dark theme, a touch brighter on top so the light still comes from above. */
-  --bubble-top: color-mix(in srgb, var(--droplet-blue) 65%, var(--deep-water));
-  --bubble-bottom: color-mix(in srgb, var(--droplet-blue) 38%, var(--deep-water));
-  --bubble-highlight: rgb(255 255 255 / 0.2);
-  --on-bubble: var(--white);
+  --loader: #ffffff;
 
   --overlay-06: rgb(255 255 255 / 0.07);
   --overlay-10: rgb(255 255 255 / 0.12);
@@ -158,6 +152,11 @@
   --intent-fill: var(--glass-fill); /* On a dark screen the glass is already right */
   --intent-edge: rgb(255 255 255 / 0.22);
   --intent-shadow: 0 1px 2px rgb(0 0 0 / 0.2), 0 6px 18px rgb(0 0 0 / 0.25);
+  /* On charcoal the core is Deep Water, which reads as a deep navy, with Droplet Blue for the halo and a soft Sky accent (Mist text on the
+     core is about 7, Haze about 3.8, and the greeting and the bar are not Haze). */
+  --glow-core: rgb(11 79 138 / 0.85);
+  --glow-halo: rgb(31 143 224 / 0.22);
+  --glow-accent: rgb(124 192 245 / 0.12);
 
   /* The same wave on a dark screen: it glows out of the dark instead of covering it, so the text on top keeps its contrast. */
   --wave-edge: rgb(60 170 240 / 0.26);

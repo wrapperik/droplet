@@ -134,3 +134,20 @@ describe('the mode menu in the intent bar', () => {
     await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
   })
 })
+
+describe('where a sent message comes from', () => {
+  it('passes the bar\'s place when the bar has a size, so the message can come out of its top, and nothing when it has none', async () => {
+    const user = userEvent.setup()
+    const onSubmitIntent = vi.fn()
+    render(<IntentBar onSubmitIntent={onSubmitIntent} />)
+    await write(user, 'first')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    expect(onSubmitIntent).toHaveBeenLastCalledWith('first', 'base')
+
+    const form = document.querySelector('.intent__bar')!
+    vi.spyOn(form, 'getBoundingClientRect').mockReturnValue({ left: 300, top: 600, width: 800, height: 64, right: 1100, bottom: 664, x: 300, y: 600, toJSON: () => ({}) } as DOMRect)
+    await write(user, 'second')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    expect(onSubmitIntent).toHaveBeenLastCalledWith('second', 'base', { left: 300, top: 600, width: 800, height: 64 })
+  })
+})

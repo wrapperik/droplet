@@ -1,0 +1,92 @@
+/*
+ * Two blobs that squeeze together and apart, merged into one jelly by an SVG filter, the whole thing turning a quarter turn on
+ * every other squeeze. Adapted from "dovatgabriel" on Uiverse.io.
+ */
+.jelly-wrap {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  /* A quarter turn swings the width up and down, so leave that room and keep the word beside it from being touched. */
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.jelly {
+  --uib-speed: 0.8s;
+  /* Pure black on a light screen and pure white on a dark one (--loader), not the muted text colour. --uib-size is set by the component. */
+  --uib-color: var(--loader);
+  position: relative;
+  flex: none;
+  height: calc(var(--uib-size) / 2);
+  width: var(--uib-size);
+  filter: var(--jelly-filter);
+  animation: jelly-rotate calc(var(--uib-speed) * 2) linear infinite;
+}
+
+.jelly::before,
+.jelly::after {
+  content: '';
+  position: absolute;
+  top: 0%;
+  left: 25%;
+  width: 50%;
+  height: 100%;
+  background: var(--uib-color);
+  border-radius: 100%;
+}
+
+.jelly::before {
+  animation: jelly-shift-left var(--uib-speed) ease infinite;
+}
+
+.jelly::after {
+  animation: jelly-shift-right var(--uib-speed) ease infinite;
+}
+
+.jelly__maker {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+@keyframes jelly-rotate {
+  0%,
+  49.999%,
+  100% {
+    transform: none;
+  }
+  50%,
+  99.999% {
+    transform: rotate(90deg);
+  }
+}
+
+@keyframes jelly-shift-left {
+  0%,
+  100% {
+    transform: translateX(0%);
+  }
+  50% {
+    transform: scale(0.65) translateX(-75%);
+  }
+}
+
+@keyframes jelly-shift-right {
+  0%,
+  100% {
+    transform: translateX(0%);
+  }
+  50% {
+    transform: scale(0.65) translateX(75%);
+  }
+}
+
+/* Reduced motion: the jelly stands still. */
+@media (prefers-reduced-motion: reduce) {
+  .jelly,
+  .jelly::before,
+  .jelly::after {
+    animation: none;
+  }
+}
