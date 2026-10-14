@@ -7,8 +7,28 @@ import { useAuth } from '../store/auth.ts'
 
 // Home itself is large and has its own tests: here it is a stand-in that shows what it was given.
 vi.mock('./Home.tsx', () => ({
-  default: ({ projects, userName, onAccount, onSignOut }: { projects: ProjectSummary[]; userName: string; onAccount: () => void; onSignOut: () => void }) => (
+  default: ({
+    projects,
+    userName,
+    onAccount,
+    onSignOut,
+    onCreateProject,
+    onRenameProject,
+  }: {
+    projects: ProjectSummary[]
+    userName: string
+    onAccount: () => void
+    onSignOut: () => void
+    onCreateProject: (name: string) => Promise<ProjectSummary | null>
+    onRenameProject: (id: string, name: string) => Promise<ProjectSummary | null>
+  }) => (
     <div>
+      <button type="button" onClick={() => void onCreateProject('Pet sitting').then((made) => (document.title = made ? `made ${made.id}` : 'not made'))}>
+        Make a project
+      </button>
+      <button type="button" onClick={() => void onRenameProject('p1', 'Kindred Gifts').then((done) => (document.title = done ? 'renamed' : 'not renamed'))}>
+        Rename a project
+      </button>
       <p>Projects: {projects.map((project) => project.name).join(', ')}</p>
       <p>User: {userName}</p>
       <button type="button" onClick={onAccount}>
@@ -21,8 +41,12 @@ vi.mock('./Home.tsx', () => ({
   ),
 }))
 
-const store = { listProjects: vi.fn(), createProject: vi.fn() }
-vi.mock('../lib/projectsStore.ts', () => ({ listProjects: () => store.listProjects(), createProject: (name: string) => store.createProject(name) }))
+const store = { listProjects: vi.fn(), createProject: vi.fn(), renameProject: vi.fn() }
+vi.mock('../lib/projectsStore.ts', () => ({
+  listProjects: () => store.listProjects(),
+  createProject: (name: string) => store.createProject(name),
+  renameProject: (id: string, name: string) => store.renameProject(id, name),
+}))
 
 import HomeRoute, { FIRST_PROJECT_NAME } from './HomeRoute.tsx'
 
@@ -30,6 +54,7 @@ const signOut = vi.fn(async () => {})
 beforeEach(() => {
   store.listProjects.mockReset()
   store.createProject.mockReset()
+  store.renameProject.mockReset()
   signOut.mockClear()
   useAuth.setState({ status: 'signedIn', user: { id: 'u1', email: 'm@example.com', name: 'Megan', onboarded: true }, signOut })
 })
@@ -112,6 +137,54 @@ describe('HomeRoute', () => {
     finish([{ id: 'p9', name: 'Second founder project' }])
     expect(await screen.findByText('Projects: Second founder project')).toBeInTheDocument()
     expect(screen.getByText('User: Other')).toBeInTheDocument()
+  })
+
+  it('reads the projects again from the store after one is made, and gives Home the fresh list', async () => {
+    const user = userEvent.setup()
+    store.listProjects.mockResolvedValueOnce([{ id: 'p1', name: 'Kindred Gifting' }])
+    renderRoute()
+    await screen.findByText('Projects: Kindred Gifting')
+    store.createProject.mockResolvedValue({ id: 'p2', name: 'Pet sitting' })
+    store.listProjects.mockResolvedValueOnce([{ id: 'p1', name: 'Kindred Gifting' }, { id: 'p2', name: 'Pet sitting' }])
+    await user.click(screen.getByRole('button', { name: 'Make a project' }))
+    expect(await screen.findByText('Projects: Kindred Gifting, Pet sitting')).toBeInTheDocument()
+    expect(store.createProject).toHaveBeenCalledWith('Pet sitting')
+    await waitFor(() => expect(document.title).toBe('made p2'))
+  })
+
+  it('adds the new project to the list it has if the fresh read fails, since the project was made', async () => {
+    const user = userEvent.setup()
+    store.listProjects.mockResolvedValueOnce([{ id: 'p1', name: 'Kindred Gifting' }])
+    renderRoute()
+    await screen.findByText('Projects: Kindred Gifting')
+    store.createProject.mockResolvedValue({ id: 'p2', name: 'Pet sitting' })
+    store.listProjects.mockResolvedValueOnce(null)
+    await user.click(screen.getByRole('button', { name: 'Make a project' }))
+    expect(await screen.findByText('Projects: Kindred Gifting, Pet sitting')).toBeInTheDocument()
+  })
+
+  it('changes nothing in the list when a project could not be made', async () => {
+    const user = userEvent.setup()
+    store.listProjects.mockResolvedValueOnce([{ id: 'p1', name: 'Kindred Gifting' }])
+    renderRoute()
+    await screen.findByText('Projects: Kindred Gifting')
+    store.createProject.mockResolvedValue(null)
+    await user.click(screen.getByRole('button', { name: 'Make a project' }))
+    await waitFor(() => expect(document.title).toBe('not made'))
+    expect(screen.getByText('Projects: Kindred Gifting')).toBeInTheDocument()
+    expect(store.listProjects).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows a new name after a rename, read from the store', async () => {
+    const user = userEvent.setup()
+    store.listProjects.mockResolvedValueOnce([{ id: 'p1', name: 'Kindred Gifting' }])
+    renderRoute()
+    await screen.findByText('Projects: Kindred Gifting')
+    store.renameProject.mockResolvedValue({ id: 'p1', name: 'Kindred Gifts' })
+    store.listProjects.mockResolvedValueOnce([{ id: 'p1', name: 'Kindred Gifts' }])
+    await user.click(screen.getByRole('button', { name: 'Rename a project' }))
+    expect(await screen.findByText('Projects: Kindred Gifts')).toBeInTheDocument()
+    expect(store.renameProject).toHaveBeenCalledWith('p1', 'Kindred Gifts')
   })
 
   it('sends a founder who has not been through the introduction there first, and reads and makes nothing before it', async () => {

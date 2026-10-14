@@ -15,6 +15,9 @@ type Props = {
   projects: ProjectSummary[]
   currentProjectId: string
   onSelectProject: (id: string) => void
+  // Make a project, or rename the current one, from the project menu. Each says null if it worked, otherwise what to tell the founder.
+  onCreateProject?: (name: string) => Promise<string | null>
+  onRenameProject?: (name: string) => Promise<string | null>
   // Opens the project brief.
   onOpenBrief?: () => void
   // Opens the library, everything made for the project. `libraryOpen` marks it while it is on screen.
@@ -46,6 +49,8 @@ export default function Sidebar({
   projects,
   currentProjectId,
   onSelectProject,
+  onCreateProject,
+  onRenameProject,
   onOpenBrief,
   onOpenLibrary,
   libraryOpen = false,
@@ -67,7 +72,7 @@ export default function Sidebar({
 
   return (
     <aside className="sidebar on-shell" data-collapsed={collapsed} data-open={mobileOpen} aria-label="Sidebar">
-      <ProjectSwitcher projects={projects} currentId={currentProjectId} collapsed={collapsed} onSelect={onSelectProject} />
+      <ProjectSwitcher projects={projects} currentId={currentProjectId} collapsed={collapsed} onSelect={onSelectProject} onCreate={onCreateProject} onRename={onRenameProject} />
 
       {/* What belongs to the selected project sits right under its name: its brief and its library. */}
       <div className="sidebar__project" role="group" aria-label="This project">

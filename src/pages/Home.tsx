@@ -95,6 +95,10 @@ type HomeProps = {
   onAccount?: () => void
   // Ends the session. Without it the sidebar's Sign out does nothing.
   onSignOut?: () => void
+  // Make a project, or rename one, and say what the founder's projects now are (by passing them back as `projects`). Null if it could not
+  // be done. Without them the project menu shows New project and Rename project but they cannot be used.
+  onCreateProject?: (name: string) => Promise<ProjectSummary | null>
+  onRenameProject?: (id: string, name: string) => Promise<ProjectSummary | null>
 }
 
 // The task a workspace is for, so a memory of a chat about the same task is picked first.
@@ -103,7 +107,7 @@ const TASK_OF_VIEW: Record<View, Task> = { brand: 'brand', invoice: 'invoice', b
 // What a reply changed, kept for this session so Undo this can take it back and Show me can find it again.
 type LiveReceipt = { workspace: ReceiptWorkspace; after: unknown; targets: FocusTarget[]; undoable: boolean }
 
-export default function Home({ projects = mockProjects, userName = mockUser.name, onAccount, onSignOut }: HomeProps) {
+export default function Home({ projects = mockProjects, userName = mockUser.name, onAccount, onSignOut, onCreateProject, onRenameProject }: HomeProps) {
   const projectName = useCallback((id: string) => projects.find((project) => project.id === id)?.name ?? '', [projects])
   const [currentProjectId, setCurrentProjectId] = useState(projects[0].id)
   const [collapsed, setCollapsed] = useState(false)
@@ -1138,6 +1142,35 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
     [beginChat, currentProjectId],
   )
 
+  // A project the founder has just made. Home moves to it once the list it was given includes it, so the switcher never names a project it
+  // does not have yet. The move is the one choosing a project in the menu makes.
+  const [madeProjectId, setMadeProjectId] = useState<string | null>(null)
+  useEffect(() => {
+    if (madeProjectId === null || !projects.some((project) => project.id === madeProjectId)) return
+    setMadeProjectId(null)
+    void selectProject(madeProjectId)
+  }, [madeProjectId, projects, selectProject])
+
+  const createNamedProject = useMemo(
+    () =>
+      onCreateProject
+        ? async (name: string) => {
+            const made = await onCreateProject(name)
+            if (!made) return 'We could not make that project. Check your connection and try again.'
+            setMadeProjectId(made.id)
+            return null
+          }
+        : undefined,
+    [onCreateProject],
+  )
+  const renameCurrentProject = useMemo(
+    () =>
+      onRenameProject
+        ? async (name: string) => ((await onRenameProject(currentProjectId, name)) ? null : 'We could not rename the project. Check your connection and try again.')
+        : undefined,
+    [currentProjectId, onRenameProject],
+  )
+
   // ---- The library ----
 
   // Shows the library, which takes the working screen while the conversation sits beside it.
@@ -1252,6 +1285,8 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         projects={projects}
         currentProjectId={currentProjectId}
         onSelectProject={selectProject}
+        onCreateProject={createNamedProject}
+        onRenameProject={renameCurrentProject}
         onOpenBrief={() => setBriefOpen(true)}
         onOpenLibrary={libraryOpen ? closeLibrary : openLibrary}
         libraryOpen={libraryOpen}

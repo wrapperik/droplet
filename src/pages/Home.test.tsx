@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
+import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { loadBoard } from '../lib/boardStore.ts'
 import { loadChats, saveChats } from '../lib/chatStore.ts'
@@ -2077,6 +2078,78 @@ describe('facts Droplet offers to remember', () => {
   })
 })
 
+
+describe('making and renaming projects from the switcher', () => {
+  // HomeRoute's part, in miniature: the projects are held by the parent, and Home is given the new list.
+  function Harness({ fail = false }: { fail?: boolean }) {
+    const [projects, setProjects] = useState([{ id: 'duckstack', name: 'DuckStack' }])
+    return (
+      <MemoryRouter>
+        <Home
+          projects={projects}
+          onCreateProject={async (name) => {
+            if (fail) return null
+            const made = { id: 'pet', name }
+            setProjects((current) => [...current, made])
+            return made
+          }}
+          onRenameProject={async (id, name) => {
+            setProjects((current) => current.map((project) => (project.id === id ? { ...project, name } : project)))
+            return { id, name }
+          }}
+        />
+      </MemoryRouter>
+    )
+  }
+
+  const trigger = (name: string) => screen.getByRole('button', { name: new RegExp(`^${name}`) })
+
+  it('makes a project and moves to it, with a new, empty conversation and its own saved work', async () => {
+    const user = userEvent.setup()
+    render(<Harness />)
+    await user.click(trigger('DuckStack'))
+    await user.click(screen.getByRole('menuitem', { name: 'New project' }))
+    await user.type(screen.getByRole('textbox', { name: 'Business or project name' }), 'Pet sitting')
+    await user.click(screen.getByRole('button', { name: 'Create project' }))
+    await waitFor(() => expect(trigger('Pet sitting')).toBeInTheDocument())
+    // the project brief now belongs to the new project
+    await user.click(within(screen.getByRole('group', { name: 'This project' })).getByRole('button', { name: 'Project brief' }))
+    expect(await screen.findByRole('dialog', { name: /^Project brief/ })).toHaveTextContent('Pet sitting')
+  })
+
+  it('says so, and stays where it was, when the project could not be made', async () => {
+    const user = userEvent.setup()
+    render(<Harness fail />)
+    await user.click(trigger('DuckStack'))
+    await user.click(screen.getByRole('menuitem', { name: 'New project' }))
+    await user.type(screen.getByRole('textbox', { name: 'Business or project name' }), 'Pet sitting')
+    await user.click(screen.getByRole('button', { name: 'Create project' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('We could not make that project.')
+    expect(screen.getByRole('textbox', { name: 'Business or project name' })).toHaveValue('Pet sitting')
+    expect(trigger('DuckStack')).toBeInTheDocument()
+  })
+
+  it('renames the current project and shows the new name in the switcher and the brief', async () => {
+    const user = userEvent.setup()
+    render(<Harness />)
+    await user.click(trigger('DuckStack'))
+    await user.click(screen.getByRole('menuitem', { name: 'Rename project' }))
+    const field = screen.getByRole('textbox', { name: 'Business or project name' })
+    await user.clear(field)
+    await user.type(field, 'DuckStack Studio')
+    await user.click(screen.getByRole('button', { name: 'Rename' }))
+    await waitFor(() => expect(trigger('DuckStack Studio')).toBeInTheDocument())
+    await user.click(within(screen.getByRole('group', { name: 'This project' })).getByRole('button', { name: 'Project brief' }))
+    expect(await screen.findByRole('dialog', { name: /^Project brief/ })).toHaveTextContent('DuckStack Studio')
+  })
+
+  it('has the items but cannot use them when it is given no way to make or rename a project', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await user.click(trigger('DuckStack'))
+    expect(screen.getByRole('menuitem', { name: 'New project' })).toHaveAttribute('aria-disabled', 'true')
+  })
+})
 
 describe('looking back at past chats', () => {
   const idea = 'I want to call my gift business Kindred Gifting'

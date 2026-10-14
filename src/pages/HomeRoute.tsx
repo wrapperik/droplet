@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import type { ProjectSummary } from '../lib/mockProjects.ts'
 import { FIRST_PROJECT_NAME } from '../lib/onboarding.ts'
-import { createProject, listProjects } from '../lib/projectsStore.ts'
+import { createProject, listProjects, renameProject } from '../lib/projectsStore.ts'
 import { useAuth } from '../store/auth.ts'
 import Home from './Home.tsx'
 
@@ -44,6 +44,34 @@ export default function HomeRoute() {
     navigate('/sign-in', { replace: true })
   }, [navigate, signOut])
 
+  // After a project is made or renamed the list is read again from the store, not worked out here. If that read fails the change itself
+  // went through, so the project is added (or renamed) in the list already held rather than shown as missing.
+  const refresh = useCallback(
+    async (change: (projects: ProjectSummary[]) => ProjectSummary[]) => {
+      const fresh = await listProjects()
+      setLoaded((current) => (current && current !== 'failed' && current.userId === userId ? { userId, projects: fresh ?? change(current.projects) } : current))
+    },
+    [userId],
+  )
+
+  const addProject = useCallback(
+    async (name: string) => {
+      const made = await createProject(name)
+      if (made) await refresh((projects) => (projects.some((project) => project.id === made.id) ? projects : [...projects, made]))
+      return made
+    },
+    [refresh],
+  )
+
+  const changeProjectName = useCallback(
+    async (id: string, name: string) => {
+      const renamed = await renameProject(id, name)
+      if (renamed) await refresh((projects) => projects.map((project) => (project.id === id ? renamed : project)))
+      return renamed
+    },
+    [refresh],
+  )
+
   if (user && !user.onboarded) return <Navigate to="/welcome" replace />
 
   if (loaded === 'failed') {
@@ -64,5 +92,15 @@ export default function HomeRoute() {
   }
   // Until the projects of the person who is signed in now have arrived.
   if (!loaded || loaded.userId !== userId) return <div className="auth-loading" role="status" aria-label="Loading your projects" />
-  return <Home key={userId} projects={loaded.projects} userName={user?.name} onAccount={() => navigate('/account')} onSignOut={leave} />
+  return (
+    <Home
+      key={userId}
+      projects={loaded.projects}
+      userName={user?.name}
+      onAccount={() => navigate('/account')}
+      onSignOut={leave}
+      onCreateProject={addProject}
+      onRenameProject={changeProjectName}
+    />
+  )
 }

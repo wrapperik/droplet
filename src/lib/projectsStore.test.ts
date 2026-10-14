@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mockProjects } from './mockProjects.ts'
 
 // The projects of a founder: from Supabase when it is set up, and the three sample projects when it is not.
+beforeEach(() => window.localStorage.clear())
 afterEach(() => {
   vi.doUnmock('./supabase.ts')
   vi.resetModules()
@@ -10,7 +11,7 @@ afterEach(() => {
 describe('without Supabase', () => {
   it('lists the sample projects, and makes a project that lives on this device', async () => {
     const { listProjects, createProject } = await import('./projectsStore.ts')
-    expect(await listProjects()).toBe(mockProjects)
+    expect(await listProjects()).toEqual(mockProjects)
     const made = await createProject('  Kindred   Gifting ')
     expect(made).toMatchObject({ name: 'Kindred Gifting' })
     expect(made?.id).toMatch(/^local-/)
@@ -19,6 +20,39 @@ describe('without Supabase', () => {
   it('makes no project with no name', async () => {
     const { createProject } = await import('./projectsStore.ts')
     expect(await createProject('   ')).toBeNull()
+  })
+
+  it('keeps a project made here in this browser, after the samples, and lists it again later', async () => {
+    const { listProjects, createProject } = await import('./projectsStore.ts')
+    const made = await createProject('Pet sitting')
+    const names = (await listProjects())?.map((project) => project.name)
+    expect(names).toEqual([...mockProjects.map((project) => project.name), 'Pet sitting'])
+    vi.resetModules()
+    const again = await import('./projectsStore.ts')
+    expect((await again.listProjects())?.at(-1)).toEqual(made)
+  })
+
+  it('renames a project made here and a sample project, and keeps the new names', async () => {
+    const { listProjects, createProject, renameProject } = await import('./projectsStore.ts')
+    const made = await createProject('Pet sitting')
+    expect(await renameProject(made!.id, 'Dog walking')).toEqual({ id: made!.id, name: 'Dog walking' })
+    expect(await renameProject(mockProjects[0].id, 'DuckStack Studio')).toEqual({ id: mockProjects[0].id, name: 'DuckStack Studio' })
+    const listed = await listProjects()
+    expect(listed?.[0]).toEqual({ id: mockProjects[0].id, name: 'DuckStack Studio' })
+    expect(listed?.at(-1)).toEqual({ id: made!.id, name: 'Dog walking' })
+    expect(listed).toHaveLength(mockProjects.length + 1)
+  })
+
+  it('does not rename a project that is not there, or to nothing', async () => {
+    const { renameProject } = await import('./projectsStore.ts')
+    expect(await renameProject('nope', 'Anything')).toBeNull()
+    expect(await renameProject(mockProjects[0].id, '  ')).toBeNull()
+  })
+
+  it('falls back to the samples when what was kept cannot be read', async () => {
+    window.localStorage.setItem('droplet-local-projects', '{not json')
+    const { listProjects } = await import('./projectsStore.ts')
+    expect(await listProjects()).toEqual(mockProjects)
   })
 })
 
