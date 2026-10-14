@@ -1,6 +1,7 @@
 import type { ModelCaller } from '../../src/compose/compose.ts'
 import { callerFromEnv, type ComposeEnv } from '../composeEnv.ts'
 import { handleAllowance, handleCompose } from '../composeService.ts'
+import { EVENT_STREAM, eventStream, wantsStream } from '../composeStream.ts'
 import type { CompositionLogEntry } from '../compositionLog.ts'
 import { DAY_MS, type AdvancedUse } from '../rateLimit.ts'
 import { bearerToken, corsHeaders, jsonReply, userOfToken, type Fetch } from './edgeHttp.ts'
@@ -86,14 +87,20 @@ export function createComposeHandler(deps: ComposeHandlerDeps): (request: Reques
         body = undefined
       }
 
-      const reply = await handleCompose(body, {
+      const serviceDeps = {
         call: deps.call,
         now,
         messages: MESSAGES,
         limiter: { take: async () => (await deps.recentCount(user.id, new Date(now() - HOUR_MS).toISOString())) < deps.limitPerHour },
         advanced,
-        log: (entry) => deps.record(user.id, entry),
-      })
+        log: (entry: CompositionLogEntry) => deps.record(user.id, entry),
+      }
+      // Asked for the stage as it changes: server-sent events, ending with the reply (its status is in the last event). Anything else gets the plain JSON.
+      if (wantsStream(request.headers.get('accept'))) {
+        const stream = eventStream((onStage) => handleCompose(body, { ...serviceDeps, onStage }))
+        return new Response(stream, { status: 200, headers: { ...CORS, 'content-type': EVENT_STREAM, 'cache-control': 'no-store', 'x-accel-buffering': 'no' } })
+      }
+      const reply = await handleCompose(body, serviceDeps)
       return json(reply.status, reply.body)
     } catch (error) {
       // Anything unexpected, including the database being unreachable: said plainly, and never with what went wrong inside. The cause goes to

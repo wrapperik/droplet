@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { fallbackTurn, FALLBACK_NOTE } from './fallback.ts'
 import type { Grounding } from './grounding.ts'
 import { buildUserContent, systemPromptFor } from './prompt.ts'
+import type { ComposeStage } from './progress.ts'
 import { checkTurnFor, withoutRepeatedQuestion } from './rules.ts'
 import { boardTurnSchema } from './boardSpec.ts'
 import { invoiceTurnSchema } from './invoiceSpec.ts'
@@ -110,7 +111,16 @@ function normalise(turn: AnyTurn): AnyTurn {
   }
 }
 
-export async function composeWorkspace(request: ComposeRequest, call: ModelCaller): Promise<ComposeResult> {
+// `onStage` is told where the loop has got to (asking, checking, trying again), for the progress the founder sees. It is told the stage and nothing the
+// founder wrote, and a listener that throws does not stop the loop.
+export async function composeWorkspace(request: ComposeRequest, call: ModelCaller, onStage?: (stage: ComposeStage) => void): Promise<ComposeResult> {
+  const tell = (stage: ComposeStage) => {
+    try {
+      onStage?.(stage)
+    } catch {
+      // Progress is never worth breaking an answer for.
+    }
+  }
   const mode = modeOf(request)
   const schema = turnJsonSchema(request.view)
   const system = systemPromptFor(request.view, mode)
@@ -128,6 +138,7 @@ export async function composeWorkspace(request: ComposeRequest, call: ModelCalle
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const sent = attempt === 0 ? undefined : errors
+    tell(attempt === 0 ? { stage: 'reading', ...(search ? { search: true } : {}) } : { stage: 'retrying' })
     const raw = await call({
       system,
       user: buildUserContent(request, sent, search),
@@ -146,6 +157,7 @@ export async function composeWorkspace(request: ComposeRequest, call: ModelCalle
         usage.thinking += reply.meta.usage.thinking
       }
     }
+    tell({ stage: 'checking', ...(reply.grounding && reply.grounding.queries.length > 0 ? { searched: reply.grounding.queries.slice(0, 5).map((query) => query.slice(0, 120)) } : {}) })
     const checked = checkReply(reply.text, request)
     attempts.push({ errors: checked.errors })
     if (checked.turn) {

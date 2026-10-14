@@ -259,3 +259,119 @@ describe('requestDigest', () => {
     expect(await requestDigest(request, { fetchImpl: reply(json({ kind: 'summarise_chat', answeredBy: 'base', summary: null })) })).toMatchObject({ ok: false, kind: 'bad_response' })
   })
 })
+
+// ---- Progress, and stopping ----
+
+const encoder = new TextEncoder()
+// A response that arrives in the pieces given, as a stream would.
+const streamed = (pieces: string[], status = 200) =>
+  new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const piece of pieces) controller.enqueue(encoder.encode(piece))
+        controller.close()
+      },
+    }),
+    { status, headers: { 'content-type': 'text/event-stream' } },
+  )
+const event = (name: string, data: unknown) => `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`
+const answer = { outcome: 'valid', answeredBy: 'base', turn: chatTurn }
+
+describe('requestComposition with progress', () => {
+  it('asks for the stream, and still takes plain JSON', async () => {
+    let accept = ''
+    const impl = (async (_url: string, init?: RequestInit) => {
+      accept = String(((init?.headers ?? {}) as Record<string, string>).accept)
+      return json(answer)
+    }) as unknown as typeof fetch
+    const result = await requestComposition({ intent: 'hi' }, { fetchImpl: impl })
+    expect(accept).toContain('text/event-stream')
+    expect(result).toMatchObject({ ok: true, turn: { task: 'chat' } })
+  })
+
+  it('tells the caller each stage as it arrives, then returns the reply', async () => {
+    const stages: unknown[] = []
+    const fetchImpl = reply(streamed([': ok\n\n', event('stage', { stage: 'reading', search: true }), event('stage', { stage: 'checking', searched: ['VAT registration'] }), event('result', { status: 200, body: answer })]))
+    const result = await requestComposition({ intent: 'hi' }, { fetchImpl, onStage: (stage) => stages.push(stage) })
+    expect(stages).toEqual([{ stage: 'reading', search: true }, { stage: 'checking', searched: ['VAT registration'] }])
+    expect(result).toMatchObject({ ok: true, outcome: 'valid', turn: { task: 'chat' } })
+  })
+
+  it('reads events split across pieces', async () => {
+    const whole = event('stage', { stage: 'reading' }) + event('result', { status: 200, body: answer })
+    const cut = Math.floor(whole.length / 2)
+    const stages: unknown[] = []
+    const result = await requestComposition({ intent: 'hi' }, { fetchImpl: reply(streamed([whole.slice(0, cut), whole.slice(cut)])), onStage: (stage) => stages.push(stage) })
+    expect(stages).toEqual([{ stage: 'reading' }])
+    expect(result.ok).toBe(true)
+  })
+
+  it('ignores a stage it does not know', async () => {
+    const stages: unknown[] = []
+    await requestComposition({ intent: 'hi' }, { fetchImpl: reply(streamed([event('stage', { stage: 'daydreaming' }), event('result', { status: 200, body: answer })])), onStage: (stage) => stages.push(stage) })
+    expect(stages).toEqual([])
+  })
+
+  it('reads a refusal in the result event the way it reads one in a plain response', async () => {
+    const body = { error: 'advanced_limit', message: 'You have used your 10 Advanced answers for today.' }
+    const result = await requestComposition({ intent: 'hi' }, { fetchImpl: reply(streamed([event('result', { status: 429, body })])) })
+    expect(result).toMatchObject({ ok: false, kind: 'advanced_limit', message: body.message })
+  })
+
+  it('says the connection dropped when the stream ends without a reply', async () => {
+    const result = await requestComposition({ intent: 'hi' }, { fetchImpl: reply(streamed([event('stage', { stage: 'reading' })])) })
+    expect(result).toMatchObject({ ok: false, kind: 'network' })
+    expect(!result.ok && result.message).toMatch(/lost the connection/)
+  })
+
+  it('still checks a streamed reply against the rules, so an unusable one never gets through', async () => {
+    const result = await requestComposition({ intent: 'hi' }, { fetchImpl: reply(streamed([event('result', { status: 200, body: { outcome: 'valid', answeredBy: 'base', turn: { task: 'nonsense' } } })])) })
+    expect(result).toMatchObject({ ok: false, kind: 'bad_response' })
+  })
+})
+
+describe('stopping a request', () => {
+  it('gives up at once and applies nothing, when stopped before it starts', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    let called = false
+    const impl = (async () => {
+      called = true
+      return json(answer)
+    }) as unknown as typeof fetch
+    const result = await requestComposition({ intent: 'hi' }, { fetchImpl: impl, signal: controller.signal })
+    expect(called).toBe(false)
+    expect(result).toMatchObject({ ok: false, kind: 'aborted', message: 'Stopped. Nothing was changed.' })
+  })
+
+  it('gives up while waiting for the reply, and says it was stopped, not that it timed out', async () => {
+    const controller = new AbortController()
+    const impl = ((_url: string, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        const abort = () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))
+        // As the real fetch does: a signal that is already aborted gives up at once.
+        if (init?.signal?.aborted) abort()
+        else init?.signal?.addEventListener('abort', abort)
+      })) as unknown as typeof fetch
+    const pending = requestComposition({ intent: 'hi' }, { fetchImpl: impl, signal: controller.signal })
+    controller.abort()
+    expect(await pending).toMatchObject({ ok: false, kind: 'aborted' })
+  })
+})
+
+describe('a stream that stalls', () => {
+  it('times out, and says so, rather than waiting for ever', async () => {
+    const impl = (async () => new Response(new ReadableStream<Uint8Array>({ start() {} }), { status: 200, headers: { 'content-type': 'text/event-stream' } })) as unknown as typeof fetch
+    const result = await requestComposition({ intent: 'hi' }, { fetchImpl: impl, timeoutMs: 30 })
+    expect(result).toMatchObject({ ok: false, kind: 'timeout' })
+  })
+
+  it('is stopped, not timed out, when the founder stops it', async () => {
+    const controller = new AbortController()
+    const impl = (async () => new Response(new ReadableStream<Uint8Array>({ start() {} }), { status: 200, headers: { 'content-type': 'text/event-stream' } })) as unknown as typeof fetch
+    const pending = requestComposition({ intent: 'hi' }, { fetchImpl: impl, signal: controller.signal })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    controller.abort()
+    expect(await pending).toMatchObject({ ok: false, kind: 'aborted' })
+  })
+})

@@ -4,6 +4,7 @@ import { ComposeError, type ModelCaller } from '../../src/compose/compose.ts'
 import { validOpenReply } from '../../src/compose/fixtures.ts'
 import type { CompositionLogEntry } from '../compositionLog.ts'
 import type { AdvancedUse } from '../rateLimit.ts'
+import { takeEvents } from '../../src/lib/sse.ts'
 import { createComposeHandler, createEdgeComposeHandler, MAX_BODY_BYTES, type ComposeHandlerDeps } from './composeEdge.ts'
 
 const good: ModelCaller = async () => validOpenReply
@@ -394,5 +395,47 @@ describe('background work in the compose function', () => {
     const row = JSON.parse(String(calls.find((call) => call.init?.method === 'POST' && call.url.endsWith('/rest/v1/compositions'))!.init?.body)) as Record<string, unknown>
     expect(row).toMatchObject({ task: 'summarise_chat', mode: 'base', answered_by: 'base', outcome: 'valid' })
     expect(JSON.stringify(row)).not.toMatch(/Kindred|Pretoria/)
+  })
+})
+
+describe('the compose function, asked for progress', () => {
+  const streaming = { authorization: 'Bearer good-token', accept: 'text/event-stream, application/json' }
+
+  it('answers with the stages and then the reply, as server-sent events, and records the request as usual', async () => {
+    const { handle, recorded } = setup()
+    const response = await handle(post({ intent: 'a colour palette for my gift box business' }, streaming))
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')).toBe('text/event-stream')
+    expect(response.headers.get('access-control-allow-origin')).toBe('*')
+    const { events } = takeEvents(await response.text())
+    expect(events.map((entry) => entry.event)).toEqual(['stage', 'stage', 'result'])
+    expect(JSON.parse(events[0].data)).toEqual({ stage: 'reading' })
+    const result = JSON.parse(events[2].data)
+    expect(result.status).toBe(200)
+    expect(result.body).toMatchObject({ outcome: 'valid', turn: { task: 'brand' } })
+    expect(recorded).toHaveLength(1)
+  })
+
+  it('carries a refusal in the result with its status, after the founder has been checked', async () => {
+    const { handle } = setup({}, 3)
+    const response = await handle(post({ intent: 'a palette' }, streaming))
+    const { events } = takeEvents(await response.text())
+    const result = JSON.parse(events[events.length - 1].data)
+    expect(result.status).toBe(429)
+    expect(result.body.error).toBe('rate_limited')
+  })
+
+  it('still turns away someone who is not signed in with a plain 401, not a stream', async () => {
+    const { handle } = setup()
+    const response = await handle(post({ intent: 'a palette' }, { accept: 'text/event-stream' }))
+    expect(response.status).toBe(401)
+    expect(response.headers.get('content-type')).toBe('application/json')
+  })
+
+  it('never puts what the founder wrote in a stage', async () => {
+    const { handle } = setup()
+    const text = await (await handle(post({ intent: 'invoice Ayesha Khan for the secret job' }, streaming))).text()
+    const stages = takeEvents(text).events.filter((entry) => entry.event === 'stage')
+    expect(JSON.stringify(stages)).not.toMatch(/Ayesha|secret/)
   })
 })

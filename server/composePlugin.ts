@@ -3,6 +3,7 @@ import type { Plugin } from 'vite'
 import { appendComposition } from './compositionLog.ts'
 import { callerFromEnv } from './composeEnv.ts'
 import { handleAllowance, handleCompose } from './composeService.ts'
+import { EVENT_STREAM, streamEvents, wantsStream } from './composeStream.ts'
 import { createAdvancedAllowance, createRateLimiter } from './rateLimit.ts'
 
 // Serves POST /api/compose (and GET, for the Advanced allowance) from the Vite dev server, so the app can call the composer on the address it already
@@ -72,6 +73,14 @@ export function composePlugin(env: Record<string, string>): Plugin {
         } catch {
           res.statusCode = 413
           res.end(JSON.stringify({ error: 'bad_request', message: 'That request is too large.' }))
+          return
+        }
+        if (wantsStream(req.headers.accept)) {
+          // The stage as it changes, then the reply, as server-sent events. The status is in the result event.
+          res.statusCode = 200
+          res.setHeader('content-type', EVENT_STREAM)
+          await streamEvents((onStage) => handleCompose(body, { call, limiter, advanced, log: appendComposition, onStage }), (text) => void res.write(text))
+          res.end()
           return
         }
         const reply = await handleCompose(body, { call, limiter, advanced, log: appendComposition })

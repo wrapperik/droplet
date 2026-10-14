@@ -3,6 +3,8 @@ import type { Grounding } from '../compose/grounding.ts'
 import { backgroundResponseSchema, chatText, groundingProblems, summaryProblems, type ChatSummary, type SummariseRequest } from '../compose/background.ts'
 import { digestSource, type DigestRequest, type WorkspaceDigest } from '../compose/digest.ts'
 import { composeHeaders, composeTarget, type ComposeTarget } from './composeEndpoint.ts'
+import { stageSchema, type ComposeStage } from '../compose/progress.ts'
+import { takeEvents } from './sse.ts'
 import { allowanceSchema, composeResponseSchema, type Allowance, type AnyTurn, type ComposeRequest, type Mode, type Outcome } from '../compose/spec.ts'
 
 // Asks the composer for a workspace. The browser never talks to the model: it asks a server that holds the key (the dev server, or
@@ -25,6 +27,8 @@ export type ComposeFailureKind =
   | 'timeout'
   | 'unavailable'
   | 'blocked'
+  // The founder pressed Stop. Nothing was applied.
+  | 'aborted'
 
 export type ComposeSuccess = { ok: true; outcome: Outcome; turn: AnyTurn; answeredBy: Mode; allowance?: Allowance; note?: string; grounding?: Grounding }
 // `allowance` is where the Advanced allowance stands, when the server says (it does with a refusal for having none left).
@@ -34,33 +38,89 @@ const TIMEOUT_MS = 60_000
 
 type Options = { fetchImpl?: typeof fetch; timeoutMs?: number; target?: ComposeTarget; headers?: (target: ComposeTarget) => Promise<Record<string, string>> }
 
+// Told each stage the composer reports while it works (see compose/progress.ts), and stopped by the founder: aborting the signal gives up on the reply
+// and nothing is applied.
+type ComposeOptions = Options & { onStage?: (stage: ComposeStage) => void; signal?: AbortSignal }
+
+const STOPPED: ComposeFailure = { ok: false, kind: 'aborted', message: 'Stopped. Nothing was changed.' }
+const DROPPED: ComposeFailure = { ok: false, kind: 'network', message: 'I lost the connection while it was working. Try again.' }
+
+// Reads a stream of events to its result. Stages go to `onStage` as they arrive; the result is the status and body the plain JSON response would have had.
+async function readStream(response: Response, onStage: ComposeOptions['onStage'], abort: AbortSignal): Promise<{ status: number; body: unknown } | null> {
+  const reader = response.body?.getReader()
+  if (!reader) return null
+  // A browser ends the body itself when the request is aborted; this makes sure of it, so a stop or a timeout never leaves the read waiting.
+  abort.addEventListener('abort', () => void reader.cancel().catch(() => undefined), { once: true })
+  const decoder = new TextDecoder()
+  let buffer = ''
+  for (;;) {
+    const { done, value } = await reader.read()
+    buffer += decoder.decode(value, { stream: !done })
+    const taken = takeEvents(buffer)
+    buffer = taken.rest
+    for (const event of taken.events) {
+      let data: unknown
+      try {
+        data = JSON.parse(event.data)
+      } catch {
+        continue
+      }
+      if (event.event === 'stage') {
+        const stage = stageSchema.safeParse(data)
+        if (stage.success) onStage?.(stage.data)
+      } else if (event.event === 'result') {
+        const result = (data ?? {}) as { status?: unknown; body?: unknown }
+        return { status: typeof result.status === 'number' ? result.status : 500, body: result.body }
+      }
+    }
+    if (done) return null
+  }
+}
+
 export async function requestComposition(
   request: ComposeRequest,
-  { fetchImpl = fetch, timeoutMs = TIMEOUT_MS, target = composeTarget(), headers = composeHeaders }: Options = {},
+  { fetchImpl = fetch, timeoutMs = TIMEOUT_MS, target = composeTarget(), headers = composeHeaders, onStage, signal }: ComposeOptions = {},
 ): Promise<ComposeSuccess | ComposeFailure> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
+  // The founder's Stop gives up on the reply the same way a timeout does.
+  const stop = () => controller.abort()
+  if (signal?.aborted) {
+    clearTimeout(timer)
+    return STOPPED
+  }
+  signal?.addEventListener('abort', stop, { once: true })
 
-  let response: Response
+  let status: number
+  let body: unknown
   try {
-    response = await fetchImpl(target.url, {
+    const response = await fetchImpl(target.url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', ...(await headers(target)) },
+      headers: { 'content-type': 'application/json', accept: 'text/event-stream, application/json', ...(await headers(target)) },
       body: JSON.stringify(request),
       signal: controller.signal,
     })
+    status = response.status
+    if ((response.headers.get('content-type') ?? '').includes('text/event-stream')) {
+      const streamed = await readStream(response, onStage, controller.signal)
+      if (!streamed) return signal?.aborted ? STOPPED : controller.signal.aborted ? { ok: false, kind: 'timeout', message: 'That took too long. Try again.' } : DROPPED
+      status = streamed.status
+      body = streamed.body
+    } else {
+      body = await response.json().catch(() => null)
+    }
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      return { ok: false, kind: 'timeout', message: 'That took too long. Try again.' }
+      // Stopping by hand is the founder's own doing; any other abort is the clock.
+      return signal?.aborted ? STOPPED : { ok: false, kind: 'timeout', message: 'That took too long. Try again.' }
     }
     return { ok: false, kind: 'network', message: target.authenticated ? 'I could not reach the composer. Check your connection and try again.' : 'I could not reach the composer. Check that the dev server is running.' }
   } finally {
     clearTimeout(timer)
+    signal?.removeEventListener('abort', stop)
   }
 
-  const body: unknown = await response.json().catch(() => null)
-
-  if (!response.ok) {
+  if (status < 200 || status >= 300) {
     const failure = (body ?? {}) as { error?: string; message?: string; allowance?: unknown }
     const kinds: ComposeFailureKind[] = ['unauthorised', 'advanced_limit', 'no_key', 'bad_key', 'bad_model', 'bad_request', 'rate_limited', 'quota', 'timeout', 'unavailable', 'blocked']
     const kind = kinds.find((candidate) => candidate === failure.error) ?? 'unavailable'

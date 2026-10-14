@@ -1,6 +1,7 @@
 import { ComposeError, composeWorkspace, type ModelCaller } from '../src/compose/compose.ts'
 import { backgroundRequestSchema, isBackgroundRequest } from '../src/compose/background.ts'
 import { runDigest, runSummarise } from '../src/compose/runBackground.ts'
+import type { ComposeStage } from '../src/compose/progress.ts'
 import { composeRequestSchema, modeOf, type Allowance } from '../src/compose/spec.ts'
 import type { CompositionLogEntry } from './compositionLog.ts'
 import { DAY_MS, type AdvancedAllowance, type AdvancedUse, type RateLimiter } from './rateLimit.ts'
@@ -19,6 +20,8 @@ export type ComposeServiceDeps = {
   // Words to use in place of the standard ones for some failures. The dev server says what to do in .env.local, which means nothing to
   // anyone using the deployed app.
   messages?: Partial<Record<ComposeError['kind'], string>>
+  // Told where the work has got to, for the progress the founder sees. Only a stage, never what was written.
+  onStage?: (stage: ComposeStage) => void
 }
 
 export type ServiceReply = { status: number; body: Record<string, unknown> }
@@ -154,7 +157,7 @@ export async function handleCompose(body: unknown, deps: ComposeServiceDeps): Pr
   if (!(await deps.limiter.take())) return fail('rate_limited')
 
   try {
-    const result = await composeWorkspace({ ...request, mode }, deps.call)
+    const result = await composeWorkspace({ ...request, mode }, deps.call, deps.onStage)
     const meta = result.meta
     const answeredBy = meta?.answeredBy ?? mode
     // Only an answer Advanced itself gave counts against the founder. Quick answering for Google's busy model does not.
