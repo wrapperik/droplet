@@ -171,7 +171,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   }, [])
   const nextMessageId = useRef(1)
   // The message that is on its way from the bar to the thread, if one is, and where it started.
-  const [flight, setFlight] = useState<{ id: number; from: FlightOrigin } | null>(null)
+  const [flight, setFlight] = useState<{ id: number; from?: FlightOrigin } | null>(null)
   // However the flight goes (the thread it was in went away meanwhile, say), it is cleared a little after it should have ended, so it never starts again.
   useEffect(() => {
     if (!flight) return
@@ -671,8 +671,9 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
       const moved = space !== null && sentInRef.current !== undefined && sentInRef.current !== space
       sentInRef.current = space
       const you = message('you', text)
-      // A message typed in the bar comes out of the top of it and settles into the thread (see FlyingMessage); a tapped reply has no bar to come from.
-      if (from && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) setFlight({ id: you.id, from })
+      // The message rises from the bottom into its place in the thread, whether it was typed or tapped (ChatThread, `data-rising`); with reduced
+      // motion the CSS only fades it in.
+      setFlight(from ? { id: you.id, from } : { id: you.id })
       setThread((current) => [...current, ...(moved ? [message('divider', `Switched workspace to ${SPACE_NAMES[space]}`)] : []), you, pending])
       setComposing(true)
       try {

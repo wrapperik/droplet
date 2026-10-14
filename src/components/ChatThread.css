@@ -36,9 +36,34 @@
   box-shadow: var(--intent-shadow);
 }
 
-/* While the copy of it is on its way from the bar, the message is in its place but not shown, so the thread does not move when it arrives. */
-.thread__message[data-flying] {
-  visibility: hidden;
+/* A message the founder has just sent rises from the bottom into its place, fading in and settling from a little smaller, on a soft ease-out. It
+   moves only by transform and opacity, so nothing is laid out again on the way. Reduced motion: a short fade, no travel. */
+.thread__message[data-rising] {
+  transform-origin: 100% 100%;
+  animation: thread-rise 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes thread-rise {
+  from {
+    opacity: 0;
+    transform: translateY(1.75rem) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thread__message[data-rising] {
+    animation: thread-fade 160ms ease-out both;
+  }
+}
+
+@keyframes thread-fade {
+  from {
+    opacity: 0;
+  }
 }
 
 .thread__message--droplet {

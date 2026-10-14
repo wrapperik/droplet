@@ -15,7 +15,9 @@ import WebSources from './WebSources.tsx'
 // import DropletLoader from './DropletLoader.tsx'
 // import ThinkingDots from './ThinkingDots.tsx'
 import JellyLoader from './JellyLoader.tsx'
-import FlyingMessage, { type FlightOrigin } from './FlyingMessage.tsx'
+// A sent message used to be carried from the bar by a copy drawn over the screen (FlyingMessage); it now rises into place on its own (`data-rising`).
+// To bring the copy back, import FlyingMessage here and draw it at the end of the list, as the commit that replaced it shows.
+import type { FlightOrigin } from './FlyingMessage.tsx'
 import RichText from './RichText.tsx'
 import { whenLabel } from '../lib/chatStore.ts'
 import './ChatThread.css'
@@ -77,9 +79,9 @@ type Props = {
   // Remember, or Not now, was pressed on a fact Droplet offered.
   onRememberFact?: (messageId: number, key: FactKey) => void
   onDismissFact?: (messageId: number, key: FactKey) => void
-  // A message the founder just sent is on its way from the bar to its place here: the shape that carries it is drawn over the screen, and the
-  // message itself is there but not shown until it arrives. `onFlightEnd` says it has.
-  flight?: { id: number; from: FlightOrigin } | null
+  // The message the founder just sent: it rises from the bottom into its place (`data-rising`, see ChatThread.css); Home clears it a moment
+  // after. `from` is where the bar was, kept for the copy that used to fly from it. `onFlightEnd` was for that copy and is not called now.
+  flight?: { id: number; from?: FlightOrigin } | null
   onFlightEnd?: () => void
   // Draws the card of a finished task. The thread does not know how to export or open one, so whoever holds the project draws it.
   renderResult?: (message: ThreadMessage) => ReactNode
@@ -88,7 +90,7 @@ type Props = {
 const NO_STEPS: ReadonlySet<JourneyStep> = new Set()
 
 // The running conversation. It scrolls on its own, and follows the newest message.
-export default function ChatThread({ messages, onAction, onReply, done = NO_STEPS, busy, onToggle, onOpenStep, onUndoReceipt, onShowReceipt, onRememberFact, onDismissFact, flight, onFlightEnd, renderResult }: Props) {
+export default function ChatThread({ messages, onAction, onReply, done = NO_STEPS, busy, onToggle, onOpenStep, onUndoReceipt, onShowReceipt, onRememberFact, onDismissFact, flight, renderResult }: Props) {
   const listRef = useRef<HTMLOListElement>(null)
 
   // Follow the newest message, including when a reply that was pending arrives in place and is taller than "Thinking".
@@ -118,7 +120,7 @@ export default function ChatThread({ messages, onAction, onReply, done = NO_STEP
             <li
               className={`thread__message thread__message--${message.from}${message.from === 'you' ? ' glass' : ''}${message.pending ? ' thread__message--pending' : ''}`}
               data-message-id={message.id}
-              data-flying={flight?.id === message.id ? '' : undefined}
+              data-rising={flight?.id === message.id ? '' : undefined}
             >
               <span className="visually-hidden">{message.from === 'you' ? 'You: ' : 'Droplet: '}</span>
               {message.pending ? (
@@ -188,9 +190,6 @@ export default function ChatThread({ messages, onAction, onReply, done = NO_STEP
           </Fragment>
         )
       })}
-      {flight && messages.some((message) => message.id === flight.id) && (
-        <FlyingMessage messageId={flight.id} text={messages.find((message) => message.id === flight.id)?.text ?? ''} from={flight.from} onEnd={() => onFlightEnd?.()} />
-      )}
     </ol>
   )
 }

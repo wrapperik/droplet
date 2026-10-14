@@ -257,3 +257,30 @@ describe('the time and copy under a message', () => {
     expect(container.querySelector('.thread__meta')).toBeNull()
   })
 })
+
+describe('a message the founder has just sent', () => {
+  const messages: ThreadMessage[] = [
+    { id: 1, from: 'you', text: 'Earlier' },
+    { id: 2, from: 'droplet', text: 'An answer' },
+    { id: 3, from: 'you', text: 'Just sent' },
+  ]
+
+  it('rises into its place, and nothing else in the thread moves', () => {
+    const { container } = render(<ChatThread messages={messages} onAction={() => {}} flight={{ id: 3 }} />)
+    const sent = container.querySelector('[data-message-id="3"]')!
+    expect(sent).toHaveAttribute('data-rising')
+    expect(container.querySelectorAll('[data-rising]')).toHaveLength(1)
+    // Its words are on screen from the start: nothing is hidden while it rises.
+    expect(screen.getByText('Just sent')).toBeVisible()
+  })
+
+  it('rises for a tapped reply as well, which has no bar to come from', () => {
+    const { container } = render(<ChatThread messages={messages} onAction={() => {}} flight={{ id: 1 }} />)
+    expect(container.querySelector('[data-message-id="1"]')).toHaveAttribute('data-rising')
+  })
+
+  it('does not rise when nothing was just sent', () => {
+    const { container } = render(<ChatThread messages={messages} onAction={() => {}} />)
+    expect(container.querySelectorAll('[data-rising]')).toHaveLength(0)
+  })
+})
