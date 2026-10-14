@@ -77,9 +77,12 @@ describe('the database migrations', () => {
     const columns = compositions.split('\n').map((line) => /^\s{2}(\w+) /.exec(line)?.[1]).filter(Boolean)
     expect(columns).toEqual(['id', 'user_id', 'outcome', 'task', 'model', 'error', 'actions', 'bad_replies', 'ms', 'created_at'])
     expect(columns.filter((name) => /intent|spec|message|prompt|text|body|content|reply/.test(name ?? ''))).toEqual([])
-    // the founder may read their own rows, and nothing more: the function writes with its own key
+    // the founder may read their own rows, and nothing more: the function writes with its own key (service_role), which may read to count and
+    // insert to log, and nothing more
     expect(code).toMatch(/grant select on public\.compositions to authenticated/)
-    expect(code).not.toMatch(/grant [^;]*\b(insert|update|delete)\b[^;]* on public\.compositions/)
+    expect(code).toMatch(/grant select, insert on public\.compositions to service_role;/)
+    expect(code).not.toMatch(/grant [^;]*\b(insert|update|delete)\b[^;]* on public\.compositions to (?!service_role;)/)
+    expect(code).not.toMatch(/grant [^;]*\b(update|delete)\b[^;]* on public\.compositions/)
     expect(code).not.toMatch(/create policy "[^"]+" on public\.compositions\s+for (insert|update|delete)/)
   })
 
