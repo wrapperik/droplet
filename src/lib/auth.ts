@@ -63,6 +63,40 @@ export function friendlyAuthError(message: string): string {
   return 'Something went wrong. Try again in a moment.'
 }
 
+// What went wrong when Supabase sends the founder back from Google or from a link in an email with an error in the address (in the query, or
+// after the #), in the app's words, or null when the address carries none. Without this the founder lands on the sign-in screen with no word.
+export function authErrorFromUrl(href: string): string | null {
+  let url: URL
+  try {
+    url = new URL(href)
+  } catch {
+    return null
+  }
+  const read = (key: string) => url.searchParams.get(key) ?? new URLSearchParams(url.hash.replace(/^#/, '')).get(key) ?? ''
+  const error = read('error')
+  const code = read('error_code')
+  const description = read('error_description')
+  if (error === '' && code === '' && description === '') return null
+  const text = `${code} ${description}`.toLowerCase()
+  if (code === 'signup_disabled' || text.includes('signups not allowed')) return 'New accounts are switched off right now. Sign in with an account you already have.'
+  if (text.includes('database error saving new user')) return 'Your account could not be made. Try again, or make one with your email and a password.'
+  if (code === 'otp_expired' || text.includes('expired')) return 'That link has expired. Sign in again, or make your account again for a new link.'
+  if (error === 'access_denied') return 'Signing in with Google was cancelled or not allowed for that account. Try again, or use your email and a password.'
+  const friendly = friendlyAuthError(description)
+  return friendly === friendlyAuthError('') ? 'Signing in did not work. Try again, or use your email and a password.' : friendly
+}
+
+// The address without what Supabase added about an error, so a reload does not show the message again.
+export function withoutAuthError(href: string): string {
+  const url = new URL(href)
+  const keys = ['error', 'error_code', 'error_description']
+  keys.forEach((key) => url.searchParams.delete(key))
+  const hash = new URLSearchParams(url.hash.replace(/^#/, ''))
+  keys.forEach((key) => hash.delete(key))
+  url.hash = hash.toString()
+  return `${url.pathname}${url.search}${url.hash}`
+}
+
 // The name to show: the one they gave, or Google's, or the start of their email.
 export function displayNameOf(metadata: Record<string, unknown> | undefined, email: string | undefined): string {
   for (const key of ['display_name', 'full_name', 'name']) {

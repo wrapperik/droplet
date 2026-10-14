@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { checkCredentials, createSupabaseAuthBackend, localAuthBackend, type AuthBackend, type AuthUser, type SupabaseAuthClient } from '../lib/auth.ts'
+import { authErrorFromUrl, checkCredentials, createSupabaseAuthBackend, localAuthBackend, withoutAuthError, type AuthBackend, type AuthUser, type SupabaseAuthClient } from '../lib/auth.ts'
 import { getSupabase } from '../lib/supabase.ts'
 import { localDocumentStorage, setDocumentStorage } from '../lib/storage.ts'
 
@@ -67,6 +67,15 @@ export const useAuth = create<AuthState>((set, get) => {
     notice: '',
 
     start: () => {
+      // Back from Google or an email link with an error: say it on the sign-in screen, and take it out of the address. Read before the
+      // backend starts, since the Supabase client reads the address when it is made.
+      if (!following && typeof window !== 'undefined') {
+        const returned = authErrorFromUrl(window.location.href)
+        if (returned) {
+          set({ error: returned, notice: '' })
+          window.history.replaceState(window.history.state, '', withoutAuthError(window.location.href))
+        }
+      }
       if (!following) {
         const mine = ++sequence
         const stop = authBackend().onChange((user) => {

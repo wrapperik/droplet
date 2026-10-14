@@ -301,3 +301,24 @@ describe('deleting the account', () => {
     expect(useAuth.getState()).toMatchObject({ status: 'signedIn', busy: false, notice: '' })
   })
 })
+
+describe('coming back from Google with an error', () => {
+  afterEach(() => window.history.replaceState(null, '', '/'))
+
+  it('says what went wrong on the sign-in screen and takes it out of the address', async () => {
+    window.history.replaceState(null, '', '/home?error=access_denied&error_description=The+user+denied+access')
+    setAuthBackend(fakeBackend({ user: null }).backend)
+    start()
+    await vi.waitFor(() => expect(useAuth.getState().status).toBe('signedOut'))
+    expect(useAuth.getState().error).toBe('Signing in with Google was cancelled or not allowed for that account. Try again, or use your email and a password.')
+    expect(window.location.search).toBe('')
+  })
+
+  it('says nothing when the address carries no error', async () => {
+    window.history.replaceState(null, '', '/home')
+    setAuthBackend(fakeBackend({ user: null }).backend)
+    start()
+    await vi.waitFor(() => expect(useAuth.getState().status).toBe('signedOut'))
+    expect(useAuth.getState().error).toBe('')
+  })
+})

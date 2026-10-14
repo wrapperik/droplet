@@ -19,6 +19,11 @@ export default function SignIn() {
   // A link with ?mode=sign-up opens on making an account.
   const [params] = useSearchParams()
   const [mode, setMode] = useState<Mode>(() => (params.get('mode') === 'sign-up' ? 'sign-up' : 'sign-in'))
+  // Pressed Continue with Google: the button says so until Google opens (or an error brings the founder back to this screen).
+  const [toGoogle, setToGoogle] = useState(false)
+  useEffect(() => {
+    if (!busy) setToGoogle(false)
+  }, [busy])
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -96,7 +101,7 @@ export default function SignIn() {
           </p>
 
           <button type="submit" className="signin__primary" disabled={busy} aria-busy={busy}>
-            {busy ? 'One moment' : making ? 'Make my account' : 'Sign in to Droplet'}
+            {busy && !toGoogle ? 'One moment' : making ? 'Make my account' : 'Sign in to Droplet'}
           </button>
         </form>
 
@@ -104,8 +109,17 @@ export default function SignIn() {
           <span>or</span>
         </div>
 
-        <button type="button" className="signin__google" disabled={busy} onClick={() => void signInWithGoogle()}>
-          Continue with Google
+        <button
+          type="button"
+          className="signin__google"
+          disabled={busy}
+          aria-busy={busy && toGoogle}
+          onClick={() => {
+            setToGoogle(true)
+            void signInWithGoogle()
+          }}
+        >
+          {busy && toGoogle ? 'Opening Google' : 'Continue with Google'}
         </button>
       </div>
     </main>

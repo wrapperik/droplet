@@ -185,3 +185,23 @@ describe('the sign-in screen', () => {
     expect(screen.getByRole('button', { name: 'Continue with Google' })).toBeDisabled()
   })
 })
+
+describe('continuing with Google', () => {
+  it('says it is opening Google while it does, without the email button saying it is busy', async () => {
+    let finish: (result: AuthResult) => void = () => {}
+    setAuthBackend({ ...backend(), signInWithGoogle: () => new Promise<AuthResult>((resolve) => (finish = resolve)) })
+    renderSignIn()
+    await userEvent.click(screen.getByRole('button', { name: 'Continue with Google' }))
+    expect(screen.getByRole('button', { name: 'Opening Google' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Sign in to Droplet' })).toBeDisabled()
+    await act(async () => finish({ ok: false, message: 'Signing in with Google is not switched on yet.' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Signing in with Google is not switched on yet.')
+    expect(screen.getByRole('button', { name: 'Continue with Google' })).toBeEnabled()
+  })
+
+  it('shows what went wrong when Google sent the founder back with an error', async () => {
+    useAuth.setState({ error: 'Signing in with Google was cancelled or not allowed for that account. Try again, or use your email and a password.' })
+    renderSignIn()
+    expect(await screen.findByRole('alert')).toHaveTextContent('Signing in with Google was cancelled')
+  })
+})

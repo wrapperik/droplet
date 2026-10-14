@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { checkCredentials, createSupabaseAuthBackend, displayNameOf, friendlyAuthError, localAuthBackend, MIN_PASSWORD, type SupabaseAuthClient } from './auth.ts'
+import { authErrorFromUrl, checkCredentials, createSupabaseAuthBackend, displayNameOf, friendlyAuthError, localAuthBackend, MIN_PASSWORD, withoutAuthError, type SupabaseAuthClient } from './auth.ts'
 import { localDocumentStorage, removeAllLocalDocuments } from './storage.ts'
 
 describe('checkCredentials', () => {
@@ -261,5 +261,37 @@ describe('deleting the account', () => {
     expect(window.localStorage.getItem('droplet-theme')).toBe('dark')
     window.localStorage.removeItem('droplet-theme')
     expect(removeAllLocalDocuments()).toBe(true)
+  })
+})
+
+describe('an error Supabase put in the address on the way back', () => {
+  const base = 'https://droplet.test/home'
+
+  it('is nothing when the address carries none', () => {
+    expect(authErrorFromUrl(base)).toBeNull()
+    expect(authErrorFromUrl(`${base}#access_token=abc&type=bearer`)).toBeNull()
+    expect(authErrorFromUrl('not an address')).toBeNull()
+  })
+
+  it('says a Google sign-in was cancelled or refused, from the query or after the #', () => {
+    const said = 'Signing in with Google was cancelled or not allowed for that account. Try again, or use your email and a password.'
+    expect(authErrorFromUrl(`${base}?error=access_denied&error_description=The+user+denied`)).toBe(said)
+    expect(authErrorFromUrl(`${base}#error=access_denied&error_code=403`)).toBe(said)
+  })
+
+  it('names the causes the founder can act on, in the app\'s words', () => {
+    expect(authErrorFromUrl(`${base}?error=server_error&error_description=Database+error+saving+new+user`)).toBe('Your account could not be made. Try again, or make one with your email and a password.')
+    expect(authErrorFromUrl(`${base}#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired`)).toBe('That link has expired. Sign in again, or make your account again for a new link.')
+    expect(authErrorFromUrl(`${base}?error=access_denied&error_code=signup_disabled`)).toBe('New accounts are switched off right now. Sign in with an account you already have.')
+  })
+
+  it('never shows the service\'s own wording for something it does not recognise', () => {
+    const said = authErrorFromUrl(`${base}?error=server_error&error_description=Unexpected+failure+in+gotrue+xyz`)
+    expect(said).toBe('Signing in did not work. Try again, or use your email and a password.')
+  })
+
+  it('is taken out of the address, leaving the rest', () => {
+    expect(withoutAuthError(`${base}?error=access_denied&error_description=x&tab=1`)).toBe('/home?tab=1')
+    expect(withoutAuthError(`${base}#error=access_denied&error_code=403`)).toBe('/home')
   })
 })
