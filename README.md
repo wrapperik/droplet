@@ -19,8 +19,8 @@ Final-year project by Rikus Pretorius (Bachelor of Creative Technologies, Open W
 
 ## Next: sprint 3 (14 to 20 October 2026)
 
-- [ ] Logo handoff: a handoff card naming the boundary, a copyable spec panel (palette, fonts, formats, sizes), a link-out in a new tab, and the logo recorded as outstanding ([chunk 12](docs/roadmap/12-logo-handoff.md))
-- [ ] Import slot: accept a PNG or SVG, reject a wrong format or size with a reason, and show the logo as resolved in the library and on the invoice
+- [ ] Logo handoff (built, not yet reviewed by hand): a handoff card naming the boundary, a copyable spec panel (palette, fonts, formats, sizes), a link-out in a new tab, and the logo recorded as outstanding ([chunk 12](docs/roadmap/12-logo-handoff.md)). Run the `logo` migration before deploying
+- [ ] Import slot (built, not yet reviewed by hand): accept a PNG or SVG, reject a wrong format or size with a reason, and show the logo as resolved in the library and on the invoice page and PDF
 - [ ] Usability tests with three people outside the project, one per priority flow (brand, logo, invoice), noted in the bug log
 - [ ] Fix every high-severity bug from the tests
 - [ ] Re-run the fixed test requests on the deployed function and record the valid, retried and fallback rates

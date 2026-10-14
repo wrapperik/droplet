@@ -10,7 +10,7 @@ describe('the fixed test requests', () => {
   it('expect real tasks, and cover talking, acting, advice, refusing and injection', () => {
     for (const test of TEST_REQUESTS) for (const task of [test.expect.task].flat()) expect(TASKS).toContain(task)
     const ids = TEST_REQUESTS.map((t) => t.id).join(' ')
-    for (const needed of ['palette-', 'chat-', 'advice-', 'act-', 'follow-up', 'route-', 'save-refused', 'injection', 'chat-names', 'chat-thanks', 'invoice-bare', 'invoice-fill', 'invoice-no-price', 'invoice-advice', 'invoice-undo', 'board-ideas', 'board-expand', 'board-cluster', 'board-template', 'board-fill', 'board-advice', 'board-delete-refused', 'board-edit-refused', 'board-not-live', 'board-route-invoice', 'route-board', 'board-summary', 'board-summary-empty', 'board-remember-refused', 'discover-first', 'discover-assets', 'discover-plan', 'plan-open-tap', 'invoice-logo-first', 'invoice-insist', 'logo-ask', 'compare-table', 'facts-stage-audience', 'facts-none-in-advice', 'recall-last-time', 'recall-none', 'notes-found', 'screen-switch', 'screen-close', 'screen-go-back', 'screen-not-open']) expect(ids).toContain(needed)
+    for (const needed of ['palette-', 'chat-', 'advice-', 'act-', 'follow-up', 'route-', 'save-refused', 'injection', 'chat-names', 'chat-thanks', 'invoice-bare', 'invoice-fill', 'invoice-no-price', 'invoice-advice', 'invoice-undo', 'board-ideas', 'board-expand', 'board-cluster', 'board-template', 'board-fill', 'board-advice', 'board-delete-asks', 'board-edit-suggests', 'board-neat', 'board-wrong-frame', 'board-colour', 'board-interview', 'board-not-live', 'board-route-invoice', 'route-board', 'board-summary', 'board-summary-empty', 'board-remember-refused', 'discover-first', 'discover-assets', 'discover-plan', 'plan-open-tap', 'invoice-logo-first', 'invoice-insist', 'logo-ask', 'compare-table', 'facts-stage-audience', 'facts-none-in-advice', 'recall-last-time', 'recall-none', 'notes-found', 'screen-switch', 'screen-close', 'screen-go-back', 'screen-not-open']) expect(ids).toContain(needed)
   })
 
   it('check the conversation too: a follow-up question is expected, and a list where options were asked for', () => {
@@ -21,13 +21,16 @@ describe('the fixed test requests', () => {
     expect(TEST_REQUESTS.some((test) => test.expect.titles === false)).toBe(true)
   })
 
-  it('include the board: adding, expanding, grouping, templates, filling prompts, and what it must refuse', () => {
+  it('include the board: adding, expanding, grouping, templates, filling prompts, and what it must refuse or only propose', () => {
     const board = TEST_REQUESTS.filter((test) => test.request.view === 'board')
     expect(board.length).toBeGreaterThanOrEqual(10)
     for (const test of board) expect(test.request.board, test.id).toBeDefined()
     expect(board.some((test) => test.expect.acts)).toBe(true)
-    // asked to delete, to rewrite, or to carry on in the background, it must change nothing
-    for (const id of ['board-delete-refused', 'board-edit-refused', 'board-not-live', 'board-remember-refused', 'board-summary-empty']) expect(TEST_REQUESTS.find((test) => test.id === id)?.expect.acts).toBe(false)
+    // asked to carry on in the background, to remember a name, or to interview the founder, it must change nothing
+    for (const id of ['board-not-live', 'board-remember-refused', 'board-summary-empty', 'board-interview']) expect(TEST_REQUESTS.find((test) => test.id === id)?.expect.acts).toBe(false)
+    // asked to delete or reword the founder's things, it may only propose it with the action that the app turns into a question in the chat
+    expect(TEST_REQUESTS.find((test) => test.id === 'board-delete-asks')?.expect.firstAction).toEqual(['remove'])
+    expect(TEST_REQUESTS.find((test) => test.id === 'board-edit-suggests')?.expect.firstAction).toEqual(['edit_note'])
     expect(TEST_REQUESTS.some((test) => test.expect.addsNotes !== undefined)).toBe(true)
   })
 })

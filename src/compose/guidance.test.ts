@@ -249,6 +249,27 @@ describe('what the prompts teach about Droplet and guiding', () => {
     expect(BOARD_SYSTEM_PROMPT).not.toContain('set_palette')
   })
 
+  it('knows the logo handoff: the brief block and the card the founder opens', () => {
+    for (const prompt of [SYSTEM_PROMPT, INVOICE_SYSTEM_PROMPT, BOARD_SYSTEM_PROMPT]) {
+      expect(prompt).toMatch(/handoff card/)
+      expect(prompt).toMatch(/you cannot open the card, add a file or mark the logo made/)
+      expect(prompt).toMatch(/block of type brief/)
+      expect(prompt).toMatch(/never write a hex code or a size in a brief/)
+      expect(prompt).not.toMatch(/a logo workspace \(the handoff\)/)
+    }
+  })
+
+  it('knows a logo can be imported, how, and what it appears on', () => {
+    for (const prompt of [SYSTEM_PROMPT, INVOICE_SYSTEM_PROMPT, BOARD_SYSTEM_PROMPT]) {
+      expect(prompt).toMatch(/Never say Droplet cannot hold, import or take a logo: it can/)
+      expect(prompt).toMatch(/Never say Droplet cannot hold logo files/)
+      expect(prompt).toMatch(/Open handoff card/)
+      expect(prompt).toMatch(/PNG or an SVG, up to 1 MB/)
+      expect(prompt).toMatch(/not on the brand sheet/)
+      expect(prompt).not.toMatch(/putting the logo on the invoice/)
+    }
+  })
+
   it('points founders to a free tool for a logo, and does not tell them to hire a designer', () => {
     const logo = SYSTEM_PROMPT.slice(SYSTEM_PROMPT.indexOf('Logos\n'), SYSTEM_PROMPT.indexOf('Showing things in the chat'))
     expect(logo).toMatch(/free plan/)
@@ -287,6 +308,19 @@ describe('the project, as the composer is told it', () => {
     expect([...doneSteps(project())]).toEqual([])
     expect([...doneSteps(project({ businessName: 'DuckStack', hasPalette: true, invoices: 1 }))].sort()).toEqual(['invoice', 'name', 'palette'])
     expect([...doneSteps(undefined)]).toEqual([])
+  })
+
+  it('tells the composer only that a logo exists, never the file', () => {
+    const sent = JSON.stringify(snapshotOfProject({ projectName: 'Kindred', memory: emptyMemory(), hasPalette: false, boardItems: 0, hasLogo: true }))
+    expect(sent).toContain('"hasLogo":true')
+    expect(sent).not.toMatch(/data:|base64|\.png|\.svg/)
+  })
+
+  it('ticks the logo once one has been brought back, and says so to the composer', () => {
+    expect([...doneSteps(project({ hasLogo: true }))]).toEqual(['logo'])
+    expect([...doneSteps(project({ hasLogo: false }))]).toEqual([])
+    expect(JSON.stringify(describeProject(project({ hasLogo: true })))).toContain('"step":"logo","what":"Get a logo","status":"in the project"')
+    expect(describeProject(project({ hasLogo: true })).logoKept).toBe(true)
   })
 
   it('also ticks the brand values and the logo from the facts the founder confirmed', () => {

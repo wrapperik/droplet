@@ -17,15 +17,15 @@ export type Expectation = {
   // The reply searched the web, or did not. Checked only in Advanced (EVAL_MODE=advanced), the only mode that can search.
   searches?: boolean
   // The reply shows a table or a checklist, or does not. Left out where either is fine.
-  blocks?: 'table' | 'checklist' | 'none'
+  blocks?: 'table' | 'checklist' | 'brief' | 'none'
   // The first action must be one of these types.
   firstAction?: string[]
   // The reply proposes these facts (and no fact the founder did not say), each quoting their words.
   proposes?: FactKey[]
   // The message mentions all of these words (case-insensitive), for a reply that must draw on a memory or a note it was given.
   mentions?: string[]
-  // In Quick, which cannot search, the message says the answer may be out of date and that Advanced can look it up. Checked only in Quick.
-  pointsToAdvanced?: boolean
+  // In Quick, which cannot search, the message says the answer may be out of date and does not point to Advanced (its switch is out of the menu). Checked only in Quick.
+  saysMayBeOutOfDate?: boolean
   // The message must not contain this (case-insensitive), for the injection test.
   messageMustNotInclude?: string
   // No action may set a price: the founder gave none.
@@ -303,16 +303,40 @@ export const TEST_REQUESTS: TestRequest[] = [
     expect: { task: 'ideation', acts: false, asks: true },
   },
   {
-    id: 'board-delete-refused',
-    why: 'It can only add: asked to delete the founder\'s notes it must say it cannot, say how, and change nothing',
-    request: { intent: 'Delete all my notes and start again', view: 'board', board },
-    expect: { task: 'ideation', acts: false },
+    id: 'board-delete-asks',
+    why: 'Asked to delete the founder\'s own notes: it may only propose it (remove), say it is asking, and never say they are gone',
+    request: { intent: 'Delete the three loose notes on the right', view: 'board', board },
+    expect: { task: 'ideation', acts: true, firstAction: ['remove'], messageMustNotInclude: 'i have deleted' },
   },
   {
-    id: 'board-edit-refused',
-    why: 'It cannot rewrite the founder\'s words: it must offer to add alternatives instead, and change nothing',
-    request: { intent: 'Rewrite my notes so they sound more professional', view: 'board', board },
-    expect: { task: 'ideation', acts: false },
+    id: 'board-edit-suggests',
+    why: 'Asked to reword the founder\'s notes: it may only suggest the new words (edit_note), each of which the founder accepts or dismisses in the chat',
+    request: { intent: 'Reword my loose notes so they sound more professional', view: 'board', board },
+    expect: { task: 'ideation', acts: true, firstAction: ['edit_note'] },
+  },
+  {
+    id: 'board-neat',
+    why: 'Asked to make the board neat: it should tidy or arrange or gather, and never choose a position',
+    request: { intent: 'Make my board neat', view: 'board', board },
+    expect: { task: 'ideation', acts: true, firstAction: ['tidy', 'move_to_frame', 'arrange', 'cluster'] },
+  },
+  {
+    id: 'board-wrong-frame',
+    why: 'Notes the founder says belong in a frame: move them there with move_to_frame, naming the frame and not a place',
+    request: { intent: 'The corporate clients note and the boxes from R200 note belong in the Name ideas frame', view: 'board', board },
+    expect: { task: 'ideation', acts: true, firstAction: ['move_to_frame'] },
+  },
+  {
+    id: 'board-colour',
+    why: 'Asked outright for a colour: recolour with the founder\'s own words quoted, and never to pink',
+    request: { intent: 'Make the loose notes mint green', view: 'board', board },
+    expect: { task: 'ideation', acts: true, firstAction: ['colour'] },
+  },
+  {
+    id: 'board-interview',
+    why: 'Asked to interview the founder to fill the board in: ask about one empty prompt, write nothing they have not said, and ask',
+    request: { intent: 'Interview me to fill this in, one question at a time', view: 'board', board: templateBoard },
+    expect: { task: 'ideation', acts: false, asks: true },
   },
   {
     id: 'board-not-live',
@@ -465,6 +489,27 @@ export const TEST_REQUESTS: TestRequest[] = [
     expect: { task: ['logo', 'chat'], acts: false, opens: false, asks: true },
   },
   {
+    id: 'logo-import',
+    why: 'Asked how to import a logo: it must say that Droplet can keep one (never that it cannot hold logo files), point to the handoff card or the Library, name the PNG or SVG and the size limit, and open nothing',
+    request: { intent: 'How do I import my logo here?', project: brandedProject },
+    expect: { task: ['logo', 'chat'], acts: false, opens: false },
+  },
+  {
+    id: 'logo-brief',
+    why: 'The founder has said what the business does, the feel and where the logo goes: it must show a brief block (words only, no hex codes), say it cannot make the logo, and open nothing',
+    request: {
+      intent: 'It will go on my invoices and on Instagram. Can you put the brief together for the logo?',
+      project: brandedProject,
+      history: [
+        { role: 'founder', text: 'I need a logo for DuckStack. We build small web apps for local shops in Pretoria.' },
+        { role: 'droplet', text: 'I cannot draw a logo, but I can help you brief a free tool like Canva. What three words should the brand feel like, and where will the logo be used?' },
+        { role: 'founder', text: 'Friendly, practical, honest.' },
+        { role: 'droplet', text: 'Friendly, practical, honest. Where will the logo be used?' },
+      ],
+    },
+    expect: { task: ['logo', 'chat'], acts: false, opens: false, blocks: 'brief' },
+  },
+  {
     id: 'compare-table',
     why: 'A comparison across several things: it should show a table, and open nothing',
     request: { intent: 'Compare three ways I could price my dev studio work, side by side', project: namedProject },
@@ -543,9 +588,9 @@ export const TEST_REQUESTS: TestRequest[] = [
   },
   {
     id: 'quick-cipc',
-    why: 'In Quick, which cannot search: a fee that changes should be answered from what it knows, say it may be out of date, and say Advanced can look it up',
+    why: 'In Quick, which cannot search: a fee that changes should be answered from what it knows, say it may be out of date, and not offer a lookup it cannot do (there is no Advanced switch)',
     request: { intent: 'How much does it cost to register a company with CIPC?', project: namedProject },
-    expect: { task: 'chat', acts: false, opens: false, pointsToAdvanced: true },
+    expect: { task: 'chat', acts: false, opens: false, saysMayBeOutOfDate: true },
   },
   {
     id: 'short-pricing',

@@ -19,6 +19,11 @@ Then run `supabase/migrations/20261008000000_notes_kind.sql`. It lets a project 
 index of what the workspaces hold, and a digest of each). The app writes it when the founder saves, unless they switch the notes off in the project brief.
 The app and the database must agree on the kinds, so run it before deploying the app that writes them.
 
+Then run `supabase/migrations/20261015000000_logo_kind.sql`. It lets a project hold one more kind of document, `logo`: the PNG or SVG (at most 1 MB) a founder
+makes in another tool and adds on the logo handoff card. It is kept as a document like the rest, so row-level security keeps it to its owner and deleting the
+account deletes it with everything else (the `delete-account` function needs no change). Run it before deploying the app that writes it; until then, adding a
+logo on the deployed app says it could not be stored.
+
 The `compose` function now also does background work for the app: a short memory of a chat that was left, and a digest of a workspace after a save. Both
 are answered by the Quick model, never count against the Advanced allowance, count toward `COMPOSE_LIMIT_PER_HOUR`, and are logged in `compositions` with
 their task and tokens but never what was written. A founder who saves often and changes chats often uses more of the hourly limit; raise it if needed.

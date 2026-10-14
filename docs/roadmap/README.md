@@ -29,6 +29,8 @@ Build chunks from the AI and UX review of 6 October 2026. Each chunk is one revi
 | 13 | [What Droplet used](13-what-i-used.md) | 04, 05, 06 |
 | 14 | [Later](14-later.md) | |
 
+Status (15 October 2026): 01 to 13 are built, except that 11 does not tint the loader for Advanced and 12 does not yet put the logo on the invoice, and 08 shows a suggested edit in the chat rather than on the note. 09 is covered by 06 (`<project_notes>`). Nothing has been checked by hand yet. 14 is for later.
+
 Dates: UX300 submission Sunday 25 October, presentations 28 and 29 October. Aim to finish 01 to 13 before the submission; cut from the end if time runs short.
 
 ## Decisions (6 October)
