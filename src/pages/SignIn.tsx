@@ -1,5 +1,5 @@
 import { useEffect, useId, useState, type FormEvent } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useSearchParams } from 'react-router-dom'
 import { DangerCircleIcon, InfoCircleIcon } from '@solar-icons/react/linear'
 import { MIN_PASSWORD } from '../lib/auth.ts'
 import { useAuth } from '../store/auth.ts'
@@ -16,7 +16,9 @@ export default function SignIn() {
   // The session is looked for here too, since this is where a founder can arrive straight from Google or from the link in an email.
   useEffect(() => start(), [start])
   const { busy, error, notice, signIn, signUp, signInWithGoogle, clearMessages } = useAuth()
-  const [mode, setMode] = useState<Mode>('sign-in')
+  // The landing page links here with ?mode=sign-up to open on making an account.
+  const [params] = useSearchParams()
+  const [mode, setMode] = useState<Mode>(() => (params.get('mode') === 'sign-up' ? 'sign-up' : 'sign-in'))
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')

@@ -31,6 +31,7 @@ const backend = (): AuthBackend => ({
   },
   signOut: async () => {},
   completeOnboarding: async () => true,
+  deleteAccount: async () => ({ ok: true as const }),
 })
 
 let before: DocumentStorage
@@ -47,9 +48,9 @@ afterEach(() => {
   setDocumentStorage(before)
 })
 
-const renderSignIn = () =>
+const renderSignIn = (entry = '/sign-in') =>
   render(
-    <MemoryRouter initialEntries={['/sign-in']}>
+    <MemoryRouter initialEntries={[entry]}>
       <Routes>
         <Route path="/sign-in" element={<SignIn />} />
         <Route path="/home" element={<p>The app</p>} />
@@ -70,6 +71,21 @@ describe('the sign-in screen', () => {
     expect(screen.getByRole('button', { name: 'Sign in' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: 'Continue with Google' })).toBeInTheDocument()
     expect(screen.queryByLabelText('What should we call you?')).not.toBeInTheDocument()
+  })
+
+  it('opens on making an account when the address says so (the landing page links here)', () => {
+    renderSignIn('/sign-in?mode=sign-up')
+    expect(screen.getByRole('heading', { name: 'Make your account' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Make an account' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByLabelText('What should we call you?')).toBeInTheDocument()
+  })
+
+  it('opens on signing in for ?mode=sign-in, and for a mode it does not know', () => {
+    const { unmount } = renderSignIn('/sign-in?mode=sign-in')
+    expect(screen.getByRole('heading', { name: 'Welcome back' })).toBeInTheDocument()
+    unmount()
+    renderSignIn('/sign-in?mode=nonsense')
+    expect(screen.getByRole('heading', { name: 'Welcome back' })).toBeInTheDocument()
   })
 
   it('asks for a name too when making an account, and says how long a password must be', async () => {
