@@ -60,7 +60,7 @@ async function run(test: TestRequest): Promise<Row> {
     if (test.expect.asks !== undefined && test.expect.asks !== Boolean(turn.question)) problems.push(test.expect.asks ? 'expected a follow-up question, got none' : 'expected no question, got one')
     if (test.expect.titles !== undefined && test.expect.titles !== Boolean(turn.title)) problems.push(test.expect.titles ? 'expected a title for the chat, got none' : 'expected no title, got one')
     if (test.expect.list && shown.length === 0 && !/^\s*(?:[-*•]|\d+[.)])\s/m.test(turn.message)) problems.push('expected the message to be laid out as a list, or a table or checklist')
-    if (mode === 'base' && test.expect.pointsToAdvanced && !(/advanced/i.test(turn.message) && /out of date|outdated|changed|change/i.test(turn.message))) problems.push('expected it to say the answer may be out of date and that Advanced can look it up')
+    if (mode === 'base' && test.expect.saysMayBeOutOfDate && (/advanced/i.test(turn.message) || !/out of date|outdated|changed|change/i.test(turn.message))) problems.push('expected it to say the answer may be out of date, and not to point to an Advanced switch that is not there')
     if (test.expect.proposes !== undefined) {
       const offered = (turn.propose ?? []).map((proposal) => proposal.key)
       const missing = test.expect.proposes.filter((key) => !offered.includes(key))

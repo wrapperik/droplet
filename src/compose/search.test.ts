@@ -245,13 +245,15 @@ describe('what the prompts say about searching and about being useful', () => {
 describe('what Quick is told, and what it is not', () => {
   const views = [undefined, 'brand', 'invoice', 'board'] as const
 
-  it.each(views)('Quick (%s) is not told how to search: it is told it cannot, to say an answer may be out of date, and that Advanced can look it up', (view) => {
+  it.each(views)('Quick (%s) is not told how to search: it is told it cannot, to say an answer may be out of date, and not to offer a lookup', (view) => {
     const quick = systemPromptFor(view, 'base')
     expect(quick).not.toMatch(/<web_search> says whether you can search Google this time/)
     expect(quick).not.toMatch(/Do not paste links or list sources/)
     expect(quick).toMatch(/You cannot search the web in this mode/)
     expect(quick).toMatch(/may be out of date/)
-    expect(quick).toMatch(/Advanced, in the menu beside the message box, can look it up/)
+    // there is no Advanced switch in the menu, so Quick never points to one
+    expect(quick).not.toMatch(/Advanced/)
+    expect(quick).toMatch(/never offer to/)
     expect(quick).toMatch(/Never claim to have looked something up/)
   })
 

@@ -1,18 +1,12 @@
 import { useEffect, useRef, type KeyboardEvent } from 'react'
 import { motion } from 'framer-motion'
-import { GlobalIcon, SignpostIcon, WidgetIcon } from '@solar-icons/react/linear'
-import { describeAllowance } from '../lib/advancedAllowance.ts'
+import { SignpostIcon, WidgetIcon } from '@solar-icons/react/linear'
 import type { WorkMode } from '../lib/workMode.ts'
-import type { Allowance } from '../compose/spec.ts'
 import './ModeMenu.css'
 
 type Props = {
   workMode: WorkMode
   onWorkMode: (mode: WorkMode) => void
-  // Advanced (a stronger model that searches the web) for the next message only.
-  advanced: boolean
-  onAdvanced: (on: boolean) => void
-  allowance: Allowance | null
 }
 
 const MODES: { id: WorkMode; label: string; hint: string; Icon: typeof SignpostIcon }[] = [
@@ -20,11 +14,11 @@ const MODES: { id: WorkMode; label: string; hint: string; Icon: typeof SignpostI
   { id: 'workspace', label: 'Workspace', hint: 'Every tool at once', Icon: WidgetIcon },
 ]
 
-// How Droplet works: Guide or Workspace, which stays until it is changed, and below them Advanced, for the next message only. Advanced is the
-// founder's choice and is never switched on by the app. When no Advanced answers are left the row stays, disabled, and says when one comes back.
-export default function ModeMenu({ workMode, onWorkMode, advanced, onAdvanced, allowance }: Props) {
+// How Droplet works: Guide or Workspace, which stays until it is changed. There was an Advanced switch below them (a stronger model that searches the web,
+// for the next message only); it is taken out of the menu because search needs a Gemini key with billing, which a free key does not have. The server
+// still understands `mode: 'advanced'`, so the switch can come back.
+export default function ModeMenu({ workMode, onWorkMode }: Props) {
   const listRef = useRef<HTMLDivElement>(null)
-  const search = describeAllowance(allowance)
 
   useEffect(() => {
     listRef.current?.querySelector<HTMLButtonElement>('[role="menuitemradio"][aria-checked="true"]')?.focus()
@@ -62,25 +56,6 @@ export default function ModeMenu({ workMode, onWorkMode, advanced, onAdvanced, a
           </button>
         ))}
       </div>
-      <div className="mode-menu__divider" role="separator" />
-      {/* aria-disabled and not disabled, so it can still be reached and its reason read out */}
-      <button
-        type="button"
-        role="menuitemcheckbox"
-        aria-checked={advanced}
-        aria-disabled={search.exhausted || undefined}
-        className="mode-menu__item mode-menu__item--switch"
-        onClick={() => {
-          if (!search.exhausted) onAdvanced(!advanced)
-        }}
-      >
-        <GlobalIcon size={18} aria-hidden="true" />
-        <span className="mode-menu__text">
-          <span className="mode-menu__label">Advanced</span>
-          <span className="mode-menu__hint">{search.text}</span>
-        </span>
-        <span className="mode-menu__switch" aria-hidden="true" />
-      </button>
     </motion.div>
   )
 }
