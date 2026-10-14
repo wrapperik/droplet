@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { checkCredentials, createSupabaseAuthBackend, displayNameOf, friendlyAuthError, localAuthBackend, MIN_PASSWORD, type SupabaseAuthClient } from './auth.ts'
-import { localDocumentStorage } from './storage.ts'
+import { localDocumentStorage, removeAllLocalDocuments } from './storage.ts'
 
 describe('checkCredentials', () => {
   const ok = { name: 'Megan', email: 'megan@example.com', password: 'longenough' }
@@ -90,8 +90,8 @@ function fakeClient(answers: Partial<{ signUp: unknown; signIn: unknown; oauth: 
         asked.push({ method: 'oauth', input })
         return (answers.oauth ?? { error: null }) as never
       },
-      signOut: async () => {
-        asked.push({ method: 'signOut' })
+      signOut: async (input?: unknown) => {
+        asked.push({ method: 'signOut', input })
         return { error: null }
       },
       updateUser: async (input: unknown) => {
@@ -208,3 +208,58 @@ describe('the introduction, kept in the account', () => {
   })
 })
 
+
+describe('deleting the account', () => {
+  const session = { user: { id: 'u1', email: 'm@example.com' }, access_token: 'the-founders-token' }
+  const config = (fetchImpl: typeof fetch) => ({ url: 'https://abc.supabase.co/', key: 'publishable', fetch: fetchImpl })
+
+  it('asks the function with the founder\'s own token and the publishable key, then ends the session on this device only', async () => {
+    const { client, asked } = fakeClient({ session })
+    const fetchImpl = vi.fn(async () => new Response('{"deleted":true}', { status: 200 }))
+    const result = await createSupabaseAuthBackend(client, config(fetchImpl as unknown as typeof fetch)).deleteAccount()
+    expect(result).toEqual({ ok: true })
+    expect(fetchImpl).toHaveBeenCalledWith('https://abc.supabase.co/functions/v1/delete-account', { method: 'POST', headers: { authorization: 'Bearer the-founders-token', apikey: 'publishable' } })
+    expect(asked).toEqual([{ method: 'signOut', input: { scope: 'local' } }])
+  })
+
+  it('does not call the function, or sign anyone out, with no session', async () => {
+    const { client, asked } = fakeClient()
+    const fetchImpl = vi.fn()
+    const result = await createSupabaseAuthBackend(client, config(fetchImpl as unknown as typeof fetch)).deleteAccount()
+    expect(result).toMatchObject({ ok: false, message: expect.stringContaining('Sign in again') })
+    expect(fetchImpl).not.toHaveBeenCalled()
+    expect(asked).toEqual([])
+  })
+
+  it('says plainly when the session has ended or the server could not do it, in the app\'s words, and signs nobody out', async () => {
+    for (const [status, text] of [[401, 'Sign in again'], [500, 'could not be deleted'], [404, 'could not be deleted']] as const) {
+      const { client, asked } = fakeClient({ session })
+      const fetchImpl = async () => new Response('{"message":"secret service detail"}', { status })
+      const result = await createSupabaseAuthBackend(client, config(fetchImpl as unknown as typeof fetch)).deleteAccount()
+      expect(result.ok).toBe(false)
+      expect(result.ok === false && result.message).toContain(text)
+      expect(result.ok === false && result.message).not.toContain('secret')
+      expect(asked).toEqual([])
+    }
+  })
+
+  it('says so when the server cannot be reached', async () => {
+    const { client } = fakeClient({ session })
+    const fetchImpl = async () => {
+      throw new TypeError('Failed to fetch')
+    }
+    expect(await createSupabaseAuthBackend(client, config(fetchImpl as unknown as typeof fetch)).deleteAccount()).toEqual({ ok: false, message: 'Could not reach the server. Check your connection and try again.' })
+  })
+
+  it('on this device alone removes every project\'s saved documents, and nothing else of the device\'s', async () => {
+    window.localStorage.setItem('droplet-project-duckstack-palette', '{}')
+    window.localStorage.setItem('droplet-project-local-abc-chats', '[]')
+    window.localStorage.setItem('droplet-theme', 'dark')
+    expect(await localAuthBackend.deleteAccount()).toEqual({ ok: true })
+    expect(window.localStorage.getItem('droplet-project-duckstack-palette')).toBeNull()
+    expect(window.localStorage.getItem('droplet-project-local-abc-chats')).toBeNull()
+    expect(window.localStorage.getItem('droplet-theme')).toBe('dark')
+    window.localStorage.removeItem('droplet-theme')
+    expect(removeAllLocalDocuments()).toBe(true)
+  })
+})

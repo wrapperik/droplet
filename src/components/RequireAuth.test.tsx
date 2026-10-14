@@ -17,6 +17,7 @@ const backend = (user: AuthUser | null, delayMs = 0): AuthBackend => ({
   signInWithGoogle: async () => ({ ok: true }),
   signOut: async () => {},
   completeOnboarding: async () => true,
+  deleteAccount: async () => ({ ok: true as const }),
 })
 
 let before: DocumentStorage

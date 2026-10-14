@@ -7,7 +7,7 @@ import { setAuthBackend, useAuth } from './auth.ts'
 const megan: AuthUser = { id: 'u1', email: 'megan@example.com', name: 'Megan', onboarded: true }
 
 // A backend a test controls: who is signed in, what it answers, and who is listening.
-function fakeBackend(options: { user?: AuthUser | null; kind?: 'local' | 'supabase'; signUp?: AuthResult; signIn?: AuthResult; google?: AuthResult; onboardingSaved?: boolean } = {}) {
+function fakeBackend(options: { user?: AuthUser | null; kind?: 'local' | 'supabase'; signUp?: AuthResult; signIn?: AuthResult; google?: AuthResult; onboardingSaved?: boolean; deleteAccount?: AuthResult } = {}) {
   const storage = slowMemoryStorage(1).driver
   const listeners = new Set<(user: AuthUser | null) => void>()
   let current: AuthUser | null = options.user ?? null
@@ -39,6 +39,12 @@ function fakeBackend(options: { user?: AuthUser | null; kind?: 'local' | 'supaba
     completeOnboarding: async () => {
       calls.push('completeOnboarding')
       return options.onboardingSaved ?? true
+    },
+    deleteAccount: async () => {
+      calls.push('deleteAccount')
+      const result = options.deleteAccount ?? { ok: true }
+      if (result.ok) current = null
+      return result
     },
   }
   return { backend, storage, calls, emit: (user: AuthUser | null) => { current = user; listeners.forEach((listener) => listener(user)) }, listenerCount: () => listeners.size }
@@ -243,3 +249,55 @@ describe('finishing the introduction', () => {
   })
 })
 
+
+describe('deleting the account', () => {
+  it('signs the founder out, goes back to this browser\'s storage and leaves a notice for the sign-in screen', async () => {
+    const { backend, calls, storage } = fakeBackend({ user: megan })
+    setAuthBackend(backend)
+    start()
+    await vi.waitFor(() => expect(documentStorage()).toBe(storage))
+    expect(await useAuth.getState().deleteAccount()).toBe(true)
+    expect(calls).toContain('deleteAccount')
+    expect(useAuth.getState()).toMatchObject({ status: 'signedOut', user: null, busy: false, error: '', notice: 'Your account and everything in it has been deleted.' })
+    expect(documentStorage()).toBe(localDocumentStorage)
+  })
+
+  it('keeps the founder signed in and says what went wrong when it could not be done', async () => {
+    const { backend } = fakeBackend({ user: megan, deleteAccount: { ok: false, message: 'Your account could not be deleted. Try again in a moment.' } })
+    setAuthBackend(backend)
+    start()
+    await vi.waitFor(() => expect(useAuth.getState().status).toBe('signedIn'))
+    expect(await useAuth.getState().deleteAccount()).toBe(false)
+    expect(useAuth.getState()).toMatchObject({ status: 'signedIn', busy: false, error: 'Your account could not be deleted. Try again in a moment.', notice: '' })
+  })
+
+  it('says it in the app\'s words when the backend itself fails', async () => {
+    const { backend } = fakeBackend({ user: megan })
+    setAuthBackend({ ...backend, deleteAccount: async () => { throw new Error('boom: service detail') } })
+    start()
+    await vi.waitFor(() => expect(useAuth.getState().status).toBe('signedIn'))
+    expect(await useAuth.getState().deleteAccount()).toBe(false)
+    expect(useAuth.getState().error).toBe('Your account could not be deleted. Try again in a moment.')
+  })
+
+  it('ignores a second press while the first is still working', async () => {
+    const { backend, calls } = fakeBackend({ user: megan })
+    setAuthBackend(backend)
+    start()
+    await vi.waitFor(() => expect(useAuth.getState().status).toBe('signedIn'))
+    const first = useAuth.getState().deleteAccount()
+    expect(await useAuth.getState().deleteAccount()).toBe(false)
+    await first
+    expect(calls.filter((call) => call === 'deleteAccount')).toHaveLength(1)
+  })
+
+  it('on this device alone keeps the sample founder where they are and sets no sign-in notice', async () => {
+    const { backend, calls } = fakeBackend({ user: megan, kind: 'local' })
+    setAuthBackend({ ...backend, storage: localDocumentStorage })
+    start()
+    await vi.waitFor(() => expect(useAuth.getState().status).toBe('signedIn'))
+    expect(await useAuth.getState().deleteAccount()).toBe(true)
+    expect(calls).toContain('deleteAccount')
+    expect(useAuth.getState()).toMatchObject({ status: 'signedIn', busy: false, notice: '' })
+  })
+})

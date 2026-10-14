@@ -1,24 +1,72 @@
-import { useCallback } from 'react'
+import { useCallback, useId, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { AltArrowLeftIcon, Logout2Icon, RestartIcon } from '@solar-icons/react/linear'
+import { AltArrowLeftIcon, DangerCircleIcon, InfoCircleIcon, Logout2Icon, RestartIcon, TrashBinMinimalisticIcon } from '@solar-icons/react/linear'
 import { authBackend, useAuth } from '../store/auth.ts'
 import './Account.css'
 
-// Who is signed in, where their work is kept, the introduction again, and signing out. Standard on purpose, like sign-in: nothing here is
-// clever. Deleting the account and its data is not built yet (it needs a server function), so there is no button for it.
+// The word to type on this device alone, where there is no email address to type.
+export const DELETE_WORD = 'DELETE'
+
+// Who is signed in, where their work is kept, the introduction again, signing out, and deleting the account with everything in it. Standard on
+// purpose, like sign-in: nothing here is clever. Deleting is always visible and complete (manifesto principle 6): one visible action, an
+// honest list of what goes, and a typed confirmation, since it cannot be undone.
 export default function Account() {
   const user = useAuth((state) => state.user)
   const signOut = useAuth((state) => state.signOut)
+  const deleteAccount = useAuth((state) => state.deleteAccount)
+  const busy = useAuth((state) => state.busy)
+  const error = useAuth((state) => state.error)
+  const clearMessages = useAuth((state) => state.clearMessages)
   const navigate = useNavigate()
+  const [confirming, setConfirming] = useState(false)
+  const [typed, setTyped] = useState('')
+  // On this device alone there is no sign-in screen to say it was done, so it is said here.
+  const [clearedHere, setClearedHere] = useState(false)
+  const openRef = useRef<HTMLButtonElement>(null)
+  const ids = { panel: useId(), input: useId(), list: useId() }
 
   const leave = useCallback(async () => {
     await signOut()
     navigate('/sign-in', { replace: true })
   }, [navigate, signOut])
 
+  const open = () => {
+    if (confirming) return
+    clearMessages()
+    setClearedHere(false)
+    setTyped('')
+    setConfirming(true)
+  }
+
+  const cancel = () => {
+    if (busy) return
+    clearMessages()
+    setConfirming(false)
+    setTyped('')
+    // The panel that had focus is going, so focus goes back to the button that opened it.
+    openRef.current?.focus()
+  }
+
   if (!user) return null
   // On this device alone there is no account: what is kept is kept in this browser, and there is no one to sign out.
   const onDevice = authBackend().kind === 'local'
+  const phrase = onDevice ? DELETE_WORD : user.email
+  const matches = typed.trim().toLowerCase() === phrase.toLowerCase() && phrase !== ''
+
+  const confirmDelete = async () => {
+    if (busy || !matches) return
+    const done = await deleteAccount()
+    if (!done) return
+    if (onDevice) {
+      setConfirming(false)
+      setTyped('')
+      setClearedHere(true)
+      openRef.current?.focus()
+    } else {
+      // The sign-in screen says that it is done.
+      navigate('/sign-in', { replace: true })
+    }
+  }
 
   return (
     <div className="account-shell">
@@ -79,6 +127,106 @@ export default function Account() {
               </section>
             </div>
           )}
+
+          <div className="account-card account-card--group account-card--danger">
+            <section className="account-row" aria-labelledby="account-delete">
+              <div className="account-row__text">
+                <h2 id="account-delete">{onDevice ? 'Delete everything on this device' : 'Delete account and data'}</h2>
+                <p>
+                  {onDevice
+                    ? 'Remove every project and everything saved in this browser. This cannot be undone.'
+                    : 'Remove your account and everything in it, for good. This cannot be undone.'}
+                </p>
+              </div>
+              <button
+                ref={openRef}
+                type="button"
+                className="account-row__button account-row__button--danger"
+                aria-expanded={confirming}
+                aria-controls={ids.panel}
+                onClick={open}
+              >
+                <TrashBinMinimalisticIcon size={16} aria-hidden="true" />
+                {onDevice ? 'Delete everything on this device' : 'Delete account and data'}
+              </button>
+            </section>
+
+            <p className="account-delete__done" role="status" hidden={!clearedHere}>
+              <InfoCircleIcon size={18} aria-hidden="true" />
+              <span>Everything saved on this device has been deleted.</span>
+            </p>
+
+            {confirming && (
+              <form
+                id={ids.panel}
+                className="account-delete"
+                aria-labelledby="account-delete-title"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  void confirmDelete()
+                }}
+              >
+                <h3 id="account-delete-title">This will delete, for good:</h3>
+                <ul id={ids.list}>
+                  {onDevice ? (
+                    <>
+                      <li>Every project in this browser</li>
+                      <li>Every palette, board, invoice, client and chat saved in them</li>
+                      <li>Droplet&rsquo;s notes on your projects</li>
+                    </>
+                  ) : (
+                    <>
+                      <li>Every project, and every palette, board, invoice, client and chat saved in them</li>
+                      <li>Droplet&rsquo;s notes on your projects</li>
+                      <li>The log of your requests to the AI (never your words, only how each went)</li>
+                      <li>Your account, so you will not be able to sign in again with it</li>
+                    </>
+                  )}
+                </ul>
+                <p className="account-delete__warning">There is no way to get any of it back. Export what you want to keep first.</p>
+
+                <div className="account-delete__field">
+                  <label htmlFor={ids.input}>
+                    {onDevice ? (
+                      <>
+                        Type <strong>{DELETE_WORD}</strong> to confirm
+                      </>
+                    ) : (
+                      <>
+                        Type your email address, <strong>{user.email}</strong>, to confirm
+                      </>
+                    )}
+                  </label>
+                  <input
+                    id={ids.input}
+                    type="text"
+                    autoComplete="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    autoFocus
+                    aria-describedby={ids.list}
+                    value={typed}
+                    readOnly={busy}
+                    onChange={(event) => setTyped(event.target.value)}
+                  />
+                </div>
+
+                <p className="account-delete__error" role="alert" hidden={error === ''}>
+                  <DangerCircleIcon size={18} aria-hidden="true" />
+                  <span>{error}</span>
+                </p>
+
+                <div className="account-delete__actions">
+                  <button type="button" className="account-row__button" onClick={cancel} disabled={busy}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="account-row__button account-row__button--danger-solid" disabled={!matches || busy} aria-busy={busy}>
+                    {busy ? 'Deleting' : 'Delete everything'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
         </div>
       </main>
     </div>

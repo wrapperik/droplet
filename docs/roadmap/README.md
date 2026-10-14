@@ -59,4 +59,4 @@ From the local log (`.droplet/compositions.jsonl`, 189 requests, 3 to 6 October)
 - A new chat forgets everything; founders asked "what do you know about me?" and "how did you know my location?".
 - With the current free key, any request with Google Search on returns 429 ("check your plan and billing details") on both models, while the same request without search works. Search likely needs billing on the key. Check AI Studio's rate limit page.
 
-Pitch Must-haves not built: logo handoff card, type pairing (fonts), review and export (covered by 07), dependencies and outstanding assets, `proposedMemory` (covered by 04), delete account.
+Pitch Must-haves not built: logo handoff card, type pairing (fonts), review and export (covered by 07), dependencies and outstanding assets, `proposedMemory` (covered by 04).

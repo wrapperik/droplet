@@ -1,6 +1,7 @@
 # Deploying Droplet
 
-Two things go live: the **`compose` Edge Function** in Supabase (the only place the Gemini key exists) and the **web app** on Vercel. Do them in
+Three things go live: the **`compose` Edge Function** in Supabase (the only place the Gemini key exists), the **`delete-account` Edge Function** (what the
+account page's Delete account and data button calls) and the **web app** on Vercel. Do them in
 this order. Set up Supabase first (`docs/supabase-setup.md`): the project, the keys in `.env`, and the first migration.
 
 ## 1. The record of compositions (one more migration)
@@ -84,6 +85,30 @@ curl -s https://untyznmtxgacrkogigar.supabase.co/functions/v1/compose \
 
 Without the header it answers `{"error":"unauthorised",...}` with a 401. In the dashboard, **Edge Functions, compose, Logs** shows each call, and
 **Table Editor, compositions** shows the record.
+
+### The `delete-account` function
+
+The account page's **Delete account and data** button asks this function to delete the signed-in founder. It checks the founder's token with
+Supabase Auth, then deletes that user through the admin API with the function's service role key. Every table references `auth.users` with
+`on delete cascade`, so their profile, projects, documents and request log go with the account. (There are no Storage buckets yet; when logos and
+exports are stored there, the function must remove those files too.)
+
+It needs no secret of your own: Supabase gives every Edge Function `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` by default, the same two
+`compose` uses for the `compositions` table. Deploy it once, and again after any change to its source:
+
+```
+npm run deploy:delete-account
+```
+
+That builds `supabase/functions/delete-account/index.ts` (git-ignored) and deploys it. `supabase/config.toml` switches **Verify JWT** off for it,
+as for `compose`, because the function checks the token itself. To deploy without the command line, run `npm run build:edge`, make a function called
+`delete-account` in the dashboard, paste that file and turn **Verify JWT** off.
+
+**Check it** only with a throwaway account, since it really deletes. Without a token it answers 401 and deletes nobody:
+
+```
+curl -s -X POST https://untyznmtxgacrkogigar.supabase.co/functions/v1/delete-account
+```
 
 ## 3. The web app on Vercel
 

@@ -220,6 +220,8 @@ describe('what the prompts teach about Droplet and guiding', () => {
     expect(prompt).toMatch(/Three workspaces are built/)
     expect(prompt).toMatch(/Not built yet, so never offer them as if they exist/)
     expect(prompt).toMatch(/Droplet does not make logos or any images/)
+    expect(prompt).toMatch(/Delete account and data/)
+    expect(prompt).not.toMatch(/quotes, payments, accounting links, and deleting an account/)
     expect(prompt).toMatch(/1\. name \(the board\)/)
     expect(prompt).toMatch(/do not open anything and do not list options/)
     expect(prompt).toMatch(/Never open one because you think it would help/)

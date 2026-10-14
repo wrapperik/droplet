@@ -13,7 +13,8 @@
     "typecheck": "tsc -b",
     "eval:compose": "node --env-file=.env scripts/eval-compose.ts",
     "build:edge": "node scripts/build-edge.mjs",
-    "deploy:compose": "npm run build:edge && npx supabase functions deploy compose"
+    "deploy:compose": "npm run build:edge && npx supabase functions deploy compose",
+    "deploy:delete-account": "npm run build:edge -- delete-account && npx supabase functions deploy delete-account"
   },
   "dependencies": {
     "@fontsource-variable/google-sans": "^5.3.1",

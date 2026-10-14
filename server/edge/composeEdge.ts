@@ -3,6 +3,7 @@ import { callerFromEnv, type ComposeEnv } from '../composeEnv.ts'
 import { handleAllowance, handleCompose } from '../composeService.ts'
 import type { CompositionLogEntry } from '../compositionLog.ts'
 import { DAY_MS, type AdvancedUse } from '../rateLimit.ts'
+import { bearerToken, corsHeaders, jsonReply, userOfToken, type Fetch } from './edgeHttp.ts'
 
 // The `compose` function as it runs in Supabase (an Edge Function, in Deno). It uses only what the web gives every runtime, `Request`,
 // `Response` and `fetch`, so it is tested here in Node and needs no Supabase library. In front of the same service the dev server uses it
@@ -38,15 +39,9 @@ export type ComposeHandlerDeps = {
   now?: () => number
 }
 
-const CORS = {
-  'access-control-allow-origin': '*',
-  'access-control-allow-headers': 'authorization, apikey, content-type, x-client-info',
-  'access-control-allow-methods': 'GET, POST, OPTIONS',
-  'access-control-max-age': '86400',
-}
+const CORS = corsHeaders('GET, POST, OPTIONS')
 
-const json = (status: number, body: unknown, extra: Record<string, string> = {}) =>
-  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...CORS, ...extra } })
+const json = (status: number, body: unknown, extra: Record<string, string> = {}) => jsonReply(CORS, status, body, extra)
 
 // What the deployed app says where the dev server tells you to edit .env.local.
 const MESSAGES = {
@@ -64,7 +59,7 @@ export function createComposeHandler(deps: ComposeHandlerDeps): (request: Reques
     if (request.method !== 'POST' && request.method !== 'GET') return json(405, { error: 'bad_request', message: 'Use POST.' }, { allow: 'GET, POST' })
 
     try {
-      const token = /^Bearer\s+(.+)$/i.exec(request.headers.get('authorization') ?? '')?.[1]?.trim()
+      const token = bearerToken(request)
       const user = token ? await deps.authenticate(token) : null
       if (!user) return json(401, { error: 'unauthorised', message: 'Sign in to use Droplet.' })
 
@@ -109,8 +104,6 @@ export function createComposeHandler(deps: ComposeHandlerDeps): (request: Reques
 
 // ---- Supabase, over plain HTTP ----
 
-type Fetch = typeof fetch
-
 // The deps for the real thing: Supabase Auth and the `compositions` table through their HTTP APIs, with the function's own service key.
 export function createEdgeComposeHandler(env: ComposeEnv, fetchImpl: Fetch = fetch): (request: Request) => Promise<Response> {
   const url = env.SUPABASE_URL?.replace(/\/+$/, '') ?? ''
@@ -132,10 +125,7 @@ export function createEdgeComposeHandler(env: ComposeEnv, fetchImpl: Fetch = fet
     advancedPerDay: configured.advancedPerDay,
 
     async authenticate(token) {
-      const response = await fetchImpl(`${url}/auth/v1/user`, { headers: { apikey: serviceKey, authorization: `Bearer ${token}` } })
-      if (!response.ok) return null
-      const user = (await response.json().catch(() => null)) as { id?: unknown } | null
-      return typeof user?.id === 'string' && user.id !== '' ? { id: user.id } : null
+      return userOfToken(fetchImpl, url, serviceKey, token)
     },
 
     async recentCount(userId, sinceIso) {

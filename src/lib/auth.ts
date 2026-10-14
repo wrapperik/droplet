@@ -1,6 +1,6 @@
 import { mockUser } from './mockProjects.ts'
 import { createSupabaseDocumentStorage, type DocumentsClient } from './supabaseStorage.ts'
-import { localDocumentStorage, type DocumentStorage } from './storage.ts'
+import { localDocumentStorage, removeAllLocalDocuments, type DocumentStorage } from './storage.ts'
 
 // Signing in, behind one small interface, so the screens and the store do not know which service is under them. The real one is Supabase
 // (email and password, or Google). Without Supabase set up there is a stand-in that is always signed in as the sample founder, so the app
@@ -27,6 +27,9 @@ export interface AuthBackend {
   signOut(): Promise<void>
   // Remembers, in the account, that the founder has been through the introduction. False if it could not be saved.
   completeOnboarding(): Promise<boolean>
+  // Deletes the account and everything in it: every project and what is saved in it, and the log of AI requests (Supabase), or everything saved
+  // in this browser (this device alone). On success the founder is signed out. The message of a failure is in the app's words.
+  deleteAccount(): Promise<AuthResult>
 }
 
 // ---- What is checked before anything is sent ----
@@ -97,6 +100,10 @@ export const localAuthBackend: AuthBackend = {
   async completeOnboarding() {
     return true
   },
+  // There is no account here, only what was saved in this browser, so that is what goes.
+  async deleteAccount() {
+    return removeAllLocalDocuments() ? { ok: true } : { ok: false, message: 'Could not remove what is saved in this browser. Try again.' }
+  },
 }
 
 // ---- Supabase ----
@@ -107,12 +114,12 @@ type SupabaseAuthResponse = { data: { user: SupabaseUser | null; session: unknow
 // The little of a Supabase client that this needs, so a test can stand in for it.
 export type SupabaseAuthClient = DocumentsClient & {
   auth: {
-    getSession(): Promise<{ data: { session: { user: SupabaseUser } | null } }>
+    getSession(): Promise<{ data: { session: { user: SupabaseUser; access_token?: string } | null } }>
     onAuthStateChange(listener: (event: string, session: { user: SupabaseUser } | null) => void): { data: { subscription: { unsubscribe(): void } } }
     signUp(input: { email: string; password: string; options: { data: { display_name: string }; emailRedirectTo: string } }): Promise<SupabaseAuthResponse>
     signInWithPassword(input: { email: string; password: string }): Promise<SupabaseAuthResponse>
     signInWithOAuth(input: { provider: 'google'; options: { redirectTo: string } }): Promise<{ error: { message: string } | null }>
-    signOut(): Promise<{ error: { message: string } | null }>
+    signOut(options?: { scope?: 'global' | 'local' | 'others' }): Promise<{ error: { message: string } | null }>
     updateUser(input: { data: Record<string, unknown> }): Promise<{ error: { message: string } | null }>
   }
 }
@@ -123,7 +130,12 @@ const toUser = (user: SupabaseUser | null | undefined): AuthUser | null =>
 // Where the founder is sent after confirming an email or coming back from Google.
 const backTo = () => `${window.location.origin}/home`
 
-export function createSupabaseAuthBackend(client: SupabaseAuthClient): AuthBackend {
+// Where the `delete-account` Edge Function is: the project's address and the publishable key it asks for (both public, see supabase.ts).
+export type DeleteAccountConfig = { url?: string; key?: string; fetch?: typeof fetch }
+
+const DELETE_FAILED = 'Your account could not be deleted. Try again in a moment.'
+
+export function createSupabaseAuthBackend(client: SupabaseAuthClient, config: DeleteAccountConfig = {}): AuthBackend {
   return {
     kind: 'supabase',
     storage: createSupabaseDocumentStorage(client),
@@ -175,6 +187,23 @@ export function createSupabaseAuthBackend(client: SupabaseAuthClient): AuthBacke
         return !error
       } catch {
         return false
+      }
+    },
+    async deleteAccount() {
+      const url = (config.url ?? import.meta.env.VITE_SUPABASE_URL)?.replace(/\/+$/, '')
+      const key = config.key ?? import.meta.env.VITE_SUPABASE_ANON_KEY
+      try {
+        // The founder's own access token, not the publishable key: the function checks it with Supabase Auth and deletes whoever it belongs to.
+        const token = (await client.auth.getSession()).data.session?.access_token
+        if (!url || !token) return { ok: false, message: 'Your session has ended. Sign in again, then try deleting your account.' }
+        const response = await (config.fetch ?? fetch)(`${url}/functions/v1/delete-account`, { method: 'POST', headers: { authorization: `Bearer ${token}`, apikey: key ?? '' } })
+        if (response.status === 401) return { ok: false, message: 'Your session has ended. Sign in again, then try deleting your account.' }
+        if (!response.ok) return { ok: false, message: DELETE_FAILED }
+        // The account is gone, so the session is ended here only: asking the service to end it would fail for a user that no longer exists.
+        await client.auth.signOut({ scope: 'local' }).catch(() => undefined)
+        return { ok: true }
+      } catch (error) {
+        return { ok: false, message: error instanceof Error && /fetch|network|load failed/i.test(error.message) ? friendlyAuthError(error.message) : DELETE_FAILED }
       }
     },
   }

@@ -1,4 +1,4 @@
-# Supabase CLI settings for this repo. Only what the CLI needs to deploy the `compose` function.
+# Supabase CLI settings for this repo. Only what the CLI needs to deploy the `compose` and `delete-account` functions.
 project_id = "droplet"
 
 [functions.compose]
@@ -7,3 +7,10 @@ enabled = true
 # does not understand every kind of project key, is switched off. A request with no valid founder's token still gets a 401.
 verify_jwt = false
 entrypoint = "./functions/compose/index.ts"
+
+[functions.delete-account]
+enabled = true
+# Like compose, the function checks the founder's token itself, with Supabase Auth (see server/edge/deleteAccountEdge.ts), so the platform's own
+# check is switched off. A request with no valid founder's token still gets a 401, and the account deleted is always the token's own.
+verify_jwt = false
+entrypoint = "./functions/delete-account/index.ts"

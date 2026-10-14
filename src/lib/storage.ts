@@ -16,7 +16,8 @@ export interface DocumentStorage {
   remove(projectId: string, kind: DocKind): Promise<void>
 }
 
-const keyFor = (projectId: string, kind: DocKind) => `droplet-project-${projectId}-${kind}`
+const LOCAL_PREFIX = 'droplet-project-'
+const keyFor = (projectId: string, kind: DocKind) => `${LOCAL_PREFIX}${projectId}-${kind}`
 
 // This browser's local storage, under the keys the app has always used, so what was saved before is still there.
 export const localDocumentStorage: DocumentStorage = {
@@ -43,6 +44,22 @@ export const localDocumentStorage: DocumentStorage = {
       // Nothing to remove.
     }
   },
+}
+
+// Removes every project's saved documents from this browser, whichever projects there were, for "Delete everything on this device". Only
+// documents: the theme and the work mode are preferences of the device and not the founder's work. True if nothing could be left behind.
+export function removeAllLocalDocuments(): boolean {
+  try {
+    const stale: string[] = []
+    for (let index = 0; index < window.localStorage.length; index++) {
+      const key = window.localStorage.key(index)
+      if (key?.startsWith(LOCAL_PREFIX)) stale.push(key)
+    }
+    for (const key of stale) window.localStorage.removeItem(key)
+    return true
+  } catch {
+    return false
+  }
 }
 
 let current: DocumentStorage = localDocumentStorage

@@ -25,6 +25,9 @@ type AuthState = {
   signOut: () => Promise<void>
   // The founder has been through the introduction. Never holds them up: if it could not be saved they carry on, and see it again next time.
   completeOnboarding: () => Promise<void>
+  // Deletes the account and everything in it. True once it is gone. With an account the founder is then signed out and the sign-in screen
+  // says it was deleted; on this device alone only what is saved in this browser goes. A failure is said in `error`, in plain words.
+  deleteAccount: () => Promise<boolean>
   clearMessages: () => void
 }
 
@@ -125,6 +128,30 @@ export const useAuth = create<AuthState>((set, get) => {
       finished.add(user.id)
       set({ user: { ...user, onboarded: true } })
       await authBackend().completeOnboarding()
+    },
+
+    deleteAccount: async () => {
+      if (get().busy) return false
+      set({ busy: true, error: '', notice: '' })
+      let result: Awaited<ReturnType<AuthBackend['deleteAccount']>>
+      try {
+        result = await authBackend().deleteAccount()
+      } catch {
+        result = { ok: false, message: 'Your account could not be deleted. Try again in a moment.' }
+      }
+      if (!result.ok) {
+        set({ busy: false, error: result.message })
+        return false
+      }
+      if (authBackend().kind === 'local') {
+        set({ busy: false })
+        return true
+      }
+      // Gone: the documents go back to this browser's storage and nobody is signed in, before the notice is set so the sign-in screen shows it.
+      finished.clear()
+      follow(null)
+      set({ busy: false, error: '', notice: 'Your account and everything in it has been deleted.' })
+      return true
     },
 
     clearMessages: () => set({ error: '', notice: '' }),

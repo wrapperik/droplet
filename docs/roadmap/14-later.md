@@ -13,4 +13,3 @@ Short notes; each needs its own design pass before building.
 - **Chat blocks:** `options` and `palette_options` (swatches that travel into the palette on Use this), `review`, `confirm`; Save to library on a block.
 - **Prompt size:** trim the 8,000 to 9,000 token prompts; measure with the eval.
 - **Measures:** log Undo this pressed straight after a turn, Try again and proposals turned down, as signs of a bad turn.
-- **Delete account and data:** the server function and the button (pitch Must-have, manifesto principle 6).

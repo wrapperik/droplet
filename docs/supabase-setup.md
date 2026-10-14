@@ -41,6 +41,16 @@ Open **Authentication**.
 Run `npm run dev` and open `/home`. You are sent to the sign-in screen. Make an account, sign in, and make a change that you save: in **Table
 Editor**, `project_documents` has a row for your project. Sign in as someone else and their projects are empty.
 
+## 5. Deleting an account
+
+The account page's **Delete account and data** button asks the `delete-account` Edge Function to delete the signed-in founder from Supabase Auth.
+Every table (`profiles`, `projects`, `project_documents`, `compositions`) references `auth.users` with `on delete cascade`, so that one deletion
+removes everything of theirs. The function needs the project's service role key to do it. Supabase gives every Edge Function `SUPABASE_URL` and
+`SUPABASE_SERVICE_ROLE_KEY` as secrets by default, the same two the `compose` function already reads, so there is nothing to set. If you have
+ever run `npx supabase secrets set SUPABASE_SERVICE_ROLE_KEY=...` yourself, make sure it is the project's current secret key. Deploy the function
+with `npm run deploy:delete-account` (see `docs/deploy.md`). Try it with a throwaway account: after deleting, the user is gone from
+**Authentication, Users** and their rows from `projects` and `compositions`.
+
 ## Free plan
 
 Free projects pause after about a week without use and have no backups. Open the dashboard before a presentation or a testing session to make sure

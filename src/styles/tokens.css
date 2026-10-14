@@ -62,6 +62,9 @@
   --shell: var(--white); /* Home's page, sidebar and docked chat: white on a light screen, dark charcoal on a dark one. What sits on it uses .on-shell. */
   --screen: var(--white); /* The rounded working screen beside the sidebar */
   --on-status: var(--white); /* Icon inside a status circle */
+  /* Deleting for good: a red text colour and fill. #B91C1C is 6.47 on white (--screen) and 6.06 on Mist; --on-danger (white) on it is 6.47. */
+  --danger: #b91c1c;
+  --on-danger: var(--white);
   --loader: #000000; /* The thinking indicator: pure black on a light screen, pure white on a dark one */
 
   --overlay-06: rgb(14 26 43 / 0.06); /* Quiet fills: icon wells, active nav item */
@@ -136,6 +139,9 @@
   --on-pending: var(--haze); /* About 6 on the grey over Night */
   --screen: var(--charcoal);
   --on-status: var(--ink);
+  /* #F87171 is 5.55 on the dark screen (#232529), 6.35 on Night and 5.05 on windows (#2A2C31); --on-danger (Ink) on it is 6.32. */
+  --danger: #f87171;
+  --on-danger: var(--ink);
   --loader: #ffffff;
 
   --overlay-06: rgb(255 255 255 / 0.07);

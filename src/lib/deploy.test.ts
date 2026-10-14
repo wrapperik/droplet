@@ -19,18 +19,21 @@ describe('the deployment files', () => {
   it('builds the Edge Function before it deploys it', () => {
     expect(pkg.scripts['build:edge']).toBe('node scripts/build-edge.mjs')
     expect(pkg.scripts['deploy:compose']).toMatch(/^npm run build:edge && .*functions deploy compose/)
+    expect(pkg.scripts['deploy:delete-account']).toMatch(/^npm run build:edge( -- delete-account)? && .*functions deploy delete-account/)
     expect(existsSync('scripts/build-edge.mjs')).toBe(true)
   })
 
   it('switches the platform\'s token check off for the function only because the function checks the token itself', () => {
     const config = readFileSync('supabase/config.toml', 'utf8')
     expect(config).toMatch(/\[functions\.compose\][^[]*verify_jwt = false/)
-    expect(readFileSync('server/edge/composeEdge.ts', 'utf8')).toMatch(/\/auth\/v1\/user/)
+    expect(readFileSync('server/edge/edgeHttp.ts', 'utf8')).toMatch(/\/auth\/v1\/user/)
+    expect(config).toMatch(/\[functions\.delete-account\][^[]*verify_jwt = false/)
   })
 
   it('does not keep the generated function in the repo, and does not let a key in', () => {
     const ignore = readFileSync('.gitignore', 'utf8')
     expect(ignore).toMatch(/^supabase\/functions\/compose\/index\.ts$/m)
+    expect(ignore).toMatch(/^supabase\/functions\/delete-account\/index\.ts$/m)
     expect(ignore).toMatch(/^\.env$/m)
   })
 
