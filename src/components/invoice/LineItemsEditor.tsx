@@ -3,6 +3,8 @@ import { AddCircleIcon, AltArrowDownIcon, AltArrowUpIcon, StarIcon, TrashBinMini
 import { computeTotals, lineIsBlank, lineProblems, quantityIsValid, type Line, type LineProblem } from '../../lib/invoice.ts'
 import { centsToField, formatRand, parseMoney } from '../../lib/money.ts'
 import type { InvoiceAction } from '../../lib/invoiceState.ts'
+import { lineSuggestions } from '../../lib/inlineAi.ts'
+import AskDroplet from '../AskDroplet.tsx'
 import ToolWindow from '../ToolWindow.tsx'
 import './LineItemsEditor.css'
 
@@ -104,6 +106,7 @@ function Row({ line, index, count, problems, amount, dispatch }: RowProps) {
         {amount === null ? '–' : formatRand(amount)}
       </output>
       <div className="lines__actions">
+        <AskDroplet compact suggestions={line.description.trim() === '' ? [] : lineSuggestions(index + 1, line.description)} label={`Ask Droplet about line ${index + 1}`} />
         <button type="button" className="lines__icon" aria-pressed={Boolean(line.starred)} onClick={() => dispatch({ type: 'update_line', id: line.id, patch: { starred: !line.starred } })} aria-label={`Keep line ${index + 1} in mind`}>
           <StarIcon size={16} aria-hidden="true" />
         </button>

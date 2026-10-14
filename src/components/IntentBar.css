@@ -168,3 +168,74 @@
   cursor: default;
   opacity: 0.6;
 }
+
+/* The bar reading the room: what is selected, and a few chips above the field. Quiet, small, and they wrap rather than scroll. */
+.intent__hints {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  max-width: 100%;
+}
+
+.intent__selection,
+.intent__hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  max-width: 100%;
+  border: 1px solid var(--overlay-10);
+  border-radius: var(--radius-pill);
+  background: var(--intent-fill);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.intent__selection {
+  padding: 0.25rem 0.25rem 0.25rem 0.75rem;
+  color: var(--text-muted);
+}
+
+.intent__selection button,
+.intent__hint-dismiss {
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.intent__selection button:hover,
+.intent__hint-dismiss:hover,
+.intent__selection button:focus-visible,
+.intent__hint-dismiss:focus-visible {
+  background: var(--overlay-06);
+  color: var(--text);
+}
+
+.intent__hint-send {
+  padding: 0.3125rem 0.75rem;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+
+.intent__hint[data-kind='nudge'] .intent__hint-send {
+  padding-right: 0.25rem;
+  color: var(--accent);
+}
+
+.intent__hint-send:hover:not(:disabled),
+.intent__hint-send:focus-visible {
+  background: var(--accent-tint-soft);
+}
+
+.intent__hint-send:disabled {
+  opacity: 0.5;
+}

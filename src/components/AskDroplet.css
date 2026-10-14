@@ -1,0 +1,113 @@
+.ask {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: 1.875rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--overlay-10);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--accent);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.ask:hover,
+.ask:focus-visible,
+.ask[aria-expanded='true'] {
+  background: var(--accent-tint-soft);
+}
+
+/* On a colour or an invoice line it is the icon alone, the size of the buttons beside it. */
+.ask--compact {
+  justify-content: center;
+  width: 1.75rem;
+  min-height: 1.75rem;
+  padding: 0;
+  border: 0;
+  color: inherit;
+}
+
+/* Drawn on the page itself, over everything, so a window or a swatch cannot clip it. */
+.ask__panel {
+  position: fixed;
+  z-index: 1000;
+  display: grid;
+  gap: 0.5rem;
+  width: min(17rem, calc(100vw - 1.5rem));
+  padding: 0.75rem;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.ask__title {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.ask__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ask__suggestion {
+  min-height: 2rem;
+  padding: 0.25rem 0.875rem;
+  border: 1px solid var(--overlay-10);
+  border-radius: var(--radius-pill);
+  background: var(--overlay-06);
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.ask__suggestion:hover:not(:disabled),
+.ask__suggestion:focus-visible {
+  background: var(--accent-tint-soft);
+}
+
+.ask__suggestion:disabled,
+.ask__send:disabled {
+  opacity: 0.5;
+}
+
+.ask__form {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.ask__field {
+  flex: 1;
+  min-width: 0;
+  height: 2rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--overlay-10);
+  border-radius: var(--radius-pill);
+  background: var(--overlay-06);
+  color: var(--text);
+  font-size: 0.8125rem;
+}
+
+.ask__send {
+  height: 2rem;
+  padding: 0 0.875rem;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--button);
+  color: var(--on-button);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.ask__wait {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}

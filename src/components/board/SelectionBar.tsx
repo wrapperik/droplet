@@ -22,6 +22,8 @@ import {
 } from '../../lib/boardTypes.ts'
 import type { BoardAction } from '../../lib/boardState.ts'
 import type { ProjectMemory } from '../../lib/memorySave.ts'
+import { boardSuggestions } from '../../lib/inlineAi.ts'
+import AskDroplet from '../AskDroplet.tsx'
 import { IDEA_LIMITS, ideaFits, ideaStatus, ideaText, type IdeaKind } from '../../lib/projectMemory.ts'
 
 // What lets a founder decide a name or an offer from the board: what the project remembers now, and a way to remember words. Nothing is
@@ -193,6 +195,11 @@ export default function SelectionBar({ selected, held, dispatch, say, style, tem
             </button>
           ))
         ))}
+
+      <AskDroplet
+        suggestions={boardSuggestions(selected)}
+        label={selected.length === 1 ? (isFrame(selected[0]) ? 'Ask Droplet about this frame' : 'Ask Droplet about this note') : 'Ask Droplet about these notes'}
+      />
 
       {connectable && (
         <button

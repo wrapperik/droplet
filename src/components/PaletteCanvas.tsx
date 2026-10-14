@@ -11,6 +11,8 @@ import {
 } from '@solar-icons/react/linear'
 import { readableTextColour } from '../lib/colour.ts'
 import { COLOUR_ROLES, type PaletteBlock } from '../lib/palette.ts'
+import { colourSuggestions } from '../lib/inlineAi.ts'
+import AskDroplet from './AskDroplet.tsx'
 import { ReasonTip } from './Toolbar.tsx'
 import './PaletteCanvas.css'
 
@@ -158,6 +160,7 @@ export default function PaletteCanvas({ blocks, selectedId, max, min, onSelect, 
                       <StarIcon size={15} aria-hidden="true" />
                     </button>
                   )}
+                  {block.id === selectedId && <AskDroplet compact suggestions={colourSuggestions(index + 1)} label={`Ask Droplet about colour ${index + 1}`} style={{ color: ink }} />}
                   {canRemove && (
                     <button
                       type="button"

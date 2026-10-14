@@ -1,15 +1,12 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Allowance } from '../compose/spec.ts'
 import { WORK_MODE_STORAGE_KEY } from '../lib/workMode.ts'
 import { useWorkMode } from '../store/workMode.ts'
 import IntentBar from './IntentBar.tsx'
 
-const left = (advancedLeft: number, resetsAt: string | null = null): Allowance => ({ advancedLeft, advancedLimit: 10, resetsAt })
 const openModeMenu = async (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole('button', { name: /Choose how Droplet works/ }))
 const write = async (user: ReturnType<typeof userEvent.setup>, text: string) => user.type(screen.getByLabelText('Describe what you need'), text)
-const advancedRow = () => screen.getByRole('menuitemcheckbox', { name: /Advanced/ })
 
 describe('the mode menu in the intent bar', () => {
   beforeEach(() => {
@@ -17,9 +14,9 @@ describe('the mode menu in the intent bar', () => {
     useWorkMode.setState({ mode: 'guide' })
   })
 
-  it('is a button in the bar, always there, that opens Guide and Workspace, with Guide the one in use, and Advanced below them', async () => {
+  it('is a button in the bar, always there, that opens Guide and Workspace, with Guide the one in use, and no Advanced switch', async () => {
     const user = userEvent.setup()
-    render(<IntentBar allowance={left(7)} />)
+    render(<IntentBar />)
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Choose how Droplet works/ })).toHaveAccessibleName('Choose how Droplet works. Guide mode is on.')
     await openModeMenu(user)
@@ -27,13 +24,14 @@ describe('the mode menu in the intent bar', () => {
     expect(modes.map((row) => row.textContent)).toEqual(['GuideOne step at a time', 'WorkspaceEvery tool at once'])
     expect(modes[0]).toHaveAttribute('aria-checked', 'true')
     expect(modes[1]).toHaveAttribute('aria-checked', 'false')
-    expect(advancedRow()).toHaveTextContent('AdvancedSearches the web · 7 of 10 left today')
-    expect(advancedRow()).toHaveAttribute('aria-checked', 'false')
+    // Advanced needs a key with billing, which a free key does not have, so the menu does not offer it
+    expect(screen.queryByRole('menuitemcheckbox')).not.toBeInTheDocument()
+    expect(screen.getByRole('menu')).not.toHaveTextContent(/Advanced|Searches the web/)
   })
 
   it('switches to Workspace mode, keeps it on this device, and says so on the button', async () => {
     const user = userEvent.setup()
-    render(<IntentBar allowance={left(7)} />)
+    render(<IntentBar />)
     await openModeMenu(user)
     await user.click(screen.getByRole('menuitemradio', { name: /Workspace/ }))
     await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
@@ -46,7 +44,7 @@ describe('the mode menu in the intent bar', () => {
 
   it('keeps the mode after a message is sent: it is not for one message only', async () => {
     const user = userEvent.setup()
-    render(<IntentBar allowance={left(7)} onSubmitIntent={() => undefined} />)
+    render(<IntentBar onSubmitIntent={() => undefined} />)
     await openModeMenu(user)
     await user.click(screen.getByRole('menuitemradio', { name: /Workspace/ }))
     await write(user, 'hello')
@@ -54,104 +52,19 @@ describe('the mode menu in the intent bar', () => {
     expect(useWorkMode.getState().mode).toBe('workspace')
   })
 
-  it('shows no pill, and sends Quick, unless Advanced is switched on', async () => {
+  it('shows no pill, and sends Quick', async () => {
     const user = userEvent.setup()
     const onSubmitIntent = vi.fn()
-    render(<IntentBar allowance={left(7)} onSubmitIntent={onSubmitIntent} />)
+    render(<IntentBar onSubmitIntent={onSubmitIntent} />)
     expect(screen.queryByRole('button', { name: /Advanced is on/ })).not.toBeInTheDocument()
     await write(user, 'hello')
     await user.click(screen.getByRole('button', { name: 'Send' }))
     expect(onSubmitIntent).toHaveBeenCalledWith('hello', 'base')
-  })
-
-  it('shows an Advanced pill in the bar when it is switched on, and the pill turns it off', async () => {
-    const user = userEvent.setup()
-    const onSubmitIntent = vi.fn()
-    render(<IntentBar allowance={left(7)} onSubmitIntent={onSubmitIntent} />)
-    await openModeMenu(user)
-    await user.click(advancedRow())
-    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
-    const pill = screen.getByRole('button', { name: /Advanced is on for your next message/ })
-    expect(pill).toHaveTextContent('Advanced')
-    await user.click(pill)
-    expect(screen.queryByRole('button', { name: /Advanced is on/ })).not.toBeInTheDocument()
-    await write(user, 'hello')
-    await user.click(screen.getByRole('button', { name: 'Send' }))
-    expect(onSubmitIntent).toHaveBeenCalledWith('hello', 'base')
-  })
-
-  it('switches Advanced off from the menu as well', async () => {
-    const user = userEvent.setup()
-    render(<IntentBar allowance={left(7)} />)
-    await openModeMenu(user)
-    await user.click(advancedRow())
-    await openModeMenu(user)
-    expect(advancedRow()).toHaveAttribute('aria-checked', 'true')
-    await user.click(advancedRow())
-    expect(screen.queryByRole('button', { name: /Advanced is on/ })).not.toBeInTheDocument()
-  })
-
-  it('sends the next message as Advanced, and then goes back to Quick: the pill clears after sending', async () => {
-    const user = userEvent.setup()
-    const onSubmitIntent = vi.fn()
-    render(<IntentBar allowance={left(7)} onSubmitIntent={onSubmitIntent} />)
-    await openModeMenu(user)
-    await user.click(advancedRow())
-    await write(user, 'What does CIPC charge?')
-    await user.click(screen.getByRole('button', { name: 'Send' }))
-    expect(onSubmitIntent).toHaveBeenLastCalledWith('What does CIPC charge?', 'advanced')
-    expect(screen.queryByRole('button', { name: /Advanced is on/ })).not.toBeInTheDocument()
-    await write(user, 'and SARS?')
-    await user.click(screen.getByRole('button', { name: 'Send' }))
-    expect(onSubmitIntent).toHaveBeenLastCalledWith('and SARS?', 'base')
-    await openModeMenu(user)
-    expect(advancedRow()).toHaveAttribute('aria-checked', 'false')
-  })
-
-  it('disables the Advanced row when none are left, says when one comes back, and does not hide it', async () => {
-    const user = userEvent.setup()
-    const back = new Date(2099, 0, 1, 14, 20)
-    render(<IntentBar allowance={left(0, back.toISOString())} onSubmitIntent={() => undefined} />)
-    await openModeMenu(user)
-    const row = advancedRow()
-    expect(row).toHaveAttribute('aria-disabled', 'true')
-    expect(row).toHaveTextContent(/None left today · back tomorrow at 14:20|None left today · back at 14:20/)
-    await user.click(row)
-    // pressing it does nothing: the menu stays open and no pill appears
-    expect(screen.getByRole('menu')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Advanced is on/ })).not.toBeInTheDocument()
-  })
-
-  it('shows Advanced with no count when the server has not said, and lets it be switched on', async () => {
-    const user = userEvent.setup()
-    render(<IntentBar allowance={null} />)
-    await openModeMenu(user)
-    const row = advancedRow()
-    expect(row).toHaveTextContent('Searches the web')
-    expect(row).not.toHaveTextContent(/left today/)
-    expect(row).not.toHaveAttribute('aria-disabled')
-    await user.click(row)
-    expect(await screen.findByRole('button', { name: /Advanced is on/ })).toBeInTheDocument()
-  })
-
-  it('turns Advanced off if the allowance runs out while it is on, so the pill never promises what is not there', async () => {
-    const user = userEvent.setup()
-    const { rerender } = render(<IntentBar allowance={left(1)} />)
-    await openModeMenu(user)
-    await user.click(advancedRow())
-    expect(screen.getByRole('button', { name: /Advanced is on/ })).toBeInTheDocument()
-    rerender(<IntentBar allowance={left(0)} />)
-    expect(screen.queryByRole('button', { name: /Advanced is on/ })).not.toBeInTheDocument()
-  })
-
-  it('does not switch Advanced on by itself: it is Quick on every new bar, whatever the allowance', () => {
-    render(<IntentBar allowance={left(10)} />)
-    expect(screen.queryByRole('button', { name: /Advanced is on/ })).not.toBeInTheDocument()
   })
 
   it('opens one menu at a time: the task menu closes the mode menu', async () => {
     const user = userEvent.setup()
-    render(<IntentBar allowance={left(7)} />)
+    render(<IntentBar />)
     await openModeMenu(user)
     expect(screen.getByRole('menu', { name: 'How Droplet works' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Choose a task' }))
@@ -161,7 +74,7 @@ describe('the mode menu in the intent bar', () => {
 
   it('closes the mode menu on Escape', async () => {
     const user = userEvent.setup()
-    render(<IntentBar allowance={left(7)} />)
+    render(<IntentBar />)
     await openModeMenu(user)
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
@@ -182,5 +95,47 @@ describe('where a sent message comes from', () => {
     await write(user, 'second')
     await user.click(screen.getByRole('button', { name: 'Send' }))
     expect(onSubmitIntent).toHaveBeenLastCalledWith('second', 'base', { left: 300, top: 600, width: 800, height: 64 })
+  })
+})
+
+describe('the bar reading the room', () => {
+  const nudge = { id: 'contrast', label: 'Fix the contrast?', text: 'Fix the contrast between my text and background colours', kind: 'nudge' as const }
+  const way = { id: 'names', label: 'Brainstorm names', text: 'Brainstorm some name ideas for my business', kind: 'hint' as const }
+
+  it('says what suits the moment in the empty field, and the usual words without hints', () => {
+    const { rerender } = render(<IntentBar />)
+    expect(screen.getByLabelText('Describe what you need')).toHaveAttribute('placeholder', 'Write your message...')
+    rerender(<IntentBar hints={{ placeholder: 'Ask about the 2 selected notes' }} />)
+    expect(screen.getByLabelText('Describe what you need')).toHaveAttribute('placeholder', 'Ask about the 2 selected notes')
+  })
+
+  it('shows what is selected, with a cross that clears it', async () => {
+    const onClear = vi.fn()
+    render(<IntentBar hints={{ selection: { label: '2 notes selected', onClear } }} />)
+    expect(screen.getByRole('group', { name: 'Suggestions' })).toHaveTextContent('2 notes selected')
+    await userEvent.click(screen.getByRole('button', { name: 'Clear the selection' }))
+    expect(onClear).toHaveBeenCalled()
+  })
+
+  it('shows chips that send their request when pressed, and nudges that can be put away', async () => {
+    const onChip = vi.fn()
+    const onDismiss = vi.fn()
+    render(<IntentBar hints={{ chips: [nudge, way], onChip, onDismiss }} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Brainstorm names' }))
+    expect(onChip).toHaveBeenCalledWith(way)
+    expect(screen.queryByRole('button', { name: 'Put away: Brainstorm names' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Put away: Fix the contrast?' }))
+    expect(onDismiss).toHaveBeenCalledWith(nudge)
+    expect(onChip).toHaveBeenCalledTimes(1)
+  })
+
+  it('waits while Droplet works', () => {
+    render(<IntentBar busy hints={{ chips: [way], onChip: vi.fn() }} />)
+    expect(screen.getByRole('button', { name: 'Brainstorm names' })).toBeDisabled()
+  })
+
+  it('draws nothing above the bar when there is nothing to say', () => {
+    render(<IntentBar hints={{ chips: [], selection: null }} />)
+    expect(screen.queryByRole('group', { name: 'Suggestions' })).not.toBeInTheDocument()
   })
 })

@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { AddIcon, CloseCircleIcon, ReplyIcon, TuningIcon } from '@solar-icons/react/linear'
 import { useDismiss } from '../hooks/useDismiss.ts'
-import { describeAllowance } from '../lib/advancedAllowance.ts'
-import type { Allowance, Mode } from '../compose/spec.ts'
+import type { Mode } from '../compose/spec.ts'
+import type { Hint } from '../lib/composerHints.ts'
 import type { TaskId } from '../lib/tasks.ts'
 import { useWorkMode } from '../store/workMode.ts'
 import type { FlightOrigin } from './FlyingMessage.tsx'
@@ -21,18 +21,25 @@ type Props = {
   busy?: boolean
   // The tip above the bar, which offers the menu of workspaces. It is for the very start, before anything has been said.
   showTip?: boolean
-  // Where the founder's Advanced allowance stands, as the server last said. Null when it is not known yet: Advanced then stays usable without a count.
-  allowance?: Allowance | null
+  // The bar reading the room (see composerHints.ts): what the empty field says, what is selected, and a few chips of things worth asking for or doing
+  // next. A chip only sends the request it names, when it is pressed.
+  hints?: {
+    placeholder?: string
+    selection?: { label: string; onClear: () => void } | null
+    chips?: Hint[]
+    onChip?: (hint: Hint) => void
+    // A nudge can be put away; it stays away for that workspace.
+    onDismiss?: (hint: Hint) => void
+  }
 }
 
 // The two equal ways in: describe what you need, or choose a task from the menu.
-export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false, busy = false, showTip = true, allowance = null }: Props) {
+export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false, busy = false, showTip = true, hints }: Props) {
   const [text, setText] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
   const [modeOpen, setModeOpen] = useState(false)
-  // Quick unless the founder switches Advanced on, and only for the next message. The app never switches it on.
-  const [advanced, setAdvanced] = useState(false)
-  const mode: Mode = advanced ? 'advanced' : 'base'
+  // Every message is answered by Quick. The Advanced switch is out of the menu (see ModeMenu), though the send still takes a mode.
+  const mode: Mode = 'base'
   // Guide or Workspace: how a task opens. It stays until the founder changes it.
   const workMode = useWorkMode((state) => state.mode)
   const setWorkMode = useWorkMode((state) => state.setMode)
@@ -45,14 +52,6 @@ export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false
     setModeOpen(false)
   }, [])
   useDismiss(menuOpen || modeOpen, close, wrapRef)
-
-  // Advanced that has been used up since it was chosen (on another device, say) is switched off, so the pill never promises what is not there.
-  const exhausted = describeAllowance(allowance).exhausted
-  const [wasExhausted, setWasExhausted] = useState(exhausted)
-  if (exhausted !== wasExhausted) {
-    setWasExhausted(exhausted)
-    if (exhausted) setAdvanced(false)
-  }
 
   // The bar moves into the side panel when a workspace appears, so keep the cursor in it.
   useEffect(() => {
@@ -70,7 +69,6 @@ export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false
     if (from) onSubmitIntent?.(text.trim(), mode, from)
     else onSubmitIntent?.(text.trim(), mode)
     setText('')
-    setAdvanced(false)
   }
 
   const closeModes = () => {
@@ -94,14 +92,33 @@ export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false
               setWorkMode(next)
               closeModes()
             }}
-            advanced={advanced}
-            onAdvanced={(on) => {
-              setAdvanced(on)
-              closeModes()
-            }}
-            allowance={allowance}
           />
         )}</AnimatePresence>
+
+      {(hints?.selection || (hints?.chips && hints.chips.length > 0)) && (
+        <div className="intent__hints" role="group" aria-label="Suggestions">
+          {hints.selection && (
+            <span className="intent__selection">
+              {hints.selection.label}
+              <button type="button" aria-label="Clear the selection" onClick={hints.selection.onClear}>
+                <CloseCircleIcon size={16} aria-hidden="true" />
+              </button>
+            </span>
+          )}
+          {hints.chips?.map((hint) => (
+            <span key={hint.id} className="intent__hint" data-kind={hint.kind}>
+              <button type="button" className="intent__hint-send" disabled={busy} onClick={() => hints.onChip?.(hint)}>
+                {hint.label}
+              </button>
+              {hint.kind === 'nudge' && (
+                <button type="button" className="intent__hint-dismiss" aria-label={`Put away: ${hint.label}`} onClick={() => hints.onDismiss?.(hint)}>
+                  <CloseCircleIcon size={14} aria-hidden="true" />
+                </button>
+              )}
+            </span>
+          ))}
+        </div>
+      )}
 
       <form ref={formRef} className="intent__bar glass" onSubmit={submit}>
         <button
@@ -117,19 +134,13 @@ export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false
         >
           <AddIcon size={22} aria-hidden="true" />
         </button>
-        {advanced && (
-          <button type="button" className="intent__pill" onClick={() => setAdvanced(false)} aria-label="Advanced is on for your next message. Turn it off">
-            Advanced
-            <CloseCircleIcon size={16} aria-hidden="true" />
-          </button>
-        )}
         <input
           ref={inputRef}
           className="intent__input"
           type="text"
           value={text}
           onChange={(event) => setText(event.target.value)}
-          placeholder="Write your message..."
+          placeholder={hints?.placeholder ?? 'Write your message...'}
           aria-label="Describe what you need"
           autoComplete="off"
         />
