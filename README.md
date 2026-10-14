@@ -17,6 +17,15 @@ Final-year project by Rikus Pretorius (Bachelor of Creative Technologies, Open W
 - **Library:** everything made in a project, its status and its exports.
 - **Accounts:** email and password or Google, row-level security on every table, and delete account and data from the account page.
 
+## Next: sprint 3 (14 to 20 October 2026)
+
+- [ ] Logo handoff: a handoff card naming the boundary, a copyable spec panel (palette, fonts, formats, sizes), a link-out in a new tab, and the logo recorded as outstanding ([chunk 12](docs/roadmap/12-logo-handoff.md))
+- [ ] Import slot: accept a PNG or SVG, reject a wrong format or size with a reason, and show the logo as resolved in the library and on the invoice
+- [ ] Usability tests with three people outside the project, one per priority flow (brand, logo, invoice), noted in the bug log
+- [ ] Fix every high-severity bug from the tests
+- [ ] Re-run the fixed test requests on the deployed function and record the valid, retried and fallback rates
+- [ ] Check the phone layout for reviewing and exporting an invoice
+
 ## Stack
 
 | Layer | Choice |
