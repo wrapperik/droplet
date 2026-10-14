@@ -1,0 +1,30 @@
+.copy-text {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  min-width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+}
+
+.copy-text[data-has-label] {
+  padding: 0 0.75rem;
+  border: 1px solid var(--overlay-10);
+  background: var(--overlay-06);
+  color: var(--text);
+}
+
+.copy-text:hover,
+.copy-text:focus-visible {
+  background: var(--accent-tint-soft);
+  color: var(--text);
+}

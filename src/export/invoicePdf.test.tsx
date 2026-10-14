@@ -41,4 +41,22 @@ describe('buildInvoicePdf', () => {
     const text = new TextDecoder('latin1').decode(await blob.arrayBuffer())
     expect(text.match(/\/Type \/Page\b/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
   }, 30_000)
+
+  // A 1 by 1 PNG, enough for the library to draw.
+  const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+  const images = async (blob: Blob) => (new TextDecoder('latin1').decode(await blob.arrayBuffer()).match(/\/Subtype \/Image\b/g) ?? []).length
+
+  it('draws the logo in the band when it is given one', async () => {
+    expect(await images(await buildInvoicePdf(complete(), roles, PNG))).toBeGreaterThanOrEqual(1)
+  }, 30_000)
+
+  it('draws no image, and still names the business, when there is no logo', async () => {
+    expect(await images(await buildInvoicePdf(complete(), roles))).toBe(0)
+    expect(await images(await buildInvoicePdf(complete(), roles, null))).toBe(0)
+  }, 30_000)
+
+  it('makes a PDF from a barely begun invoice with a logo, without failing', async () => {
+    const blob = await buildInvoicePdf(newContent('2026-10-04'), roles, PNG)
+    expect(new TextDecoder().decode((await blob.arrayBuffer()).slice(0, 5))).toBe('%PDF-')
+  }, 30_000)
 })

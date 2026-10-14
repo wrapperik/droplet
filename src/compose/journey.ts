@@ -60,6 +60,8 @@ export const projectSnapshotSchema = z.object({
   invoices: z.number().int().min(0).max(1000),
   // Things on the saved board, so the composer can tell a board in use from an empty one.
   boardItems: z.number().int().min(0).max(1000),
+  // A logo made in another tool has been brought back and kept. Absent in a request from before the handoff.
+  hasLogo: z.boolean().optional(),
   // The facts about the business the founder confirmed, in their words, by key. Absent in a request from before facts.
   facts: z.partialRecord(z.enum(FACT_KEYS), z.string().max(MAX_FACT_LENGTH)).optional(),
 })
@@ -74,7 +76,7 @@ export function doneSteps(project: ProjectSnapshot | undefined): Set<JourneyStep
   if (project.hasPalette) done.add('palette')
   if (project.invoices > 0) done.add('invoice')
   if ((project.facts?.['brand.values'] ?? '').trim() !== '') done.add('values')
-  if ((project.facts?.['logo.status'] ?? '').trim() !== '') done.add('logo')
+  if (project.hasLogo === true || (project.facts?.['logo.status'] ?? '').trim() !== '') done.add('logo')
   return done
 }
 
@@ -98,5 +100,6 @@ export function describeProject(project: ProjectSnapshot): Record<string, unknow
     savedClients: project.clients,
     savedInvoices: project.invoices,
     boardItems: project.boardItems,
+    logoKept: project.hasLogo === true,
   }
 }

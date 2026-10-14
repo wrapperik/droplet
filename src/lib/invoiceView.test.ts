@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { newContent, type InvoiceContent } from './invoice.ts'
-import { invoiceView, quantityText } from './invoiceView.ts'
+import { invoiceView, logoSlotOf, quantityText } from './invoiceView.ts'
 
 const plain = (text: string) => text.replace(/[\s ]/g, ' ')
 
@@ -108,5 +108,30 @@ describe('invoiceView', () => {
     expect(quantityText(12)).toBe('12')
     expect(quantityText(1.5)).toBe('1.5')
     expect(quantityText(0.25)).toBe('0.25')
+  })
+})
+
+describe('the logo on the invoice', () => {
+  const logo = { dataUrl: 'data:image/png;base64,AAAA' }
+
+  it('is not on the view unless a caller gives it, so a caller that does not know draws nothing', () => {
+    expect(invoiceView(complete()).logo).toBeNull()
+  })
+
+  it('carries the slot it is given, and nothing else on the view changes', () => {
+    const slot = logoSlotOf(logo)
+    expect(invoiceView(complete(), slot).logo).toEqual({ kind: 'added', src: logo.dataUrl, alt: 'Your logo' })
+    expect({ ...invoiceView(complete(), slot), logo: null }).toEqual(invoiceView(complete()))
+  })
+
+  it('is the placeholder when the project has none, nothing while it is still being read, and the logo when there is one', () => {
+    expect(logoSlotOf(undefined)).toBeNull()
+    expect(logoSlotOf(null)).toEqual({ kind: 'outstanding' })
+    expect(logoSlotOf(logo)?.kind).toBe('added')
+  })
+
+  it('leaves the placeholder out of a small copy of the page, which has no room for its note', () => {
+    expect(logoSlotOf(null, false)).toBeNull()
+    expect(logoSlotOf(logo, false)?.kind).toBe('added')
   })
 })

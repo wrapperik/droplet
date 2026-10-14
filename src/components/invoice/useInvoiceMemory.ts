@@ -7,6 +7,7 @@ import { loadPalette } from '../../lib/projectStore.ts'
 import { newId } from '../../lib/ids.ts'
 import { loadInvoice, saveArrangement } from '../../lib/invoiceStore.ts'
 import { useLoaded } from '../../hooks/useLoaded.ts'
+import { useProjectLogo } from '../../hooks/useProjectLogo.ts'
 import { loadMemory, saveMemory } from '../../lib/memoryStore.ts'
 import type { ProjectMemory } from '../../lib/memorySave.ts'
 import { businessStatus, clientStatus, emptyMemory, numbersInUse, savedInvoice, withBusiness, withClient, withInvoice } from '../../lib/projectMemory.ts'
@@ -17,12 +18,14 @@ export const sameContent = (a: InvoiceContent, b: InvoiceContent) => JSON.string
 
 // What the invoice workspace and the guide share: what the project remembers, the confirmed palette, what confirming would remember,
 // and the confirm itself. Nothing is remembered unless the founder confirms it, and only what they ticked.
-export function useInvoiceMemory(projectId: string, state: InvoiceState, onConfirmed?: () => void) {
+export function useInvoiceMemory(projectId: string, state: InvoiceState, onConfirmed?: () => void, logoVersion = 0) {
   // What the project remembers, how the workspace was arranged and the confirmed palette are read from storage, which takes a moment. Until
   // they have arrived the status says nothing and saving waits, so nothing is judged against what has not been read yet.
   const { value: memory, loaded: memoryLoaded, set: setMemory } = useLoaded<ProjectMemory>(projectId, () => loadMemory(projectId), emptyMemory())
   const { value: arrangementSave, loaded: arrangementLoaded, set: setArrangementSave } = useLoaded(projectId, () => loadInvoice(projectId), null)
   const { value: paletteBlocks } = useLoaded(projectId, async () => (await loadPalette(projectId))?.blocks ?? starterBlocks(), starterBlocks())
+  // The logo brought back from another tool: undefined until read, null if there is none. It is drawn on the page and in the PDF, and goes nowhere else.
+  const logo = useProjectLogo(projectId, logoVersion)
   const loaded = memoryLoaded && arrangementLoaded
   const [saveFailed, setSaveFailed] = useState(false)
 
@@ -85,5 +88,5 @@ export function useInvoiceMemory(projectId: string, state: InvoiceState, onConfi
   // What the invoice still needs, in code, from what is on it.
   const readiness = useMemo(() => checkInvoice(content, { usedNumbers: numbersInUse(memory, doc.invoiceId) }), [content, memory, doc.invoiceId])
 
-  return { memory, loaded, doc, content, roles, saved, unsaved, hasChanges, saveStatus, business, client, number, items, persist, confirm, readiness }
+  return { memory, loaded, logo, doc, content, roles, saved, unsaved, hasChanges, saveStatus, business, client, number, items, persist, confirm, readiness }
 }

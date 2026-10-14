@@ -17,6 +17,7 @@ import {
   type LibraryItem,
   type LogoItem,
 } from '../lib/library.ts'
+import { loadLogo } from '../lib/logoStore.ts'
 import { loadMemory } from '../lib/memoryStore.ts'
 import { loadNotes } from '../lib/notesStore.ts'
 import { settingOn } from '../lib/projectMemory.ts'
@@ -37,13 +38,15 @@ type Props = {
   onOpen: (target: OpenTarget, options?: { confirmed?: boolean }) => Promise<'done' | 'unsaved'>
   // Asks Droplet something, in the founder's name, such as to help write a logo brief.
   onAsk: (text: string) => void
+  // Opens the logo handoff card, where the founder gets the spec and adds the logo they made.
+  onOpenHandoff?: () => void
   // Something was forgotten or exported, so the rest of the app reads the project again.
   onChanged?: () => void
 }
 
 // The library: everything the founder has made for this project, in the order they meet it, where each thing stands, and what they can do with it.
 // It is a view of what is saved. It changes nothing on its own: each button does one thing, and a forget asks twice.
-export default function Library({ projectId, projectName, version = 0, onClose, onOpen, onAsk, onChanged }: Props) {
+export default function Library({ projectId, projectName, version = 0, onClose, onOpen, onAsk, onOpenHandoff, onChanged }: Props) {
   const titleId = useId()
   const [library, setLibrary] = useState<LibraryData | null>(null)
   const [notesOn, setNotesOn] = useState(true)
@@ -57,8 +60,8 @@ export default function Library({ projectId, projectName, version = 0, onClose, 
   const [replacing, setReplacing] = useState<{ target: OpenTarget; what: string } | null>(null)
 
   const load = useCallback(async () => {
-    const [palette, board, memory, notes] = await Promise.all([loadPalette(projectId), loadBoard(projectId), loadMemory(projectId), loadNotes(projectId)])
-    return { data: libraryOf({ palette, board, memory, notes }), notesOn: settingOn(memory, 'notes') }
+    const [palette, board, memory, notes, logo] = await Promise.all([loadPalette(projectId), loadBoard(projectId), loadMemory(projectId), loadNotes(projectId), loadLogo(projectId)])
+    return { data: libraryOf({ palette, board, memory, notes, logo }), notesOn: settingOn(memory, 'notes') }
   }, [projectId])
 
   useEffect(() => {
@@ -135,6 +138,7 @@ export default function Library({ projectId, projectName, version = 0, onClose, 
         if (action === 'copy_hex') return plain('Copy hex codes', () => void copyHex(item))
         return null
       case 'logo':
+        if (action === 'handoff' && onOpenHandoff) return plain(item.file ? 'Logo and files' : 'Open handoff card', onOpenHandoff, { aria: item.file ? 'Open the logo card to replace or remove your logo' : 'Open the logo handoff card' })
         if (action === 'make_brief') return plain('Make the brief', () => onAsk('Help me write a short brief for my logo.'), { aria: 'Ask Droplet to help make a logo brief' })
         return null
       case 'ideas':
@@ -328,11 +332,20 @@ function Brand({ item }: { item: BrandItem }) {
 
 function Logo({ item }: { item: LogoItem }) {
   return (
-    <div className="library__body">
-      <p className="library__name">{item.title}</p>
-      <Status item={item} />
-      <p className="library__line">Droplet does not make logos. A free tool such as Canva or Adobe Express can, and Droplet can help you write what to ask it for.</p>
-      {item.brief && <p className="library__line">What you told Droplet: {item.brief}</p>}
+    <div className={item.file ? 'library__body library__body--picture' : 'library__body'}>
+      {item.file && <img className="library__logo" src={item.file.dataUrl} alt={`Your logo, ${item.file.name}`} />}
+      <div className="library__side">
+        <p className="library__name">{item.title}</p>
+        <Status item={item} />
+        {item.file ? (
+          <p className="library__line">
+            {item.file.name}, {item.file.kind.toUpperCase()}. Made in another tool and kept with this project.
+          </p>
+        ) : (
+          <p className="library__line">Droplet does not make logos. A free tool such as Canva or Adobe Express can, and the handoff card has the colours, fonts and files to ask it for.</p>
+        )}
+        {item.brief && <p className="library__line">What you told Droplet: {item.brief}</p>}
+      </div>
     </div>
   )
 }

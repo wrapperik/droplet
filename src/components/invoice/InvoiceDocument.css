@@ -30,6 +30,43 @@
   color: var(--paper-on-primary);
 }
 
+.paper__brand {
+  display: flex;
+  align-items: center;
+  gap: calc(12 * var(--pt));
+  min-width: 0;
+}
+
+/* A tile in the page's own background, so a logo of any colour reads on the band. The PDF draws the same tile. */
+.paper__logo {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: calc(66 * var(--pt));
+  height: calc(46 * var(--pt));
+  padding: calc(5 * var(--pt));
+  border-radius: calc(5 * var(--pt));
+  background: var(--paper-background);
+}
+
+.paper__logo img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* The placeholder for a logo not brought back yet. It is on the page only: the PDF does not print it. */
+.paper__logo--outstanding {
+  border: calc(1 * var(--pt)) dashed currentColor;
+  background: transparent;
+  color: var(--paper-on-primary);
+  font-size: calc(8 * var(--pt));
+  font-weight: 700;
+  letter-spacing: calc(1 * var(--pt));
+  opacity: 0.7;
+  text-transform: uppercase;
+}
+
 .paper__business {
   font-size: calc(20 * var(--pt));
   font-weight: 700;
@@ -208,4 +245,14 @@
   margin: 0;
   color: var(--text-muted);
   font-size: 0.8125rem;
+}
+
+.paper-note__action {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
 }

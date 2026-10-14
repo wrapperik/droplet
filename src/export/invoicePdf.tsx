@@ -1,8 +1,8 @@
 /* eslint-disable react/only-export-components -- this is not a hot-reloaded screen: it only builds the PDF on demand */
-import { Document, Page, StyleSheet, Text, View, pdf } from '@react-pdf/renderer'
+import { Document, Image, Page, StyleSheet, Text, View, pdf } from '@react-pdf/renderer'
 import { readableTextColour } from '../lib/colour.ts'
 import type { InvoiceContent } from '../lib/invoice.ts'
-import { invoiceView, type InvoiceView, type Text as ViewText } from '../lib/invoiceView.ts'
+import { invoiceView, type InvoiceView, type LogoSlot, type Text as ViewText } from '../lib/invoiceView.ts'
 import type { ResolvedRoles } from '../lib/palette.ts'
 
 // The invoice as a PDF on A4, in the founder's brand. It is made from the same view-model as the page on screen, so the two say
@@ -19,6 +19,10 @@ const colourStyles = ({ background, text, primary, onPrimary }: Colours) =>
   StyleSheet.create({
     page: { backgroundColor: background, color: text, fontFamily: 'Helvetica', fontSize: 10, lineHeight: 1.4 },
     band: { backgroundColor: primary, color: onPrimary, paddingVertical: 26, paddingHorizontal: 40, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+    brand: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    // A tile in the page's own background, so a logo of any colour reads on the band.
+    logoTile: { backgroundColor: background, borderRadius: 5, padding: 5, width: 66, height: 46, justifyContent: 'center', alignItems: 'center' },
+    logo: { objectFit: 'contain', maxWidth: 56, maxHeight: 36 },
     business: { color: onPrimary, fontFamily: 'Helvetica-Bold', fontSize: 20 },
     kind: { color: onPrimary, fontFamily: 'Helvetica-Bold', fontSize: 10, letterSpacing: 1.2, textTransform: 'uppercase' },
     body: { paddingVertical: 30, paddingHorizontal: 40, gap: 22 },
@@ -45,7 +49,15 @@ function InvoiceDocument({ view, colours }: { view: InvoiceView; colours: Colour
     <Document title={`${view.title} ${view.number.text}`} author={view.from[0].text}>
       <Page size="A4" style={styles.page}>
         <View style={styles.band}>
-          <Text style={styles.business}>{words(view.from[0])}</Text>
+          <View style={styles.brand}>
+            {/* The logo, if the founder brought one. With none, the business name alone is the brand: the page's placeholder and its note are not printed. */}
+            {view.logo?.kind === 'added' ? (
+              <View style={styles.logoTile}>
+                <Image src={view.logo.src} style={styles.logo} />
+              </View>
+            ) : null}
+            <Text style={styles.business}>{words(view.from[0])}</Text>
+          </View>
           <Text style={styles.kind}>{view.title}</Text>
         </View>
 
@@ -139,21 +151,23 @@ function InvoiceDocument({ view, colours }: { view: InvoiceView; colours: Colour
   )
 }
 
-// The PDF itself, in the founder's brand.
-export function buildInvoicePdf(content: InvoiceContent, roles: ResolvedRoles): Promise<Blob> {
+// The PDF itself, in the founder's brand. `logoPng` is the logo as a PNG data address (see `pngForPdf`: an SVG is turned into one first, since this
+// library draws no SVG), or nothing.
+export function buildInvoicePdf(content: InvoiceContent, roles: ResolvedRoles, logoPng?: string | null): Promise<Blob> {
   const colours: Colours = {
     background: roles.background.hex,
     text: roles.text.hex,
     primary: roles.primary.hex,
     onPrimary: readableTextColour(roles.primary.hex),
   }
-  return pdf(<InvoiceDocument view={invoiceView(content)} colours={colours} />).toBlob()
+  const logo: LogoSlot | null = logoPng ? { kind: 'added', src: logoPng, alt: 'Logo' } : null
+  return pdf(<InvoiceDocument view={invoiceView(content, logo)} colours={colours} />).toBlob()
 }
 
 // Builds the PDF and hands it to the browser as a download. Returns false if anything went wrong.
-export async function downloadInvoice(content: InvoiceContent, roles: ResolvedRoles, fileName: string): Promise<boolean> {
+export async function downloadInvoice(content: InvoiceContent, roles: ResolvedRoles, fileName: string, logoPng?: string | null): Promise<boolean> {
   try {
-    const blob = await buildInvoicePdf(content, roles)
+    const blob = await buildInvoicePdf(content, roles, logoPng)
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url

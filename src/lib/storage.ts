@@ -5,8 +5,9 @@
 // A document is one JSON value per project and kind. What is read back is `unknown`, because storage can hold anything: each store
 // validates it with its own Zod schema.
 
-// `notes` is Droplet's notebook on the project: an index of what the workspaces hold and a digest of each (see notes.ts).
-export type DocKind = 'palette' | 'board' | 'invoice' | 'memory' | 'chats' | 'notes'
+// `notes` is Droplet's notebook on the project: an index of what the workspaces hold and a digest of each (see notes.ts). `logo` is the logo a
+// founder made in another tool and brought back (see logoSave.ts).
+export type DocKind = 'palette' | 'board' | 'invoice' | 'memory' | 'chats' | 'notes' | 'logo'
 
 export interface DocumentStorage {
   // The saved value, or null when there is none. A value that cannot be read is also null: the driver never throws.

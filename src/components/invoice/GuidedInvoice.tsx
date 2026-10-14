@@ -31,6 +31,9 @@ type Props = {
   // As for the workspace: the chat asks for the note of what would be remembered, and is told when the founder confirmed.
   saveSignal?: number
   onConfirmed?: () => void
+  // As for the workspace: the logo is read again when this changes, and the note under the page opens the handoff card.
+  logoVersion?: number
+  onOpenHandoff?: () => void
   headerSlots?: HeaderSlots
 }
 
@@ -38,8 +41,8 @@ type Props = {
 // fixed in code. Continue moves on once nothing required of the step is missing, and says what is if something is. The last step is the whole
 // invoice and what it still needs; Finish opens the same note of what would be remembered as Save does, and only once the founder confirms is
 // the invoice finished. The composer works on the same invoice through the same reducer, so what it fills in shows here at once.
-export default function GuidedInvoice({ projectId, projectName, state, dispatch, progress, onProgress, onFinished, saveSignal, onConfirmed, headerSlots }: Props) {
-  const { memory, doc, content, roles, unsaved, saveStatus, business, client, items, persist, confirm, readiness } = useInvoiceMemory(projectId, state, onConfirmed)
+export default function GuidedInvoice({ projectId, projectName, state, dispatch, progress, onProgress, onFinished, saveSignal, onConfirmed, logoVersion, onOpenHandoff, headerSlots }: Props) {
+  const { memory, logo, doc, content, roles, unsaved, saveStatus, business, client, items, persist, confirm, readiness } = useInvoiceMemory(projectId, state, onConfirmed, logoVersion)
   const { step } = progress
   const index = stepIndex(step)
   const last = index === GUIDE_STEPS.length - 1
@@ -118,7 +121,7 @@ export default function GuidedInvoice({ projectId, projectName, state, dispatch,
     review: <ReadyWindow readiness={readiness} onFix={(issue) => move(jumpTo(progress, stepOfFix(issue.fix)))} reason={lead} />,
   }
 
-  const preview = <InvoiceDocument content={content} roles={roles} reason="The invoice as it will print on A4, in the colours you confirmed for the brand. It changes as you fill in each step." />
+  const preview = <InvoiceDocument content={content} roles={roles} reason="The invoice as it will print on A4, in the colours you confirmed for the brand. It changes as you fill in each step." logo={logo} onOpenHandoff={onOpenHandoff} />
 
   const startControls = (
     <div className="workspace__history" role="group" aria-label="History">

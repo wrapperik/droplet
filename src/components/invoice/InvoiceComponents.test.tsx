@@ -66,6 +66,42 @@ describe('InvoiceDocument', () => {
   })
 })
 
+describe('the logo on the invoice page', () => {
+  const logo = { dataUrl: 'data:image/png;base64,iVBORw0KGgo=' }
+
+  it('draws the founder\'s logo in the band, beside the business name', () => {
+    const { container } = render(<InvoiceDocument content={complete()} roles={roles} reason="Why." logo={logo} />)
+    const image = container.querySelector('.paper__band img')
+    expect(image).toHaveAttribute('src', logo.dataUrl)
+    expect(image).toHaveAccessibleName('Your logo')
+    expect(container.querySelector('.paper__logo--outstanding')).toBeNull()
+    expect(screen.queryByText(/Your logo is outstanding/)).not.toBeInTheDocument()
+    expect(container.querySelector('.paper__band')).toHaveTextContent('Kindred Gifting')
+  })
+
+  it('draws a placeholder and says the logo is outstanding when there is none, without blocking anything', async () => {
+    const onOpenHandoff = vi.fn()
+    const { container } = render(<InvoiceDocument content={complete()} roles={roles} reason="Why." logo={null} onOpenHandoff={onOpenHandoff} />)
+    expect(container.querySelector('.paper__logo--outstanding')).toHaveAccessibleName('Logo outstanding')
+    expect(screen.getByText(/Your logo is outstanding/)).toHaveTextContent('uses your business name')
+    await userEvent.click(screen.getByRole('button', { name: 'Add your logo' }))
+    expect(onOpenHandoff).toHaveBeenCalled()
+    // The business name is still the brand on the page.
+    expect(container.querySelector('.paper__band')).toHaveTextContent('Kindred Gifting')
+  })
+
+  it('names where to find the card without a button when the page cannot open it', () => {
+    render(<InvoiceDocument content={complete()} roles={roles} reason="Why." logo={null} />)
+    expect(screen.queryByRole('button', { name: 'Add your logo' })).not.toBeInTheDocument()
+  })
+
+  it('draws neither the logo nor the placeholder while the logo is still being read', () => {
+    const { container } = render(<InvoiceDocument content={complete()} roles={roles} reason="Why." />)
+    expect(container.querySelector('.paper__logo')).toBeNull()
+    expect(screen.queryByText(/Your logo is outstanding/)).not.toBeInTheDocument()
+  })
+})
+
 describe('the windows', () => {
   it('the business window changes one field at a time, and says where it is kept', async () => {
     const user = userEvent.setup()

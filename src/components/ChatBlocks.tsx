@@ -1,5 +1,7 @@
 import { CheckIcon } from '@solar-icons/react/linear'
 import type { ChatBlock, ChecklistBlock, TableBlock } from '../compose/blocks.ts'
+import type { SpecColour } from '../lib/logoHandoff.ts'
+import LogoBrief from './LogoBrief.tsx'
 import { STEP_WORKSPACE, type JourneyStep } from '../compose/journey.ts'
 import { InlineText } from './RichText.tsx'
 import './ChatBlocks.css'
@@ -18,17 +20,33 @@ type Props = {
   onToggle?: (block: number, item: number, checked: boolean) => void
   // A step's Open button was pressed. That is the founder asking outright for the workspace.
   onOpen?: (step: JourneyStep) => void
+  // What a logo brief is drawn from: the business name, the saved palette's colours and the fonts the founder chose. All from what the project
+  // holds, none from the model.
+  brand?: { name: string; colours: SpecColour[]; fontsFact?: string }
+  // The brief's button for the handoff card.
+  onOpenHandoff?: () => void
 }
 
 // The pictures Droplet can put in the chat: a table, or a checklist the founder can tick. Drawn from data by these components, never from markup.
-export default function ChatBlocks({ blocks, checks, done, busy, onToggle, onOpen }: Props) {
+export default function ChatBlocks({ blocks, checks, done, busy, onToggle, onOpen, brand, onOpenHandoff }: Props) {
   return (
     <div className="blocks">
       {blocks.map((block, at) =>
         block.type === 'table' ? (
           <Table key={at} block={block} />
+        ) : block.type === 'brief' ? (
+          <LogoBrief
+            key={at}
+            block={block}
+            name={brand?.name ?? ''}
+            colours={brand?.colours ?? []}
+            fontsFact={brand?.fontsFact}
+            busy={busy}
+            onOpenHandoff={onOpenHandoff}
+            onOpenBrand={onOpen ? () => onOpen('palette') : undefined}
+          />
         ) : (
-          <Checklist key={at} block={block} index={at} checks={checks} done={done} busy={busy} onToggle={onToggle} onOpen={onOpen} />
+          <Checklist key={at} block={block} index={at} checks={checks} done={done} busy={busy} onToggle={onToggle} onOpen={onOpen} onOpenHandoff={onOpenHandoff} />
         ),
       )}
     </div>
@@ -71,9 +89,9 @@ function Table({ block }: { block: TableBlock }) {
   )
 }
 
-type ChecklistProps = Pick<Props, 'checks' | 'done' | 'busy' | 'onToggle' | 'onOpen'> & { block: ChecklistBlock; index: number }
+type ChecklistProps = Pick<Props, 'checks' | 'done' | 'busy' | 'onToggle' | 'onOpen' | 'onOpenHandoff'> & { block: ChecklistBlock; index: number }
 
-function Checklist({ block, index, checks, done, busy, onToggle, onOpen }: ChecklistProps) {
+function Checklist({ block, index, checks, done, busy, onToggle, onOpen, onOpenHandoff }: ChecklistProps) {
   const state = block.items.map((item, at) => {
     // Locked when the project shows the step is done: that comes from what is saved, not from a box.
     const locked = item.step !== undefined && done.has(item.step)
@@ -119,6 +137,12 @@ function Checklist({ block, index, checks, done, busy, onToggle, onOpen }: Check
               </label>
               {workspace && onOpen && item.step && (
                 <button type="button" className="blocks__open" disabled={busy} onClick={() => onOpen(item.step!)} aria-label={`Open ${item.label}`}>
+                  Open
+                </button>
+              )}
+              {/* The logo has no workspace, but it has the handoff card, which the founder opens themselves. */}
+              {item.step === 'logo' && onOpenHandoff && (
+                <button type="button" className="blocks__open" onClick={onOpenHandoff} aria-label={`Open the handoff card for ${item.label}`}>
                   Open
                 </button>
               )}

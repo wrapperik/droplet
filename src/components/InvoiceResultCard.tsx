@@ -3,6 +3,8 @@ import { DownloadMinimalisticIcon, PenIcon } from '@solar-icons/react/linear'
 import { starterBlocks } from '../compose/fallback.ts'
 import { formatDate, type InvoiceContent } from '../lib/invoice.ts'
 import type { InvoiceResult } from '../lib/invoiceGuide.ts'
+import { loadLogo } from '../lib/logoStore.ts'
+import { logoSlotOf } from '../lib/invoiceView.ts'
 import { loadMemory } from '../lib/memoryStore.ts'
 import { formatRand } from '../lib/money.ts'
 import { resolveRoles, type ResolvedRoles } from '../lib/palette.ts'
@@ -11,13 +13,13 @@ import { loadPalette } from '../lib/projectStore.ts'
 import { InvoicePaper } from './invoice/InvoiceDocument.tsx'
 import './InvoiceResultCard.css'
 
-export type ResultPreview = { content: InvoiceContent; roles: ResolvedRoles }
+export type ResultPreview = { content: InvoiceContent; roles: ResolvedRoles; logo: { dataUrl: string } | null }
 
 // The saved invoice and the brand, for the small page. Null when the invoice is not saved any more: the card then shows the words only.
 async function readPreview(projectId: string, invoiceId: string): Promise<ResultPreview | null> {
-  const [memory, palette] = await Promise.all([loadMemory(projectId), loadPalette(projectId)])
+  const [memory, palette, logo] = await Promise.all([loadMemory(projectId), loadPalette(projectId), loadLogo(projectId)])
   const invoice = savedInvoice(memory, invoiceId)
-  return invoice ? { content: invoice.content, roles: resolveRoles(palette?.blocks ?? starterBlocks()) } : null
+  return invoice ? { content: invoice.content, roles: resolveRoles(palette?.blocks ?? starterBlocks()), logo } : null
 }
 
 type Props = {
@@ -52,7 +54,8 @@ export default function InvoiceResultCard({ projectId, result, onExport, onOpen,
     <section className="result" aria-label={title}>
       {preview && (
         <div className="result__page" aria-hidden="true">
-          <InvoicePaper content={preview.content} roles={preview.roles} />
+          {/* The small copy has no room for the placeholder's note, so it draws a logo only when there is one. */}
+          <InvoicePaper content={preview.content} roles={preview.roles} logo={logoSlotOf(preview.logo, false)} />
         </div>
       )}
       <div className="result__info">

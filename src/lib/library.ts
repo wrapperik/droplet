@@ -6,6 +6,7 @@ import type { BoardSave } from './boardSave.ts'
 import type { ProjectMemory, SavedInvoice } from './memorySave.ts'
 import { COLOUR_ROLES, pairResult, resolveRoles, type ColourRole } from './palette.ts'
 import type { PaletteSave } from './paletteSave.ts'
+import type { LogoSave } from './logoSave.ts'
 import { checkInvoice } from './invoiceReadiness.ts'
 import { currentFacts, isRevisedSinceExport, numbersInUse } from './projectMemory.ts'
 
@@ -40,6 +41,7 @@ export type LibraryActionId =
   | 'new_invoice'
   | 'edit'
   | 'make_brief'
+  | 'handoff'
 
 type Base = {
   // Stable for the same thing: "business", "brand", "invoice:<id>", "client:<id>".
@@ -70,7 +72,12 @@ export type BrandItem = Base & {
   exportedAt: string | null
 }
 
-export type LogoItem = Base & { section: 'logo'; brief: string | null }
+export type LogoItem = Base & {
+  section: 'logo'
+  brief: string | null
+  // The logo the founder brought back from another tool, if they have. Drawn as an image; never sent to the composer.
+  file: { name: string; kind: 'png' | 'svg'; dataUrl: string; size: number } | null
+}
 
 export type IdeasItem = Base & {
   section: 'ideas'
@@ -137,6 +144,8 @@ export type LibraryInput = {
   board: BoardSave | null
   memory: ProjectMemory
   notes: NotesInput
+  // The logo brought back from another tool, if there is one. Absent in a caller that does not need it.
+  logo?: LogoSave | null
 }
 
 const filledIn = (value: string) => value.trim() !== ''
@@ -181,18 +190,32 @@ function brandItem(palette: PaletteSave | null): BrandItem | null {
   }
 }
 
-function logoItem(memory: ProjectMemory): LogoItem {
+function logoItem(memory: ProjectMemory, logo: LogoSave | null): LogoItem {
   const brief = currentFacts(memory)['logo.status'] ?? null
+  if (logo) {
+    return {
+      id: 'logo',
+      section: 'logo',
+      title: 'Logo',
+      status: 'resolved',
+      statusLabel: `Added ${longDate(logo.savedAt)}`,
+      date: logo.savedAt,
+      brief,
+      file: { name: logo.name, kind: logo.kind, dataUrl: logo.dataUrl, size: logo.size },
+      actions: ['handoff'],
+    }
+  }
   return {
     id: 'logo',
     section: 'logo',
     title: 'Logo',
-    // Droplet cannot make one, so it is always made outside and always outstanding here.
+    // Droplet cannot make one, so until the founder brings one back from another tool it is outstanding here.
     status: 'outstanding',
     statusLabel: 'Made outside Droplet',
     date: null,
     brief,
-    actions: ['make_brief'],
+    file: null,
+    actions: ['handoff', 'make_brief'],
   }
 }
 
@@ -311,13 +334,13 @@ const EMPTY: Record<LibrarySection, LibrarySectionView['empty']> = {
 
 // Everything the library holds, in the order the founder meets it: the business, then what is made for it, then what depends on that.
 export function libraryOf(input: LibraryInput): Library {
-  const { palette, board, memory, notes } = input
+  const { palette, board, memory, notes, logo = null } = input
   const invoices = [...memory.invoices].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map((invoice) => invoiceItem(invoice, memory))
   const clients = [...memory.clients].sort((a, b) => a.client.name.localeCompare(b.client.name)).map(clientItem)
   const groups: Record<LibrarySection, LibraryItem[]> = {
     business: [businessItem(memory)].flatMap((item) => (item ? [item] : [])),
     brand: [brandItem(palette)].flatMap((item) => (item ? [item] : [])),
-    logo: [logoItem(memory)],
+    logo: [logoItem(memory, logo)],
     ideas: [ideasItem(board)].flatMap((item) => (item ? [item] : [])),
     invoices,
     clients,

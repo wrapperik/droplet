@@ -52,7 +52,20 @@ describe('an empty project', () => {
 
   it('holds only the logo, which is outstanding and made outside Droplet', () => {
     expect(library.items.map((item) => item.section)).toEqual(['logo'])
-    expect(library.items[0]).toMatchObject({ status: 'outstanding', statusLabel: 'Made outside Droplet', actions: ['make_brief'] })
+    expect(library.items[0]).toMatchObject({ status: 'outstanding', statusLabel: 'Made outside Droplet', file: null, actions: ['handoff', 'make_brief'] })
+  })
+
+  it('shows the logo as resolved, with its file, once one is brought back', () => {
+    const logo = { kind: 'png' as const, name: 'kindred.png', size: 12, dataUrl: 'data:image/png;base64,AAAA', savedAt: '2026-10-15T09:00:00.000Z' }
+    const withLogo = libraryOf({ palette: null, board: null, memory: emptyMemory(), notes: {}, logo })
+    expect(withLogo.items[0]).toMatchObject({ section: 'logo', status: 'resolved', date: logo.savedAt, file: { name: 'kindred.png', kind: 'png' }, actions: ['handoff'] })
+    expect((withLogo.items[0] as { statusLabel: string }).statusLabel).toMatch(/^Added /)
+  })
+
+  it('does not tell the composer about the logo file', () => {
+    const logo = { kind: 'png' as const, name: 'kindred.png', size: 12, dataUrl: 'data:image/png;base64,AAAA', savedAt: '2026-10-15T09:00:00.000Z' }
+    const snapshot = JSON.stringify(snapshotOfLibrary(libraryOf({ palette: null, board: null, memory: emptyMemory(), notes: {}, logo })))
+    expect(snapshot).not.toMatch(/kindred\.png|base64/)
   })
 
   it('says what each empty section is for and offers to open the workspace that makes it', () => {

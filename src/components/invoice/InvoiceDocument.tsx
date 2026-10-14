@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react'
 import { readableTextColour } from '../../lib/colour.ts'
 import type { InvoiceContent } from '../../lib/invoice.ts'
-import { invoiceView, type Text } from '../../lib/invoiceView.ts'
+import { invoiceView, logoSlotOf, type LogoSlot, type Text } from '../../lib/invoiceView.ts'
 import type { ResolvedRoles } from '../../lib/palette.ts'
 import ToolWindow from '../ToolWindow.tsx'
 import './InvoiceDocument.css'
@@ -11,6 +11,10 @@ type Props = {
   // The brand the document is drawn in: the palette the founder confirmed, in its roles.
   roles: ResolvedRoles
   reason: string
+  // The logo the founder brought back: undefined while it is being read (nothing is drawn for it), null if there is none (a placeholder and a note), or the logo.
+  logo?: { dataUrl: string } | null
+  // Opens the logo handoff card, from the note under the page. Without it the note says where to find it.
+  onOpenHandoff?: () => void
 }
 
 const Part = ({ text }: { text: Text }) => (text.placeholder ? <span className="paper__placeholder">{text.text}</span> : <>{text.text}</>)
@@ -18,19 +22,33 @@ const Part = ({ text }: { text: Text }) => (text.placeholder ? <span className="
 // The invoice as a page, in the founder's brand, laid out as it will print (A4, the PDF's own proportions: see the CSS). It is made from the same words as the PDF
 // (`invoiceView`). A part that is not filled in yet shows a faded placeholder, so the page looks like an invoice from the first
 // moment and says what is still to come. The colours are set as custom properties and used only inside the page.
-export default function InvoiceDocument({ content, roles, reason }: Props) {
+export default function InvoiceDocument({ content, roles, reason, logo, onOpenHandoff }: Props) {
   return (
     <ToolWindow title="Invoice" reason={reason}>
-      <InvoicePaper content={content} roles={roles} />
+      <InvoicePaper content={content} roles={roles} logo={logoSlotOf(logo)} />
       <p className="paper-note">Shown as it will print on A4.</p>
+      {/* An outstanding logo flags the invoice and never blocks it: the business name is the brand until the logo is added, on the page and in the PDF. */}
+      {logo === null && (
+        <p className="paper-note paper-note--logo">
+          Your logo is outstanding. The invoice uses your business name until you add it, and the dashed box is not printed.
+          {onOpenHandoff && (
+            <>
+              {' '}
+              <button type="button" className="paper-note__action" onClick={onOpenHandoff}>
+                Add your logo
+              </button>
+            </>
+          )}
+        </p>
+      )}
     </ToolWindow>
   )
 }
 
 // The page alone, with no window round it, for a smaller copy such as the finished invoice in the chat. Its sizes are shares of the width of its
 // container, so whatever holds it must be one (`container-type: inline-size`).
-export function InvoicePaper({ content, roles }: Omit<Props, 'reason'>) {
-  const view = invoiceView(content)
+export function InvoicePaper({ content, roles, logo }: Pick<Props, 'content' | 'roles'> & { logo?: LogoSlot | null }) {
+  const view = invoiceView(content, logo ?? null)
   const colours = {
     '--paper-background': roles.background.hex,
     '--paper-text': roles.text.hex,
@@ -42,8 +60,20 @@ export function InvoicePaper({ content, roles }: Omit<Props, 'reason'>) {
   return (
     <article className="paper" style={colours} aria-label={`${view.title} ${view.number.text}`}>
       <header className="paper__band">
-        <span className="paper__business">
-          <Part text={view.from[0]} />
+        <span className="paper__brand">
+          {view.logo?.kind === 'added' && (
+            <span className="paper__logo">
+              <img src={view.logo.src} alt={view.logo.alt} />
+            </span>
+          )}
+          {view.logo?.kind === 'outstanding' && (
+            <span className="paper__logo paper__logo--outstanding" aria-label="Logo outstanding">
+              Logo
+            </span>
+          )}
+          <span className="paper__business">
+            <Part text={view.from[0]} />
+          </span>
         </span>
         <span className="paper__kind">{view.title}</span>
       </header>

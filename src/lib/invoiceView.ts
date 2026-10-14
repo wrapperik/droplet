@@ -10,6 +10,12 @@ export type Text = { text: string; placeholder?: boolean }
 const filled = (value: string, placeholder: string): Text => (value.trim() ? { text: value.trim() } : { text: placeholder, placeholder: true })
 const linesOf = (value: string) => value.split('\n').map((part) => part.trim()).filter(Boolean)
 
+// The logo's place on the document. `added` is the founder's own logo, drawn as an image: the page draws whatever was saved, and the PDF is given a
+// PNG (see logoRaster.ts), since its library draws no SVG. `outstanding` is the placeholder for a logo not brought back yet: it is on the page
+// only, never in the PDF, which falls back to the business name that is already there. No slot (null) draws nothing, for a caller that does not
+// know yet or has no room for one.
+export type LogoSlot = { kind: 'added'; src: string; alt: string } | { kind: 'outstanding' }
+
 export type ViewLine = {
   description: Text
   quantity: string
@@ -20,6 +26,7 @@ export type ViewLine = {
 }
 
 export type InvoiceView = {
+  logo: LogoSlot | null
   // "Tax invoice" for a business registered for VAT, "Invoice" for one that is not, and "Quote".
   title: string
   number: Text
@@ -42,7 +49,7 @@ export type InvoiceView = {
 // A quantity as it is read: whole numbers without decimals, and others with the decimals they have.
 export const quantityText = (quantity: number) => String(Math.round(quantity * 100) / 100)
 
-export function invoiceView(content: InvoiceContent): InvoiceView {
+export function invoiceView(content: InvoiceContent, logo: LogoSlot | null = null): InvoiceView {
   const { details, business, client, vatRegistered } = content
   const isQuote = details.kind === 'quote'
   const totals = computeTotals(content.lines, vatRegistered)
@@ -88,6 +95,7 @@ export function invoiceView(content: InvoiceContent): InvoiceView {
   const payment = bank.length === 0 ? null : ['Pay by EFT', ...bank.map(([label, value]) => `${label}: ${value.trim()}`), `Reference: ${details.number.trim() || 'the invoice number'}`]
 
   return {
+    logo,
     title: isQuote ? 'Quote' : vatRegistered ? 'Tax invoice' : 'Invoice',
     number: filled(details.number, 'Number'),
     issued: details.issueDate ? { text: formatDate(details.issueDate) } : { text: 'Date', placeholder: true },
@@ -104,4 +112,12 @@ export function invoiceView(content: InvoiceContent): InvoiceView {
     payment,
     notes: details.notes.trim() || null,
   }
+}
+
+// The logo's place for what the project holds: undefined (not read yet) draws nothing, so no placeholder flashes while it loads; none brought back is the
+// placeholder, unless `placeholder` is false (a small copy of the page has no room for its note); a logo is drawn.
+export function logoSlotOf(logo: { dataUrl: string } | null | undefined, placeholder = true): LogoSlot | null {
+  if (logo === undefined) return null
+  if (logo === null) return placeholder ? { kind: 'outstanding' } : null
+  return { kind: 'added', src: logo.dataUrl, alt: 'Your logo' }
 }

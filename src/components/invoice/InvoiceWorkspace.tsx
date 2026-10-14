@@ -30,6 +30,9 @@ type Props = {
   // founder is about to leave. And told when the founder has confirmed.
   saveSignal?: number
   onConfirmed?: () => void
+  // Changes when the logo is added or removed on the handoff card, so the page and the PDF read it again. And opens that card.
+  logoVersion?: number
+  onOpenHandoff?: () => void
   headerSlots?: HeaderSlots
 }
 
@@ -50,8 +53,8 @@ const REASONS = {
 // the shared workspace shell. The document is drawn in the founder's confirmed palette. The project remembers the founder's
 // business, their clients and their invoices, so none is typed twice, but only what the founder confirms: Save opens a note of what
 // would be remembered, and nothing is kept unless it is confirmed. Leaving an invoice with unsaved changes asks first.
-export default function InvoiceWorkspace({ projectId, projectName, state, dispatch, onReplace, saveSignal, onConfirmed, headerSlots }: Props) {
-  const { memory, doc, content, roles, saved, unsaved, hasChanges, saveStatus, business, client, number, items, persist, confirm, readiness } = useInvoiceMemory(projectId, state, onConfirmed)
+export default function InvoiceWorkspace({ projectId, projectName, state, dispatch, onReplace, saveSignal, onConfirmed, logoVersion, onOpenHandoff, headerSlots }: Props) {
+  const { memory, logo, doc, content, roles, saved, unsaved, hasChanges, saveStatus, business, client, number, items, persist, confirm, readiness } = useInvoiceMemory(projectId, state, onConfirmed, logoVersion)
   const [leaving, setLeaving] = useState<{ what: string; run: () => void | Promise<void> } | null>(null)
 
   // Leaving saves nothing, so an invoice with changes asks first.
@@ -120,7 +123,7 @@ export default function InvoiceWorkspace({ projectId, projectName, state, dispat
       ...extra,
     })
     return {
-      document: panel('document', 'Invoice', <InvoiceDocument content={content} roles={roles} reason={reason('document')} />, { distance: 0.12, minCols: 8 }),
+      document: panel('document', 'Invoice', <InvoiceDocument content={content} roles={roles} reason={reason('document')} logo={logo} onOpenHandoff={onOpenHandoff} />, { distance: 0.12, minCols: 8 }),
       lines: panel('lines', 'Line items', <LineItemsEditor lines={content.lines} vatRegistered={content.vatRegistered} dispatch={dispatch} reason={reason('lines')} />, { delay: 0.5, distance: 0.6, minCols: 8 }),
       invoices: panel('invoices', 'Invoices', <InvoicesWindow currentId={doc.invoiceId} current={content} saved={memory.invoices} onOpen={openInvoice} onNew={newInvoice} onCopy={copyInvoice} onForget={(id) => persist(forgetInvoice(memory, id))} reason={reason('invoices')} />, { tool: true, distance: 0.3 }),
       business: panel('business', 'Your business', <BusinessWindow business={content.business} status={business} onForget={() => persist(forgetBusiness(memory))} dispatch={dispatch} reason={reason('business')} />, { tool: true, distance: 0.3 }),
@@ -156,7 +159,7 @@ export default function InvoiceWorkspace({ projectId, projectName, state, dispat
         exportButton={
           <ExportButton
             onExport={async () => {
-              const exported = await exportInvoice(content, roles)
+              const exported = await exportInvoice(content, roles, logo)
               // An invoice that was confirmed is marked as exported, so it is not picked up as a draft again.
               if (exported && saved && sameContent(content, saved.content)) persist(markExported(memory, doc.invoiceId, new Date().toISOString()))
               return exported

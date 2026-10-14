@@ -106,6 +106,16 @@ describe('exporting an invoice', () => {
     expect((await loadMemory(PROJECT)).invoices[0].exportedAt).toBeTruthy()
   })
 
+  it('gives the export the project\'s logo, or none', async () => {
+    await saveInvoice(complete('INV-0001'))
+    await exportLibraryItem(PROJECT, 'Kindred', { kind: 'invoice', id: 'i1' })
+    expect(exports.invoice.mock.calls[0][2]).toBeNull()
+    const { importLogo } = await import('./logoStore.ts')
+    await importLogo(PROJECT, new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1])], 'k.png', { type: 'image/png' }))
+    await exportLibraryItem(PROJECT, 'Kindred', { kind: 'invoice', id: 'i1' })
+    expect((exports.invoice.mock.calls[1][2] as { name: string }).name).toBe('k.png')
+  })
+
   it('does not mark an invoice exported when the file could not be made', async () => {
     await saveInvoice(complete('INV-0001'))
     exports.invoice.mockResolvedValue(false)

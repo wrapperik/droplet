@@ -293,3 +293,15 @@
     gap: 0;
   }
 }
+
+/* The logo the founder brought back. A plain light tile, the same in both themes, since a logo is often transparent and dark. */
+.library__logo {
+  flex: none;
+  width: 6rem;
+  height: 6rem;
+  padding: 0.5rem;
+  border: 1px solid var(--overlay-10);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  object-fit: contain;
+}

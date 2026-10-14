@@ -215,4 +215,24 @@ describe('the library screen', () => {
     rerender(<Library projectId={PROJECT} projectName="Kindred" version={1} onClose={() => {}} onOpen={async () => 'done'} onAsk={() => {}} />)
     expect(await screen.findByText(/Text on background/)).toBeInTheDocument()
   })
+
+  it('opens the logo handoff card from the Logo row', async () => {
+    const onOpenHandoff = vi.fn()
+    setup({ onOpenHandoff })
+    await screen.findByText(/No palette is saved/)
+    await userEvent.click(within(section('Logo')).getByRole('button', { name: 'Open the logo handoff card' }))
+    expect(onOpenHandoff).toHaveBeenCalled()
+  })
+
+  it('shows the logo as made, with its picture, once one is brought back', async () => {
+    const { importLogo } = await import('../lib/logoStore.ts')
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3])
+    await importLogo(PROJECT, new File([png], 'kindred.png', { type: 'image/png' }))
+    setup({ onOpenHandoff: vi.fn() })
+    const logo = await screen.findByRole('img', { name: 'Your logo, kindred.png' })
+    expect(logo).toBeInTheDocument()
+    expect(section('Logo')).not.toHaveTextContent('Made outside Droplet')
+    expect(section('Logo')).toHaveTextContent('Added')
+    expect(within(section('Logo')).getByRole('button', { name: 'Open the logo card to replace or remove your logo' })).toBeInTheDocument()
+  })
 })

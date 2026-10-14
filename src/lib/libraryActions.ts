@@ -4,6 +4,7 @@ import { loadBoard, markBoardExported } from './boardStore.ts'
 import { exportInvoice } from './exportInvoice.ts'
 import { exportBrandSheet } from './exportSheet.ts'
 import { checkInvoice } from './invoiceReadiness.ts'
+import { loadLogo } from './logoStore.ts'
 import { loadMemory, saveMemory } from './memoryStore.ts'
 import { resolveRoles } from './palette.ts'
 import { forgetClient, forgetFact, forgetInvoice, markExported, numbersInUse, savedInvoice } from './projectMemory.ts'
@@ -52,7 +53,7 @@ export async function exportLibraryItem(projectId: string, projectName: string, 
   if (!readiness.ready) return fail(`It is not ready to export. ${readiness.required.map((issue) => issue.text).join(' ')}`)
   const palette = await loadPalette(projectId)
   const roles = resolveRoles(palette?.blocks ?? starterBlocks())
-  if (!(await exportInvoice(invoice.content, roles))) return fail('The invoice PDF could not be made.')
+  if (!(await exportInvoice(invoice.content, roles, await loadLogo(projectId)))) return fail('The invoice PDF could not be made.')
   await saveMemory(projectId, markExported(await loadMemory(projectId), invoice.id, new Date().toISOString()))
   return { ok: true, text: 'The invoice was downloaded.' }
 }
