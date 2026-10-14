@@ -16,7 +16,7 @@ export default function SignIn() {
   // The session is looked for here too, since this is where a founder can arrive straight from Google or from the link in an email.
   useEffect(() => start(), [start])
   const { busy, error, notice, signIn, signUp, signInWithGoogle, clearMessages } = useAuth()
-  // The landing page links here with ?mode=sign-up to open on making an account.
+  // A link with ?mode=sign-up opens on making an account.
   const [params] = useSearchParams()
   const [mode, setMode] = useState<Mode>(() => (params.get('mode') === 'sign-up' ? 'sign-up' : 'sign-in'))
   const [name, setName] = useState('')

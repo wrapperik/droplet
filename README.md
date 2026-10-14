@@ -55,7 +55,7 @@ Without the two Supabase values the app runs on this device alone, signed in as 
 
 ## Layout
 
-- `src/pages`: routed screens (landing, sign-in, introduction, Home, account)
+- `src/pages`: routed screens (sign-in, introduction, Home, account)
 - `src/components`: the workspace shell, the three workspaces, the chat and the sidebar
 - `src/compose`: the AI contract: Zod schemas, prompts, rules, and applying a turn to a workspace
 - `src/lib`: pure logic (money, VAT, contrast, layout grid, memory, storage drivers), each with tests

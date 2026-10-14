@@ -73,7 +73,7 @@ describe('the sign-in screen', () => {
     expect(screen.queryByLabelText('What should we call you?')).not.toBeInTheDocument()
   })
 
-  it('opens on making an account when the address says so (the landing page links here)', () => {
+  it('opens on making an account when the address says so (a sign-up link)', () => {
     renderSignIn('/sign-in?mode=sign-up')
     expect(screen.getByRole('heading', { name: 'Make your account' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Make an account' })).toHaveAttribute('aria-pressed', 'true')
