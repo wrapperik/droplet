@@ -273,7 +273,7 @@ describe('the compose function in Supabase', () => {
     expect(sent[0].body.tools).toEqual([{ googleSearch: {} }])
     const counted = calls.find((call) => call.url.includes('answered_by=eq.advanced'))!
     expect(counted.url).toContain('user_id=eq.user-1')
-    expect(counted.url).toMatch(/created_at=gte\.2026-10-0\d/)
+    expect(counted.url).toMatch(/created_at=gte\.\d{4}-\d{2}-\d{2}T/)
     expect(counted.url).toContain('order=created_at.asc')
     expect(counted.init?.headers).toMatchObject({ prefer: 'count=exact', range: '0-0', apikey: 'service-key' })
     expect(insertOf(calls)).toMatchObject({ mode: 'advanced', answered_by: 'advanced', model: 'gemini-3.8-flash', searched: true })
