@@ -269,3 +269,67 @@
     display: none;
   }
 }
+
+/* What Droplet is doing while it works: the stage in words, the seconds so far, and Stop. */
+.thread__elapsed {
+  font-variant-numeric: tabular-nums;
+}
+
+.thread__stop {
+  margin-left: 0.25rem;
+  padding: 0.125rem 0.75rem;
+  border: 1px solid var(--overlay-10);
+  border-radius: var(--radius-pill);
+  background: var(--overlay-06);
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.thread__stop:hover,
+.thread__stop:focus-visible {
+  background: var(--accent-tint-soft);
+}
+
+/* Editing the founder's last message in place. */
+.thread__edit {
+  display: grid;
+  gap: 0.5rem;
+  min-width: min(20rem, 70vw);
+}
+
+.thread__edit-field {
+  width: 100%;
+  padding: 0.25rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  resize: none;
+}
+
+.thread__edit-field:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.thread__edit-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* A reply that has just arrived comes in a piece at a time: each part waits its turn (--i, set in the markup) for 120 ms apiece and fades up a little.
+   Reduced motion: everything is there at once. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-reveal] {
+    animation: thread-reveal 260ms var(--ease-out) both;
+    animation-delay: calc(var(--i, 0) * 120ms);
+  }
+}
+
+@keyframes thread-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(0.3rem);
+  }
+}

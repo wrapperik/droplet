@@ -284,3 +284,108 @@ describe('a message the founder has just sent', () => {
     expect(container.querySelectorAll('[data-rising]')).toHaveLength(0)
   })
 })
+
+describe('while Droplet works', () => {
+  const pendingThread: ThreadMessage[] = [
+    { id: 1, from: 'you', text: 'What does CIPC cost?', at: '2026-10-15T09:00:00.000Z' },
+    { id: 2, from: 'droplet', text: '', pending: true },
+  ]
+
+  it('says "Thinking" until a stage is known', () => {
+    render(<ChatThread messages={pendingThread} />)
+    expect(screen.getByText('Thinking')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
+  })
+
+  it('shows the stage in words, and the seconds drawn but not read out', () => {
+    render(<ChatThread messages={pendingThread} progress={{ words: 'Searched the web for “CIPC fee”. Checking the reply', elapsed: '7s' }} />)
+    expect(screen.getByText('Searched the web for “CIPC fee”. Checking the reply')).toBeInTheDocument()
+    const seconds = screen.getByText('· 7s')
+    expect(seconds).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('offers Stop, and calls it', async () => {
+    const onStop = vi.fn()
+    render(<ChatThread messages={pendingThread} onStop={onStop} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Stop' }))
+    expect(onStop).toHaveBeenCalled()
+  })
+})
+
+describe('a reply that has just arrived', () => {
+  const reply = (fresh: boolean): ThreadMessage[] => [
+    { id: 1, from: 'you', text: 'Hello', at: '2026-10-15T09:00:00.000Z' },
+    { id: 2, from: 'droplet', text: 'First paragraph.\n\nSecond paragraph.', question: 'Which one?', replies: ['This one', 'That one'], ...(fresh ? { fresh: true } : {}), at: '2026-10-15T09:00:05.000Z' },
+  ]
+
+  it('comes in paragraph by paragraph, then its question and its suggested replies, each with its place in the order', () => {
+    const { container } = render(<ChatThread messages={reply(true)} />)
+    const paragraphs = [...container.querySelectorAll('.rich > [data-reveal]')]
+    expect(paragraphs.map((node) => (node as HTMLElement).style.getPropertyValue('--i'))).toEqual(['0', '1'])
+    expect((container.querySelector('.thread__question') as HTMLElement).style.getPropertyValue('--i')).toBe('4')
+    expect((container.querySelector('.thread__replies') as HTMLElement).style.getPropertyValue('--i')).toBe('5')
+  })
+
+  it('is shown plainly once it is no longer fresh, so a thread mounted again does not play it again', () => {
+    const { container } = render(<ChatThread messages={reply(false)} />)
+    expect(container.querySelectorAll('[data-reveal]')).toHaveLength(0)
+  })
+})
+
+describe('trying again and editing', () => {
+  const exchange: ThreadMessage[] = [
+    { id: 1, from: 'you', text: 'How should I price a gift box?', at: '2026-10-15T09:00:00.000Z' },
+    { id: 2, from: 'droplet', text: 'Start from your costs.', at: '2026-10-15T09:00:05.000Z' },
+  ]
+
+  it('offers Try again on the last reply, and calls it with that reply', async () => {
+    const onRetry = vi.fn()
+    render(<ChatThread messages={exchange} onRetry={onRetry} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(onRetry).toHaveBeenCalledWith(2)
+  })
+
+  it('offers neither on a reply that changed a workspace, on one with buttons, on a note from the app, or while Droplet is working', () => {
+    const receipt = { heading: 'Changed on the board', lines: [], left: [] } as unknown as ThreadMessage['receipt']
+    const cases: ThreadMessage[][] = [
+      [exchange[0], { ...exchange[1], receipt }],
+      [exchange[0], { ...exchange[1], actions: [{ id: 'save', label: 'Save' }] }],
+      [exchange[0], { ...exchange[1], local: true }],
+    ]
+    for (const thread of cases) {
+      const { unmount } = render(<ChatThread messages={thread} onRetry={vi.fn()} onEdit={vi.fn()} />)
+      expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Edit your message' })).not.toBeInTheDocument()
+      unmount()
+    }
+    render(<ChatThread messages={exchange} onRetry={vi.fn()} onEdit={vi.fn()} busy />)
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+  })
+
+  it('offers Edit on the message the last reply answered, and sends the edit', async () => {
+    const onEdit = vi.fn()
+    render(<ChatThread messages={exchange} onEdit={onEdit} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Edit your message' }))
+    const field = screen.getByRole('textbox', { name: 'Edit your message' })
+    expect(field).toHaveValue('How should I price a gift box?')
+    await userEvent.clear(field)
+    await userEvent.type(field, 'How should I price a corporate gift box?')
+    await userEvent.click(screen.getByRole('button', { name: 'Send again' }))
+    expect(onEdit).toHaveBeenCalledWith(1, 'How should I price a corporate gift box?')
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+  })
+
+  it('leaves the message as it was on Cancel or Escape, and will not send an empty one', async () => {
+    const onEdit = vi.fn()
+    render(<ChatThread messages={exchange} onEdit={onEdit} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Edit your message' }))
+    await userEvent.clear(screen.getByRole('textbox'))
+    expect(screen.getByRole('button', { name: 'Send again' })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByText('How should I price a gift box?')).toBeInTheDocument()
+    expect(onEdit).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit your message' }))
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+  })
+})

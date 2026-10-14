@@ -976,6 +976,41 @@ describe('the AI on the board', () => {
   const pink = () => [...document.querySelectorAll<HTMLElement>('.note[data-colour="pink"]')]
   const toolbar = () => screen.queryByRole('toolbar', { name: 'Tools' })
 
+  it('offers a few ways in on an empty board, and sends the one that is pressed as the founder\'s own request', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await pickTask(user, /Shape the business idea/)
+    expect(screen.getByLabelText('Describe what you need')).toHaveAttribute('placeholder', expect.stringMatching(/start the board/))
+    const suggestions = await screen.findByRole('group', { name: 'Suggestions' })
+    expect(suggestions).toHaveTextContent('Brainstorm namesCustomer templateInterview me')
+    answers = [reply('chat', 'Here are some.')]
+    await user.click(within(suggestions).getByRole('button', { name: 'Brainstorm names' }))
+    await screen.findByText('Here are some.')
+    expect(asked[0].intent).toBe('Brainstorm some name ideas for my business')
+  })
+
+  it('reads the selection: the field, a chip with a cross, and an Ask Droplet button that sends a suggestion about it', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await pickTask(user, /Shape the business idea/)
+    await withNote(user, 'Gift boxes for offices')
+    // the note is selected after it was written
+    await user.click(screen.getByText('Gift boxes for offices'))
+    expect(screen.getByLabelText('Describe what you need')).toHaveAttribute('placeholder', 'Ask about the selected note')
+    expect(screen.getByRole('group', { name: 'Suggestions' })).toHaveTextContent('1 note selected')
+    answers = [reply('ideation', 'Two ideas.', [{ type: 'add_note', text: 'Corporate hampers', near: 'n1' }])]
+    await user.click(screen.getByRole('button', { name: 'Ask Droplet about this note' }))
+    await user.click(screen.getByRole('button', { name: 'Expand' }))
+    await screen.findByText('Two ideas.')
+    expect(asked[0].intent).toBe('Expand this note into a few related ideas')
+    expect(asked[0]).toMatchObject({ view: 'board' })
+    expect(pink()).toHaveLength(1)
+    // the reply comes back with its receipt, like any other
+    expect(screen.getByText(/Changed on the board/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Clear the selection' }))
+    expect(screen.queryByText('1 note selected')).not.toBeInTheDocument()
+  })
+
   it('is shown the board, by reference, when it is on screen, and not the palette or the invoice', async () => {
     const user = userEvent.setup()
     renderHome()
@@ -1047,6 +1082,64 @@ describe('the AI on the board', () => {
     await say(user, 'one more idea')
     await waitFor(() => expect(pink()).toHaveLength(1))
     expect({ left: mine().style.left, top: mine().style.top, colour: mine().dataset.colour, text: mine().textContent }).toEqual(before)
+  })
+
+  it('asks in the chat before deleting a note of the founder\'s, and deletes it only on Delete', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await pickTask(user, /Shape the business idea/)
+    await withNote(user, 'Gift boxes for offices')
+    answers = [reply('ideation', 'I would take that one out. I am asking you first.', [{ type: 'remove', things: ['n1'] }])]
+    await say(user, 'Delete my note')
+    expect(await screen.findByText(/Delete 1 of your notes\?/)).toBeInTheDocument()
+    expect(screen.getByText('Gift boxes for offices')).toBeInTheDocument()
+    expect(screen.getByText(/Nothing is deleted until you say yes/)).toBeInTheDocument()
+    await user.click(within(screen.getByRole('log', { name: 'Conversation' })).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(screen.queryByText('Gift boxes for offices')).not.toBeInTheDocument())
+    expect(screen.getByText(/Undo in the header brings it back/)).toBeInTheDocument()
+    // the question is the app's own note, so it is not sent to the composer afterwards, and the buttons are gone
+    expect(screen.queryByRole('button', { name: 'Keep them' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(await screen.findByText('Gift boxes for offices')).toBeInTheDocument()
+  })
+
+  it('leaves the note alone on Keep them', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await pickTask(user, /Shape the business idea/)
+    await withNote(user, 'Gift boxes for offices')
+    answers = [reply('ideation', 'Asking first.', [{ type: 'remove', things: ['n1'] }])]
+    await say(user, 'Delete my note')
+    await user.click(await screen.findByRole('button', { name: 'Keep them' }))
+    expect(screen.getByText('Gift boxes for offices')).toBeInTheDocument()
+    expect(screen.getByText('Okay, I left them as they are.')).toBeInTheDocument()
+  })
+
+  it('suggests new words for a note of the founder\'s, and changes it only on Accept, and not if they changed it meanwhile', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await pickTask(user, /Shape the business idea/)
+    await withNote(user, 'Gift boxes')
+    answers = [reply('ideation', 'Here is a sharper version.', [{ type: 'edit_note', note: 'n1', text: 'Corporate gift boxes' }])]
+    await say(user, 'Reword my note')
+    expect(await screen.findByText(/Now: “Gift boxes”\. Suggested: “Corporate gift boxes”/)).toBeInTheDocument()
+    expect(screen.getByText('Gift boxes')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Accept' }))
+    await waitFor(() => expect(screen.getByText('Corporate gift boxes')).toBeInTheDocument())
+    expect(screen.getByText(/Undo in the header takes it back/)).toBeInTheDocument()
+  })
+
+  it('does not send the proposal\'s question to the composer as part of the conversation', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await pickTask(user, /Shape the business idea/)
+    await withNote(user, 'Gift boxes for offices')
+    answers = [reply('ideation', 'Asking first.', [{ type: 'remove', things: ['n1'] }]), reply('chat', 'Fine.')]
+    await say(user, 'Delete my note')
+    await screen.findByText(/Delete 1 of your notes\?/)
+    await say(user, 'Never mind')
+    await screen.findByText('Fine.')
+    expect(JSON.stringify(asked[1])).not.toMatch(/Nothing is deleted until you say yes/)
   })
 
   it('lets the founder keep a note as their own, and the note is then no longer pink or Droplet\'s', async () => {
@@ -1389,7 +1482,7 @@ describe('the screen while Droplet works', () => {
     const { container } = renderHome()
     await pickTask(user, /Make an invoice/)
     await say(user, 'Bill Karoo Candles')
-    expect(await screen.findByText('Thinking')).toBeInTheDocument()
+    expect(await screen.findByText(/Reading your message/)).toBeInTheDocument()
     expect(container.querySelector('.acting')).toBeNull()
     expect(container.querySelector('.glow')).toBeNull()
     answer(reply('invoice', 'Done.', [{ type: 'set_client', name: 'Karoo Candles' }]))
@@ -1557,99 +1650,19 @@ describe('Guide mode', () => {
   })
 })
 
-describe('Quick and Advanced', () => {
-  const chooseAdvanced = async (user: ReturnType<typeof userEvent.setup>) => {
-    await user.click(screen.getByRole('button', { name: /Choose how Droplet works/ }))
-    await user.click(screen.getByRole('menuitemcheckbox', { name: /Advanced/ }))
-  }
-
-  it('asks the server how many Advanced answers are left before anything is said, and shows the count in the menu', async () => {
+describe('Quick only', () => {
+  // The Advanced switch is out of the menu: searching needs a Gemini key with billing, which a free key does not have.
+  it('has no Advanced switch, asks the server nothing about an allowance, and sends every message as Quick', async () => {
     const user = userEvent.setup()
-    allowanceNow = { advancedLeft: 7, advancedLimit: 10, resetsAt: null }
+    answers = [reply('chat', 'Hello.')]
     renderHome()
     await user.click(screen.getByRole('button', { name: /Choose how Droplet works/ }))
-    expect(await screen.findByText('Searches the web · 7 of 10 left today')).toBeInTheDocument()
-  })
-
-  it('sends Quick as no mode, sends Advanced for the message it was chosen for, and then goes back to Quick', async () => {
-    const user = userEvent.setup()
-    answers = [reply('chat', 'First.'), reply('chat', 'Second.'), reply('chat', 'Third.')]
-    renderHome()
-    await say(user, 'a quick one')
-    await screen.findByText('First.')
-    await chooseAdvanced(user)
-    await say(user, 'What does CIPC charge?')
-    await screen.findByText('Second.')
-    await say(user, 'and another quick one')
-    await screen.findByText('Third.')
-    expect(asked.map((request) => request.mode)).toEqual([undefined, 'advanced', undefined])
-    expect(screen.queryByRole('button', { name: /Advanced is on/ })).not.toBeInTheDocument()
-  })
-
-  it('takes the count from the answer: one fewer after an Advanced answer, and a disabled row when none are left', async () => {
-    const user = userEvent.setup()
-    answers = [{ ...reply('chat', 'About R175.'), answeredBy: 'advanced', allowance: { advancedLeft: 0, advancedLimit: 10, resetsAt: new Date(2099, 0, 1, 14, 20).toISOString() } }]
-    renderHome()
-    await chooseAdvanced(user)
-    await say(user, 'What does CIPC charge?')
-    await screen.findByText('About R175.')
-    await user.click(screen.getByRole('button', { name: /Choose how Droplet works/ }))
-    const row = screen.getByRole('menuitemcheckbox', { name: /Advanced/ })
-    expect(row).toHaveAttribute('aria-disabled', 'true')
-    expect(row).toHaveTextContent(/None left today/)
-  })
-
-  it('shows the note that Quick answered, when Advanced was busy, and counts nothing against the founder', async () => {
-    const user = userEvent.setup()
-    answers = [{ ...reply('chat', 'It is about R175.'), answeredBy: 'base', note: 'Advanced is busy today, so I answered with Quick.', allowance: { advancedLeft: 10, advancedLimit: 10, resetsAt: null } }]
-    renderHome()
-    await chooseAdvanced(user)
-    await say(user, 'What does CIPC charge?')
-    expect(await screen.findByText(/Advanced is busy today, so I answered with Quick\./)).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /Choose how Droplet works/ }))
-    expect(screen.getByRole('menuitemcheckbox', { name: /Advanced/ })).toHaveTextContent('10 of 10 left today')
-  })
-
-  it('says plainly when none are left, takes the count from the refusal, and the message is not lost to a silent failure', async () => {
-    const user = userEvent.setup()
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (_url: string, init: { method?: string }) => {
-        if (init.method === 'GET') return new Response(JSON.stringify({ allowance: { advancedLeft: 1, advancedLimit: 10, resetsAt: null } }), { status: 200 })
-        return new Response(
-          JSON.stringify({ error: 'advanced_limit', message: 'You have used your 10 Advanced answers for today. Quick is still here.', allowance: { advancedLeft: 0, advancedLimit: 10, resetsAt: null } }),
-          { status: 429 },
-        )
-      }),
-    )
-    renderHome()
-    await chooseAdvanced(user)
-    await say(user, 'What does CIPC charge?')
-    expect(await screen.findByText(/You have used your 10 Advanced answers for today/)).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /Choose how Droplet works/ }))
-    expect(screen.getByRole('menuitemcheckbox', { name: /Advanced/ })).toHaveAttribute('aria-disabled', 'true')
-  })
-
-  it('still offers Advanced, without a count, when the server cannot say where the allowance stands', async () => {
-    const user = userEvent.setup()
-    allowanceNow = null
-    renderHome()
-    await user.click(screen.getByRole('button', { name: /Choose how Droplet works/ }))
-    const row = screen.getByRole('menuitemcheckbox', { name: /Advanced/ })
-    expect(row).toHaveTextContent('Searches the web')
-    expect(row).not.toHaveAttribute('aria-disabled')
-  })
-
-  it('asks again in Advanced when the answer takes the founder to another workspace: both asks answer the one message they chose it for', async () => {
-    const user = userEvent.setup()
-    answers = [opening('invoice', 'Opening the invoice.', 'make an invoice'), reply('invoice', 'Here it is.')]
-    renderHome()
-    await chooseAdvanced(user)
-    await say(user, 'Please make an invoice')
-    await screen.findByText('Here it is.')
-    expect(asked.map((request) => request.mode)).toEqual(['advanced', 'advanced'])
-    await say(user, 'thanks')
-    expect(asked.at(-1)?.mode).toBeUndefined()
+    expect(screen.getByRole('menu', { name: 'How Droplet works' })).not.toHaveTextContent(/Advanced|Searches the web/)
+    await user.keyboard('{Escape}')
+    await say(user, 'Hi there')
+    await screen.findByText('Hello.')
+    expect(asked[0]).not.toHaveProperty('mode')
+    expect(vi.mocked(fetch).mock.calls.some(([, init]) => (init as { method?: string }).method === 'GET')).toBe(false)
   })
 })
 
@@ -2401,5 +2414,168 @@ describe('the menu on a chat', () => {
     await user.click(screen.getByRole('button', { name: 'More for First question' }))
     await user.click(screen.getByRole('menuitem', { name: 'Unpin' }))
     await waitFor(() => expect(titles()).toEqual(['Second question', 'First question']))
+  })
+})
+
+describe('progress, stopping and asking again', () => {
+  const encoder = new TextEncoder()
+  const eventText = (name: string, data: unknown) => `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`
+
+  // A composer that streams: the test says when each stage and the reply arrive. It gives up when the request is aborted, as a real fetch does.
+  const streamingComposer = () => {
+    let stream: ReadableStreamDefaultController<Uint8Array> | null = null
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init: { method?: string; body: string; signal?: AbortSignal }) => {
+        if (init.method === 'GET') return Promise.resolve(new Response('{}', { status: 500 }))
+        return new Promise<Response>((resolve, reject) => {
+          init.signal?.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })))
+          resolve(
+            new Response(
+              new ReadableStream<Uint8Array>({
+                start(controller) {
+                  stream = controller
+                },
+              }),
+              { status: 200, headers: { 'content-type': 'text/event-stream' } },
+            ),
+          )
+        })
+      }),
+    )
+    return {
+      stage: (stage: unknown) => stream!.enqueue(encoder.encode(eventText('stage', stage))),
+      result: (body: unknown) => {
+        stream!.enqueue(encoder.encode(eventText('result', { status: 200, body })))
+        stream!.close()
+      },
+    }
+  }
+
+  it('shows the stage Droplet is at while it works, and then the reply', async () => {
+    const user = userEvent.setup()
+    const composer = streamingComposer()
+    renderHome()
+    await say(user, 'What does CIPC cost?')
+    expect(await screen.findByText(/Reading your message|Looking at what is saved/)).toBeInTheDocument()
+    await waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalled())
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    composer.stage({ stage: 'reading', search: true })
+    expect(await screen.findByText('Reading your message, and looking things up if needed')).toBeInTheDocument()
+    composer.stage({ stage: 'checking', searched: ['CIPC registration fee'] })
+    expect(await screen.findByText(/Searched the web for “CIPC registration fee”\. Checking the reply/)).toBeInTheDocument()
+    composer.result(reply('chat', 'It depends on the company type.'))
+    expect(await screen.findByText('It depends on the company type.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
+  })
+
+  it('gives up on Stop: nothing is applied, the note says so, and the note is not sent to the composer afterwards', async () => {
+    const user = userEvent.setup()
+    streamingComposer()
+    renderHome()
+    await pickTask(user, /Build the brand/)
+    await say(user, 'Make it warmer')
+    await user.click(await screen.findByRole('button', { name: 'Stop' }))
+    expect(await screen.findByText('Stopped. Nothing was changed.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
+    // The founder can carry on, and the app's note is not part of the conversation the composer is sent.
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: { method?: string; body: string }) => {
+      if (init.method === 'GET') return new Response('{}', { status: 500 })
+      asked.push(JSON.parse(init.body) as never)
+      return new Response(JSON.stringify(reply('chat', 'Fine.')), { status: 200, headers: { 'content-type': 'application/json' } })
+    }))
+    await say(user, 'Never mind')
+    await screen.findByText('Fine.')
+    expect(JSON.stringify(asked[0])).not.toMatch(/Stopped\. Nothing was changed/)
+  })
+
+  it('takes the last answer back and asks again on Try again, without the old answer in the conversation', async () => {
+    const user = userEvent.setup()
+    answers = [reply('chat', 'First answer.'), reply('chat', 'Second answer.')]
+    renderHome()
+    await say(user, 'How should I price a gift box?')
+    await screen.findByText('First answer.')
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+    await screen.findByText('Second answer.')
+    expect(screen.queryByText('First answer.')).not.toBeInTheDocument()
+    expect(within(screen.getByRole('log', { name: 'Conversation' })).getAllByText('How should I price a gift box?')).toHaveLength(1)
+    expect(asked).toHaveLength(2)
+    expect(asked[1].intent).toBe('How should I price a gift box?')
+    expect(JSON.stringify(asked[1])).not.toContain('First answer.')
+  })
+
+  it('sends an edited message in place of the last exchange', async () => {
+    const user = userEvent.setup()
+    answers = [reply('chat', 'First answer.'), reply('chat', 'Answer to the edit.')]
+    renderHome()
+    await say(user, 'How should I price a gift box?')
+    await screen.findByText('First answer.')
+    await user.click(screen.getByRole('button', { name: 'Edit your message' }))
+    const field = screen.getByRole('textbox', { name: 'Edit your message' })
+    await user.clear(field)
+    await user.type(field, 'How should I price a corporate gift box?')
+    await user.click(screen.getByRole('button', { name: 'Send again' }))
+    await screen.findByText('Answer to the edit.')
+    expect(asked[1].intent).toBe('How should I price a corporate gift box?')
+    expect(screen.queryByText('How should I price a gift box?')).not.toBeInTheDocument()
+    expect(screen.queryByText('First answer.')).not.toBeInTheDocument()
+  })
+})
+
+describe('what Droplet used', () => {
+  it('shows a line under a reply listing what went with the request, and keeps it with the saved chat', async () => {
+    const user = userEvent.setup()
+    answers = [reply('chat', 'First answer.'), reply('chat', 'Second answer.')]
+    renderHome()
+    await say(user, 'How should I price a gift box?')
+    await screen.findByText('First answer.')
+    // nothing but the message and the project's counts went with the first
+    expect(screen.getByRole('button', { name: 'Used: only your message' })).toBeInTheDocument()
+    await say(user, 'And for a bigger order?')
+    await screen.findByText('Second answer.')
+    const line = screen.getAllByRole('button', { name: /^Used:/ }).at(-1)!
+    expect(line).toHaveTextContent('Used: this chat')
+    await user.click(line)
+    expect(screen.getByText(/Not sent: addresses, contact details and bank details/)).toBeInTheDocument()
+    await waitFor(async () => expect((await loadChatsFor())[0]?.messages.filter((item) => item.used)).toHaveLength(2))
+  })
+
+  it('is built from the request, not from what the composer says it used', async () => {
+    const user = userEvent.setup()
+    answers = [{ outcome: 'valid', answeredBy: 'base', turn: { task: 'chat', message: 'Hello.', actions: [], memoryUsed: ['the secret palette', 'the client list'] } }]
+    renderHome()
+    await say(user, 'Hello')
+    await screen.findByText('Hello.')
+    const line = screen.getByRole('button', { name: /^Used:/ })
+    expect(line).not.toHaveTextContent(/secret palette|client list/)
+  })
+})
+
+describe('what Droplet says it is doing', () => {
+  it('says what it is working from, taken from the request: the chat, the saved palette and the palette on screen', async () => {
+    const user = userEvent.setup()
+    let answer: (body: unknown) => void = () => undefined
+    const slow = () =>
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (_url: string, init: { method?: string; body: string }) => {
+          if (init.method === 'GET') return new Response('{}', { status: 500 })
+          const sent = JSON.parse(init.body) as { kind?: string }
+          if (sent.kind) return new Response(JSON.stringify({ kind: sent.kind, answeredBy: 'base', summary: null, digest: null }), { status: 200, headers: { 'content-type': 'application/json' } })
+          asked.push(sent as never)
+          return new Promise<Response>((resolve) => {
+            answer = (body) => resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }))
+          })
+        }),
+      )
+    slow()
+    renderHome()
+    await pickTask(user, /Build the brand/)
+    await say(user, 'Make it warmer')
+    expect(await screen.findByText(/Reading your message alongside the palette on screen/)).toBeInTheDocument()
+    answer(reply('chat', 'Done.'))
+    await screen.findByText('Done.')
+    // the line under the reply lists the same things, so what was said while it worked is what is listed afterwards
+    expect(screen.getByRole('button', { name: /^Used: the palette on screen/ })).toBeInTheDocument()
   })
 })

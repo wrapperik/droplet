@@ -33,7 +33,7 @@ import type { Grounding } from '../compose/grounding.ts'
 import { doneSteps, OPEN_PHRASE, STEP_WORKSPACE, workspaceForPhrase, type JourneyStep, type ProjectSnapshot } from '../compose/journey.ts'
 import { snapshotOfProject } from '../compose/project.ts'
 import { starterBlocks } from '../compose/fallback.ts'
-import { applyBoardTurnActions } from '../compose/boardActions.ts'
+import { applyBoardTurnActions, type PendingBoardEdit } from '../compose/boardActions.ts'
 import { snapshotOfBoard } from '../compose/boardSnapshot.ts'
 import type { BoardTurnAction } from '../compose/boardSpec.ts'
 import { applyInvoiceTurnActions } from '../compose/invoiceActions.ts'
@@ -41,10 +41,11 @@ import { snapshotOfInvoice } from '../compose/invoiceSnapshot.ts'
 import type { InvoiceTurnAction } from '../compose/invoiceSpec.ts'
 import { founderTextOf } from '../compose/rules.ts'
 import { paletteSnapshotOf, snapshotOfState } from '../compose/snapshot.ts'
-import { MAX_HISTORY_MESSAGES, isBoardAction, isInvoiceAction, isScreenAction, routedTo, type Mode, type PaletteAction, type View } from '../compose/spec.ts'
+import { MAX_HISTORY_MESSAGES, isBoardAction, isInvoiceAction, isScreenAction, routedTo, type ComposeRequest, type Mode, type PaletteAction, type View } from '../compose/spec.ts'
+import { usedOf, workingFrom, type Used } from '../compose/used.ts'
 import { actingDelay, pause } from '../lib/acting.ts'
 import { requestComposition, requestSummary } from '../lib/composeClient.ts'
-import { useAdvancedAllowance } from '../lib/advancedAllowance.ts'
+import { elapsedLabel, stageWords, type ShownStage, type StageContext } from '../compose/progress.ts'
 import { byPinnedThenRecent, chatHasBegun, chatTitle, cleanTitle, hasFounderMessage, lastActive, loadChats, pinChat, removeChat, saveChats, storableMessages, upsertChat, type StoredChat } from '../lib/chatStore.ts'
 import { loadBoard, openBoardForProject, saveBoard } from '../lib/boardStore.ts'
 import { docOf as boardDocOf, isBoardUnsaved, reduceBoard, type BoardAction, type BoardState } from '../lib/boardState.ts'
@@ -62,6 +63,11 @@ import { exportLibraryItem, type ExportTarget, type OpenTarget } from '../lib/li
 import { findInvoice, libraryOf, type InvoiceItem } from '../lib/library.ts'
 import { snapshotOfLibrary } from '../compose/librarySnapshot.ts'
 import { loadMemory, saveMemory } from '../lib/memoryStore.ts'
+import { loadLogo } from '../lib/logoStore.ts'
+import { dismissKey, hintsFor, placeholderFor, selectionLabel, type Hint, type Room } from '../lib/composerHints.ts'
+import { AskContext } from '../components/AskContext.tsx'
+import { brandOf, type Brand } from '../lib/logoBrand.ts'
+import LogoHandoff from '../components/LogoHandoff.tsx'
 import { currentFacts, factStatus, forgetFact, settingOn, withFact } from '../lib/projectMemory.ts'
 import { MAX_CHAT_MESSAGES } from '../compose/background.ts'
 import type { Task } from '../compose/taskNames.ts'
@@ -129,11 +135,33 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   const [libraryOpen, setLibraryOpen] = useState(false)
   // Bumped when something outside the library changed what it lists, so it reads again.
   const [libraryVersion, setLibraryVersion] = useState(0)
+  // The logo handoff card, over whatever is on screen.
+  const [handoffOpen, setHandoffOpen] = useState(false)
+  // What a logo brief in the chat is drawn from: the name, the saved palette's colours and the fonts chosen. Read from the project, never from the model.
+  const [brand, setBrand] = useState<Brand | undefined>(undefined)
+  // The latest saved invoice that is ready and not yet exported, for the nudge above the message bar.
+  const [exportable, setExportable] = useState<{ number: string } | null>(null)
+  // Nudges the founder put away, by workspace: they stay away for this session.
+  const [putAway, setPutAway] = useState<ReadonlySet<string>>(new Set())
   const [composing, setComposing] = useState(false)
+  // What Droplet is doing while it works, for the pending message: the stage the server last reported (or that a workspace is being opened) and the seconds so far.
+  const [stage, setStage] = useState<ShownStage | null>(null)
+  // What the stage's words can say besides the stage: what the reply is being made from, and which workspace it is about.
+  const [stageContext, setStageContext] = useState<StageContext>({})
+  const [elapsed, setElapsed] = useState(0)
+  useEffect(() => {
+    if (!composing) return
+    const started = Date.now()
+    const timer = window.setInterval(() => setElapsed((Date.now() - started) / 1000), 1000)
+    return () => window.clearInterval(timer)
+  }, [composing])
+  // Stop gives up on the request in flight. Nothing it would have said or done is applied.
+  const abortRef = useRef<AbortController | null>(null)
+  // Changes to the founder's own board that Droplet proposed and has not made: by the message in the chat that asks the founder. Nothing here has touched the board.
+  const pendingEditsRef = useRef(new Map<number, PendingBoardEdit>())
+  const stoppedRef = useRef(false)
   // Droplet is acting on the workspace on screen: the screen goes soft with a loader on it, and what it did lands when this ends.
   const [acting, setActing] = useState(false)
-  // Where the founder's Advanced allowance stands, as the server last said.
-  const [allowance, setAllowance] = useAdvancedAllowance()
   // The two ends of the header, where the workspace puts its controls beside the logo.
   const [headerStart, setHeaderStart] = useState<HTMLElement | null>(null)
   const [headerEnd, setHeaderEnd] = useState<HTMLElement | null>(null)
@@ -182,8 +210,16 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   // the ticks on a plan.
   const readProject = useCallback(
     async (projectId: string) => {
-      const [palette, memory, board] = await Promise.all([loadPalette(projectId), loadMemory(projectId), loadBoard(projectId)])
-      return snapshotOfProject({ projectName: projectName(projectId), memory, hasPalette: palette !== null, boardItems: board?.items.length ?? 0 })
+      const [palette, memory, board, logo] = await Promise.all([loadPalette(projectId), loadMemory(projectId), loadBoard(projectId), loadLogo(projectId)])
+      return {
+        info: snapshotOfProject({ projectName: projectName(projectId), memory, hasPalette: palette !== null, boardItems: board?.items.length ?? 0, hasLogo: logo !== null }),
+        brand: brandOf({ memory, palette }),
+        // The latest saved invoice that could be exported and has not been, for the nudge. Worked out from what is saved, as the library does.
+        exportable: (() => {
+          const found = libraryOf({ palette, board, memory, notes: {} }).items.find((item): item is InvoiceItem => item.section === 'invoices' && item.ready && item.exportedAt === null)
+          return found ? { number: found.number } : null
+        })(),
+      }
     },
     [projectName],
   )
@@ -194,8 +230,11 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   // Read again, so a palette saved or an invoice confirmed in a workspace shows as a tick in a plan. A project changed meanwhile is ignored.
   const refreshProject = useCallback(async () => {
     const id = currentProjectRef.current
-    const info = await readProject(id)
-    if (currentProjectRef.current === id) setProjectInfo((current) => (JSON.stringify(current) === JSON.stringify(info) ? current : info))
+    const { info, brand: read, exportable: found } = await readProject(id)
+    if (currentProjectRef.current !== id) return
+    setProjectInfo((current) => (JSON.stringify(current) === JSON.stringify(info) ? current : info))
+    setBrand((current) => (JSON.stringify(current) === JSON.stringify(read) ? current : read))
+    setExportable((current) => (current?.number === found?.number ? current : found))
   }, [readProject])
   // Asks the invoice workspace to open its note of what would be remembered, for the "save before you go" question in the chat.
   const [invoiceSaveSignal, setInvoiceSaveSignal] = useState(0)
@@ -341,7 +380,8 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   const openNow = (): View[] => [...(workspaceRef.current ? (['brand'] as const) : []), ...(invoiceRef.current ? (['invoice'] as const) : []), ...(boardRef.current ? (['board'] as const) : [])]
 
   // The moment before a reply's changes land: the screen goes soft, with the loader on it. It is cleared once the request ends, whatever happens.
-  const actOnScreen = async () => {
+  const actOnScreen = async (where: string) => {
+    setStage({ stage: 'applying', where })
     setActing(true)
     await pause(actingDelay())
   }
@@ -387,9 +427,11 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   const converse = useCallback(
     async (text: string, history: { role: 'founder' | 'droplet'; text: string }[], pendingId: number, routed: boolean, mode: Mode = 'base') => {
       const view = onScreen()
-      const [saved, memory, savedBoard] = await Promise.all([loadPalette(currentProjectId), loadMemory(currentProjectId), loadBoard(currentProjectId)])
+      // The first thing it does is read what the project holds.
+      setStage({ stage: 'gathering' })
+      const [saved, memory, savedBoard, savedLogo] = await Promise.all([loadPalette(currentProjectId), loadMemory(currentProjectId), loadBoard(currentProjectId), loadLogo(currentProjectId)])
       // Where the founder is on the journey, so the composer can guide: only the business name, the offer and counts.
-      const project = snapshotOfProject({ projectName: projectName(currentProjectId), memory, hasPalette: saved !== null, boardItems: savedBoard?.items.length ?? 0 })
+      const project = snapshotOfProject({ projectName: projectName(currentProjectId), memory, hasPalette: saved !== null, boardItems: savedBoard?.items.length ?? 0, hasLogo: savedLogo !== null })
       setProjectInfo(project)
       const open = workspaceRef.current
       const invoiceOpen = invoiceRef.current
@@ -401,7 +443,11 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
       // What is saved, for opening or exporting one of its things when asked: counts, names and statuses only.
       const libraryData = libraryOf({ palette: saved, board: savedBoard, memory, notes: {} })
       const projectNotes = settingOn(memory, 'notes') ? notesForRequest(await loadNotes(currentProjectId), { onScreen: view, intent: text }) : null
-      const result = await requestComposition({
+      // Stop gives up on this request: whatever was on its way is not applied.
+      const controller = new AbortController()
+      abortRef.current = controller
+      if (stoppedRef.current) controller.abort()
+      const request: ComposeRequest = {
         intent: text,
         // Advanced is the founder's choice for this message. Quick is sent as no mode at all.
         ...(mode === 'advanced' ? { mode } : {}),
@@ -423,7 +469,13 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         ...(projectNotes ? { notes: projectNotes } : {}),
         library: snapshotOfLibrary(libraryData),
         project,
-      })
+      }
+      // What it is working from and which workspace it is about, in words, from the request that is about to go.
+      setStageContext({ from: workingFrom(usedOf(request)), ...(view ? { where: { brand: 'your palette', invoice: 'your invoice', board: 'your board' }[view] } : {}) })
+      setStage({ stage: 'reading' })
+      const result = await requestComposition(request, { signal: controller.signal, onStage: setStage })
+      // What went with this request, for the line under the reply. Built from the request that was sent, and from what the reply searched for.
+      let used: Used | undefined
 
       // The reply goes into the message that was pending. Droplet's question and the answers it suggests sit apart from the text, so
       // notes from the app land between the answer and the question, and the question stays last.
@@ -436,6 +488,9 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
                   text: reply,
                   pending: false,
                   at: new Date().toISOString(),
+                  // The reply comes in a piece at a time; this is cleared a moment later so a thread mounted again does not play it again.
+                  fresh: true,
+                  ...(used ? { used } : {}),
                   ...(card ? { receipt: card.receipt, receiptLive: card.live } : {}),
                   ...(proposals && proposals.length > 0 ? { proposals } : {}),
                   ...(turn?.blocks && turn.blocks.length > 0 ? { blocks: turn.blocks } : {}),
@@ -446,9 +501,14 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
           ),
         )
 
-      // The server counts the Advanced allowance and says where it stands with every answer, and with a refusal for having none left.
-      setAllowance(result.allowance)
+      if (!result.ok && result.kind === 'aborted') {
+        // Stopped by the founder: a note from the app, so it is never sent to the composer, and nothing was changed.
+        setThread((current) => current.map((item) => (item.id === pendingId ? { ...item, text: result.message, pending: false, local: true, at: new Date().toISOString() } : item)))
+        return
+      }
       if (!result.ok) return finish(result.message)
+      used = usedOf(request, { searched: result.grounding?.queries })
+      window.setTimeout(() => setThread((current) => current.map((item) => (item.id === pendingId && item.fresh ? { ...item, fresh: false } : item))), 3500)
 
       // The composer names the conversation once it has a subject, and may rename it if the subject changes.
       const named = result.turn.title ? cleanTitle(result.turn.title) : ''
@@ -459,6 +519,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         // Taking the founder to another workspace: the next answer is asked with that workspace in front of the composer and says
         // what it did, so it replaces this one. Showing both said the same thing twice ("Opening the invoice workspace" twice).
         // A reply that searched the web is the exception: it carries sources the founder should see, so it stays and the next one follows it.
+        setStage({ stage: 'opening', workspace: OPEN_PHRASE[target].replace(/^Open /, '') })
         if (result.grounding) {
           finish(result.turn.message, undefined, result.grounding)
           await openWorkspaceFor(target)
@@ -467,12 +528,19 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
           return converse(text, history, next.id, true, mode)
         }
         await openWorkspaceFor(target)
+        // Stopped while the workspace opened: the question is not asked again.
+        if (stoppedRef.current) {
+          setThread((current) => current.map((item) => (item.id === pendingId ? { ...item, text: 'Stopped. Nothing was changed.', pending: false, local: true, at: new Date().toISOString() } : item)))
+          return
+        }
         return converse(text, history, pendingId, true, mode)
       }
 
       // What the app adds to the model's own words, each as a paragraph of its own.
       const notes: (string | undefined)[] = [result.note]
       // What the reply did to the workspace on screen, for the receipt under it: built in code from what was applied, never from the model's words.
+      // Changes to the founder's own things that the reply proposed: asked in the chat after the reply, and made only on a yes.
+      let proposedEdits: PendingBoardEdit[] = []
       let done: { workspace: ReceiptWorkspace; changes: Change[]; skipped: { action: { type: string }; reason: string }[]; before: unknown; after: unknown } | null = null
       const historyTurn = result.turn.actions.some((action) => action.type === 'undo' || action.type === 'redo')
       if (view === 'invoice' && invoiceOpen) {
@@ -489,7 +557,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         let applied = apply(base)
         // Something will change: the screen goes soft while Droplet acts, and the change lands as it clears. Worked out again if the invoice moved meanwhile.
         if (applied.state !== base) {
-          await actOnScreen()
+          await actOnScreen('the invoice')
           if (invoiceRef.current && invoiceRef.current !== base) {
             base = invoiceRef.current
             applied = apply(base)
@@ -523,11 +591,11 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         // Applied to the board as it is now, which may have changed while the composer was thinking. The places are found here, in code, from the
         // board as it is, and never from the model.
         const actions = result.turn.actions.filter((action): action is BoardTurnAction => isBoardAction(action) || action.type === 'undo' || action.type === 'redo')
-        const apply = (base: BoardState) => applyBoardTurnActions({ base, actions, view: boardHandleRef.current?.viewMiddle() ?? { x: 2400, y: 1600 } })
+        const apply = (base: BoardState) => applyBoardTurnActions({ base, actions, view: boardHandleRef.current?.viewMiddle() ?? { x: 2400, y: 1600 }, founderText: founderTextOf({ intent: text, history }).join('\n') })
         let base = boardRef.current ?? boardOpen
         let applied = apply(base)
         if (applied.state !== base) {
-          await actOnScreen()
+          await actOnScreen('the board')
           if (boardRef.current && boardRef.current !== base) {
             base = boardRef.current
             applied = apply(base)
@@ -541,6 +609,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
           const mine = (state: BoardState) => boardDocOf(state).items.filter((item) => item.kind === 'note' && item.author === 'ai').length
           if (mine(applied.state) > mine(base) && mine(base) === 0) notes.push('My notes are pink. Select one to keep it as yours, or delete it.')
         }
+        proposedEdits = applied.pending
         done = { workspace: 'board', changes: applied.changes, skipped: applied.skipped, before: boardDocOf(base), after: boardDocOf(applied.state) }
       } else {
         // Applied to the workspace as it is now, which may have changed while the model was thinking.
@@ -555,7 +624,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         // Only a palette that is on screen goes soft: one this reply opens arrives in its own way.
         if (view === 'brand' && workspaceRef.current && applied.state && applied.state !== workspaceRef.current) {
           const before = workspaceRef.current
-          await actOnScreen()
+          await actOnScreen('the palette')
           if (workspaceRef.current !== before) applied = apply()
         }
         const wasState = workspaceRef.current
@@ -642,12 +711,25 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         finish(paragraphs(result.turn.message, ...notes), result.turn, undefined, card, proposals)
         if (live) receiptsRef.current.set(pendingId, live)
       }
+      // What Droplet proposed to do to the founder's own things is asked for in the chat, one question each, after the reply. Nothing has been done.
+      if (proposedEdits.length > 0) {
+        const asks = proposedEdits.map((edit): ThreadMessage => {
+          const ask: ThreadMessage = {
+            ...message('droplet', edit.prompt),
+            local: true,
+            actions: edit.kind === 'remove' ? [{ id: 'confirm-pending', label: 'Delete', primary: true }, { id: 'dismiss-pending', label: 'Keep them' }] : [{ id: 'confirm-pending', label: 'Accept', primary: true }, { id: 'dismiss-pending', label: 'Dismiss' }],
+          }
+          pendingEditsRef.current.set(ask.id, edit)
+          return ask
+        })
+        setThread((current) => [...current, ...asks])
+      }
       // Closing is the same as the button's: it asks in the thread first if anything is unsaved, after the reply, so the founder reads it first.
       if (screen?.type === 'close_workspace') await leaveWorkspacesRef.current()
     },
     // onScreen only reads refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentProjectId, message, nameChat, openWorkspaceFor, projectName, setAllowance, workspaceOpened],
+    [currentProjectId, message, nameChat, openWorkspaceFor, projectName, workspaceOpened],
   )
 
   const submitIntent = useCallback(
@@ -670,6 +752,10 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
       const space = spaceRef.current
       const moved = space !== null && sentInRef.current !== undefined && sentInRef.current !== space
       sentInRef.current = space
+      stoppedRef.current = false
+      setStage({ stage: 'gathering' })
+      setStageContext({})
+      setElapsed(0)
       const you = message('you', text)
       // The message rises from the bottom into its place in the thread, whether it was typed or tapped (ChatThread, `data-rising`); with reduced
       // motion the CSS only fades it in.
@@ -691,6 +777,37 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
       }
     },
     [converse, doneSet, message, openWorkspaceFor],
+  )
+
+  // Gives up on the request in flight. The reply it would have made is not applied.
+  const stopComposing = useCallback(() => {
+    stoppedRef.current = true
+    abortRef.current?.abort()
+  }, [])
+
+  // Asks again in place of the last exchange: the founder's message and Droplet's reply are taken out of the thread and the message is sent afresh (as it
+  // was, or as edited). Only offered for a plain conversation, so no workspace change is left behind.
+  const sendAgain = useCallback(
+    (founderId: number, text?: string) => {
+      if (busyRef.current) return
+      const current = threadRef.current
+      const at = current.findIndex((item) => item.id === founderId)
+      const asked = at === -1 ? undefined : current[at]
+      const rest = current.slice(at + 1)
+      if (!asked || asked.from !== 'you' || rest.length !== 1 || rest[0].from !== 'droplet' || rest[0].pending) return
+      const next = current.slice(0, at)
+      threadRef.current = next
+      setThread(next)
+      void submitIntent(text ?? asked.text)
+    },
+    [submitIntent],
+  )
+  const retryReply = useCallback(
+    (replyId: number) => {
+      const at = threadRef.current.findIndex((item) => item.id === replyId)
+      if (at > 0) sendAgain(threadRef.current[at - 1].id)
+    },
+    [sendAgain],
   )
 
   // The familiar path: choosing a task opens its fixed layout without asking the model, the same layout the
@@ -1070,8 +1187,37 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
     await leaveWorkspaces()
   }, [leaveWorkspaces])
 
+  // The founder's answer to a change Droplet proposed to their own things on the board. Made through the board's own reducer, as one step they can undo.
+  const answerProposal = useCallback((messageId: number, actionId: string) => {
+    const edit = pendingEditsRef.current.get(messageId)
+    if (!edit) return
+    pendingEditsRef.current.delete(messageId)
+    const say = (text: string) => setThread((current) => current.map((item) => (item.id === messageId ? { ...item, text, actions: undefined } : item)))
+    if (actionId !== 'confirm-pending') return say(edit.kind === 'remove' ? 'Okay, I left them as they are.' : 'Okay, I left it as it is.')
+    const open = boardRef.current
+    if (!open) return say('The board is closed, so nothing was changed.')
+    const items = boardDocOf(open).items
+    let next: BoardState
+    if (edit.kind === 'remove') {
+      const ids = edit.ids.filter((id) => items.some((item) => item.id === id))
+      if (ids.length === 0) return say('They are already gone.')
+      next = reduceBoard(open, { type: 'delete', ids })
+      say(`Deleted ${ids.length === 1 ? 'it' : `${ids.length} things`}. Undo in the header brings ${ids.length === 1 ? 'it' : 'them'} back.`)
+    } else {
+      const there = items.find((item) => item.id === edit.id)
+      const now = there ? (there.kind === 'frame' ? there.title : 'text' in there ? there.text : '') : null
+      if (now === null) return say('That is gone, so nothing was changed.')
+      if (now !== edit.from) return say('It has changed since, so I left it as it is.')
+      next = reduceBoard(open, edit.what === 'frame' ? { type: 'set_title', id: edit.id, title: edit.to } : { type: 'set_text', id: edit.id, text: edit.to })
+      say('Changed. Undo in the header takes it back.')
+    }
+    boardRef.current = next
+    setBoard(next)
+  }, [])
+
   const onThreadAction = useCallback(
     async (messageId: number, actionId: string) => {
+      if (pendingEditsRef.current.has(messageId)) return answerProposal(messageId, actionId)
       const prompt = leaveRef.current
       if (!prompt || prompt.id !== messageId || busyRef.current) return
       if (actionId === 'stay') settleLeave(messageId, 'Okay, I left the workspace as it is.')
@@ -1099,7 +1245,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         setInvoiceSaveSignal((count) => count + 1)
       }
     },
-    [closeWorkspaces, currentProjectId, savedForLeave, settleLeave],
+    [answerProposal, closeWorkspaces, currentProjectId, savedForLeave, settleLeave],
   )
 
   // The founder confirmed what the invoice would remember. If that was the last unsaved thing in a question about leaving, it is done.
@@ -1272,15 +1418,48 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
     [composing, currentProjectId, openFromLibrary, projectName],
   )
 
+  // What the message bar reads of the room: what is on screen and selected, worked out in code, so it can say so in the empty field and offer a few chips.
+  // A chip only sends the request it names, when it is pressed.
+  const room: Room = (() => {
+    const here = libraryOpen ? undefined : shown
+    if (!here) return {}
+    const common = { view: here, savedClients: projectInfo?.clients ?? 0, hasPalette: projectInfo?.hasPalette ?? false, hasLogo: projectInfo?.hasLogo ?? false, exportable }
+    if (here === 'board' && board) {
+      const doc = boardDocOf(board)
+      return { ...common, board: { items: doc.items, selected: doc.items.filter((item) => board.selection.includes(item.id)) } }
+    }
+    if (here === 'invoice' && invoice) {
+      const content = invoiceDocOf(invoice).content
+      return { ...common, invoice: { clientNamed: content.client.name.trim() !== '', number: content.details.number } }
+    }
+    if (here === 'brand' && workspace) {
+      const doc = docOf(workspace)
+      const at = doc.blocks.findIndex((block) => block.id === workspace.selectedId)
+      return { ...common, palette: { blocks: doc.blocks, ...(at >= 0 ? { selectedPosition: at + 1 } : {}) } }
+    }
+    return common
+  })()
+  const chips = hintsFor(room, putAway)
+  const hints = {
+    placeholder: placeholderFor(room),
+    selection: room.board && room.board.selected.length > 0 ? { label: selectionLabel(room) ?? '', onClear: () => dispatchBoard({ type: 'select', ids: [] }) } : null,
+    chips,
+    onChip: (hint: Hint) => void submitIntent(hint.text),
+    onDismiss: (hint: Hint) => setPutAway((current) => new Set(current).add(dismissKey(room, hint))),
+  }
+
   // The tip that offers the workspace menu is for the very start, before the founder has said anything.
   const bar = (isDocked: boolean) => (
-    <IntentBar docked={isDocked} busy={composing} showTip={!chatHasBegun(thread)} allowance={allowance} onSubmitIntent={submitIntent} onChooseTask={chooseTask} />
+    <IntentBar docked={isDocked} busy={composing} showTip={!chatHasBegun(thread)} onSubmitIntent={submitIntent} onChooseTask={chooseTask} hints={hints} />
   )
+  // What lets a control inside a workspace ask Droplet something in the founder's name, through the same send as the message bar.
+  const askValue = { ask: (text: string) => void submitIntent(text), busy: composing }
   const chatBar = (isDocked: boolean) => (
     <ChatBar onFullScreen={isDocked ? backToChat : undefined} busy={composing} />
   )
 
   return (
+    <AskContext.Provider value={askValue}>
     <div className={docked ? 'home home--docked' : 'home'} data-start={(!docked && !chatHasBegun(thread)) || undefined}>
       <Sidebar
         projects={projects}
@@ -1354,7 +1533,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
           {!docked && (
             <div className="home__conversation">
               {chatBar(false)}
-              <ChatThread flight={flight} onFlightEnd={() => setFlight(null)} messages={thread} onAction={onThreadAction} onReply={submitIntent} done={doneSet} busy={composing} onToggle={toggleCheck} onOpenStep={openStep} onUndoReceipt={undoReceipt} onShowReceipt={showReceipt} onRememberFact={rememberFact} onDismissFact={dismissFact} renderResult={renderResult} />
+              <ChatThread flight={flight} onFlightEnd={() => setFlight(null)} messages={thread} onAction={onThreadAction} onReply={submitIntent} done={doneSet} busy={composing} onToggle={toggleCheck} onOpenStep={openStep} onUndoReceipt={undoReceipt} onShowReceipt={showReceipt} onRememberFact={rememberFact} onDismissFact={dismissFact} renderResult={renderResult} brand={brand} onOpenHandoff={() => setHandoffOpen(true)} progress={composing && stage ? { words: stageWords(stage, stageContext), elapsed: elapsedLabel(elapsed) } : composing ? { words: 'Thinking', elapsed: elapsedLabel(elapsed) } : null} onStop={composing ? stopComposing : undefined} onRetry={retryReply} onEdit={sendAgain} />
             </div>
           )}
           {/* One workspace at a time: the one on screen leaves before the other arrives, so their toolbars and header controls never overlap. */}
@@ -1368,6 +1547,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
                   onClose={closeLibrary}
                   onOpen={openFromLibrary}
                   onAsk={(text) => void submitIntent(text)}
+                  onOpenHandoff={() => setHandoffOpen(true)}
                   onChanged={() => void refreshProject()}
                 />
               </motion.div>
@@ -1412,6 +1592,8 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
                     onFinished={finishGuided}
                     saveSignal={invoiceSaveSignal}
                     onConfirmed={invoiceConfirmed}
+                    logoVersion={libraryVersion}
+                    onOpenHandoff={() => setHandoffOpen(true)}
                     headerSlots={{ start: headerStart, end: headerEnd, shelf: shelfSlot }}
                   />
                 ) : (
@@ -1424,6 +1606,8 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
                   onReplace={setInvoice}
                   saveSignal={invoiceSaveSignal}
                   onConfirmed={invoiceConfirmed}
+                  logoVersion={libraryVersion}
+                  onOpenHandoff={() => setHandoffOpen(true)}
                   headerSlots={{ start: headerStart, end: headerEnd, shelf: shelfSlot }}
                 />
                 )}
@@ -1470,13 +1654,28 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
           onFocusCapture={() => void refreshProject()}
         >
           {chatBar(true)}
-          <ChatThread flight={flight} onFlightEnd={() => setFlight(null)} messages={thread} onAction={onThreadAction} onReply={submitIntent} done={doneSet} busy={composing} onToggle={toggleCheck} onOpenStep={openStep} onUndoReceipt={undoReceipt} onShowReceipt={showReceipt} onRememberFact={rememberFact} onDismissFact={dismissFact} renderResult={renderResult} />
+          <ChatThread flight={flight} onFlightEnd={() => setFlight(null)} messages={thread} onAction={onThreadAction} onReply={submitIntent} done={doneSet} busy={composing} onToggle={toggleCheck} onOpenStep={openStep} onUndoReceipt={undoReceipt} onShowReceipt={showReceipt} onRememberFact={rememberFact} onDismissFact={dismissFact} renderResult={renderResult} brand={brand} onOpenHandoff={() => setHandoffOpen(true)} progress={composing && stage ? { words: stageWords(stage, stageContext), elapsed: elapsedLabel(elapsed) } : composing ? { words: 'Thinking', elapsed: elapsedLabel(elapsed) } : null} onStop={composing ? stopComposing : undefined} onRetry={retryReply} onEdit={sendAgain} />
           {bar(true)}
         </motion.aside>
       )}
 
+      {handoffOpen && (
+        <LogoHandoff
+          projectId={currentProjectId}
+          onClose={() => setHandoffOpen(false)}
+          onChanged={() => {
+            void refreshProject()
+            setLibraryVersion((count) => count + 1)
+          }}
+          onOpenBrand={() => {
+            setHandoffOpen(false)
+            openStep('palette')
+          }}
+        />
+      )}
       <ProjectBrief open={briefOpen} onClose={() => setBriefOpen(false)} projectId={currentProjectId} projectName={projectName(currentProjectId)} enqueue={enqueueChats} onChanged={() => void refreshProject()} />
       <Toast toast={toast} onDismiss={() => setToast(null)} />
     </div>
+    </AskContext.Provider>
   )
 }

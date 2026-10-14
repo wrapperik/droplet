@@ -11,16 +11,18 @@ export function InlineText({ text }: { text: string }) {
 }
 
 // Droplet's words laid out: paragraphs, lists and bold, read from the small subset of Markdown the composer writes (see richText.ts).
-// It builds elements itself and never sets HTML, so nothing in a message can add markup.
-export default function RichText({ source }: { source: string }) {
+// It builds elements itself and never sets HTML, so nothing in a message can add markup. With `reveal`, each block carries its place in the order it comes
+// in (`--i`), so the stylesheet can bring them in one after another.
+export default function RichText({ source, reveal = false }: { source: string; reveal?: boolean }) {
   const blocks = useMemo(() => parseRichText(source), [source])
+  const shown = (index: number) => (reveal ? { 'data-reveal': '', style: { '--i': index } as React.CSSProperties } : {})
   return (
     <div className="rich">
       {blocks.map((block, index) => {
-        if (block.type === 'paragraph') return <p key={index}>{renderInline(block.content)}</p>
+        if (block.type === 'paragraph') return <p key={index} {...shown(index)}>{renderInline(block.content)}</p>
         if (block.type === 'bullets') {
           return (
-            <ul key={index}>
+            <ul key={index} {...shown(index)}>
               {block.items.map((item, at) => (
                 <li key={at}>{renderInline(item)}</li>
               ))}
@@ -29,7 +31,7 @@ export default function RichText({ source }: { source: string }) {
         }
         // The number is drawn by the stylesheet from a counter, so a list that carries on (4, 5, 6) keeps its numbers.
         return (
-          <ol key={index} style={{ counterReset: `rich-step ${block.start - 1}` }}>
+          <ol key={index} data-reveal={reveal ? '' : undefined} style={{ counterReset: `rich-step ${block.start - 1}`, ...(reveal ? ({ '--i': index } as React.CSSProperties) : {}) }}>
             {block.items.map((item, at) => (
               <li key={at}>{renderInline(item)}</li>
             ))}

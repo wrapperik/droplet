@@ -1,10 +1,13 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
-import { CheckIcon, CopyIcon } from '@solar-icons/react/linear'
+import { CheckIcon, CopyIcon, PenIcon, RestartIcon } from '@solar-icons/react/linear'
 import type { ChatBlock } from '../compose/blocks.ts'
 import type { JourneyStep } from '../compose/journey.ts'
 import type { Grounding } from '../compose/grounding.ts'
 import type { Receipt } from '../compose/receipt.ts'
+import type { Used } from '../compose/used.ts'
+import UsedLine from './UsedLine.tsx'
 import type { InvoiceResult } from '../lib/invoiceGuide.ts'
+import type { SpecColour } from '../lib/logoHandoff.ts'
 import ChangeReceipt from './ChangeReceipt.tsx'
 import FactChips, { type ProposalView } from './FactChips.tsx'
 import type { FactKey } from '../lib/facts.ts'
@@ -19,6 +22,7 @@ import JellyLoader from './JellyLoader.tsx'
 // To bring the copy back, import FlyingMessage here and draw it at the end of the list, as the commit that replaced it shows.
 import type { FlightOrigin } from './FlyingMessage.tsx'
 import RichText from './RichText.tsx'
+import { parseRichText } from '../lib/richText.ts'
 import { whenLabel } from '../lib/chatStore.ts'
 import './ChatThread.css'
 
@@ -45,6 +49,8 @@ export type ThreadMessage = {
   receipt?: Receipt
   // The reply was made in this session, so what it changed can still be undone and shown. Not kept: after a reload there are only the lines.
   receiptLive?: { undo: boolean; show: boolean }
+  // What Droplet was given to make this reply, in the app's words: a quiet line under it that opens into a list. Built from the request that was sent.
+  used?: Used
   // Facts Droplet offers to remember, drawn under the reply. Only for the session: they mean nothing in a chat opened later.
   proposals?: ProposalView[]
   // Answers to that question the founder can tap instead of typing. Offered only while the message is the last in the thread.
@@ -57,6 +63,9 @@ export type ThreadMessage = {
   result?: InvoiceResult
   // When it was sent or arrived (ISO), shown under it on hover or focus.
   at?: string
+  // The reply has only just arrived, so it comes in paragraph by paragraph, then its blocks, its question and its suggested replies. Home clears this
+  // a moment later, so a thread mounted again (the chat moving into the side panel) does not play it a second time. Not kept with the chat.
+  fresh?: boolean
 }
 
 type Props = {
@@ -85,13 +94,26 @@ type Props = {
   onFlightEnd?: () => void
   // Draws the card of a finished task. The thread does not know how to export or open one, so whoever holds the project draws it.
   renderResult?: (message: ThreadMessage) => ReactNode
+  // What a logo brief in the chat is drawn from: the name, the saved palette's colours and the fonts the founder chose. From the project, not the model.
+  brand?: { name: string; colours: SpecColour[]; fontsFact?: string }
+  // The brief's button for the logo handoff card.
+  onOpenHandoff?: () => void
+  // What Droplet is doing while a reply is pending: the stage in words, and the seconds so far (shown after a few). Absent, the pending message says "Thinking".
+  progress?: { words: string; elapsed: string } | null
+  // Stop was pressed on a reply still being worked on. The request is given up and nothing is applied.
+  onStop?: () => void
+  // Try again was pressed on Droplet's last reply, or the founder edited their last message and sent it again. Home takes both back and asks again.
+  onRetry?: (messageId: number) => void
+  onEdit?: (messageId: number, text: string) => void
 }
 
 const NO_STEPS: ReadonlySet<JourneyStep> = new Set()
 
 // The running conversation. It scrolls on its own, and follows the newest message.
-export default function ChatThread({ messages, onAction, onReply, done = NO_STEPS, busy, onToggle, onOpenStep, onUndoReceipt, onShowReceipt, onRememberFact, onDismissFact, flight, renderResult }: Props) {
+export default function ChatThread({ messages, onAction, onReply, done = NO_STEPS, busy, onToggle, onOpenStep, onUndoReceipt, onShowReceipt, onRememberFact, onDismissFact, flight, renderResult, brand, onOpenHandoff, progress, onStop, onRetry, onEdit }: Props) {
   const listRef = useRef<HTMLOListElement>(null)
+  // The founder's message being edited, and what it says now.
+  const [editing, setEditing] = useState<{ id: number; text: string } | null>(null)
 
   // Follow the newest message, including when a reply that was pending arrives in place and is taller than "Thinking".
   const last = messages[messages.length - 1]
@@ -102,6 +124,13 @@ export default function ChatThread({ messages, onAction, onReply, done = NO_STEP
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     list.scrollTo?.({ top: list.scrollHeight, behavior: reduce ? 'auto' : 'smooth' })
   }, [messages.length, lastKey])
+
+  // The last exchange can be tried again or edited, when it was a plain conversation: a reply that changed a workspace has its own Undo this, and one
+  // with buttons or a card is the app's question. Only while nothing is being worked on.
+  const lastIndex = messages.length - 1
+  const lastReply = messages[lastIndex]
+  const again = !busy && lastReply?.from === 'droplet' && !lastReply.pending && !lastReply.local && !lastReply.receipt && !lastReply.result && !(lastReply.actions && lastReply.actions.length > 0)
+  const askedBy = again && messages[lastIndex - 1]?.from === 'you' ? messages[lastIndex - 1] : undefined
 
   return (
     <ol ref={listRef} className="thread" role="log" aria-label="Conversation" aria-live="polite" tabIndex={0}>
@@ -114,6 +143,10 @@ export default function ChatThread({ messages, onAction, onReply, done = NO_STEP
           )
         }
         // Only the newest message offers replies: once the conversation moves on, they would answer a question that is no longer open.
+        // A reply that has only just arrived comes in a piece at a time: its paragraphs, then its blocks, receipt, question and suggested replies.
+        const fresh = message.fresh === true && message.from === 'droplet'
+        const base = fresh ? parseRichText(message.text).length : 0
+        const at = (step: number) => (fresh ? ({ 'data-reveal': '', style: { '--i': base + step } as React.CSSProperties } as const) : {})
         const replies = index === messages.length - 1 && message.from === 'droplet' && !message.pending && message.question ? (message.replies ?? []) : []
         return (
           <Fragment key={message.id}>
@@ -128,18 +161,64 @@ export default function ChatThread({ messages, onAction, onReply, done = NO_STEP
                   {/* <DropletLoader /> */}
                   {/* <ThinkingDots /> */}
                   <JellyLoader />
-                  Thinking
+                  <span>{progress?.words ?? 'Thinking'}</span>
+                  {/* The seconds are drawn but not read out: the log is a live region, and it would announce the time every second. */}
+                  {progress?.elapsed && <span className="thread__elapsed" aria-hidden="true">· {progress.elapsed}</span>}
+                  {onStop && (
+                    <button type="button" className="thread__stop" onClick={onStop}>
+                      Stop
+                    </button>
+                  )}
                 </span>
               ) : message.from === 'droplet' ? (
-                <RichText source={message.text} />
+                <RichText source={message.text} reveal={fresh} />
+              ) : editing?.id === message.id ? (
+                <form
+                  className="thread__edit"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    const text = editing.text.trim()
+                    if (text === '') return
+                    setEditing(null)
+                    onEdit?.(message.id, text)
+                  }}
+                >
+                  <textarea
+                    className="thread__edit-field"
+                    aria-label="Edit your message"
+                    value={editing.text}
+                    rows={2}
+                    maxLength={600}
+                    autoFocus
+                    onChange={(event) => setEditing({ id: message.id, text: event.target.value })}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Escape') setEditing(null)
+                      else if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault()
+                        event.currentTarget.form?.requestSubmit()
+                      }
+                    }}
+                  />
+                  <span className="thread__edit-buttons">
+                    <button type="submit" className="thread__action thread__action--primary" disabled={editing.text.trim() === ''}>
+                      Send again
+                    </button>
+                    <button type="button" className="thread__action" onClick={() => setEditing(null)}>
+                      Cancel
+                    </button>
+                  </span>
+                </form>
               ) : (
                 message.text
               )}
               {!message.pending && message.result && renderResult?.(message)}
               {!message.pending && message.blocks && message.blocks.length > 0 && (
-                <ChatBlocks blocks={message.blocks} checks={message.checks} done={done} busy={busy} onToggle={(block, item, checked) => onToggle?.(message.id, block, item, checked)} onOpen={onOpenStep} />
+                <div {...at(0)}>
+                <ChatBlocks blocks={message.blocks} checks={message.checks} done={done} busy={busy} onToggle={(block, item, checked) => onToggle?.(message.id, block, item, checked)} onOpen={onOpenStep} brand={brand} onOpenHandoff={onOpenHandoff} />
+                </div>
               )}
               {!message.pending && message.receipt && (
+                <div {...at(1)}>
                 <ChangeReceipt
                   receipt={message.receipt}
                   canUndo={message.receiptLive?.undo}
@@ -148,12 +227,18 @@ export default function ChatThread({ messages, onAction, onReply, done = NO_STEP
                   onUndo={() => onUndoReceipt?.(message.id)}
                   onShow={() => onShowReceipt?.(message.id)}
                 />
+                </div>
               )}
               {!message.pending && message.proposals && message.proposals.length > 0 && (
                 <FactChips proposals={message.proposals} onRemember={(key) => onRememberFact?.(message.id, key)} onNotNow={(key) => onDismissFact?.(message.id, key)} />
               )}
-              {!message.pending && message.question && <p className="thread__question">{message.question}</p>}
+              {!message.pending && message.question && (
+                <p className="thread__question" {...at(2)}>
+                  {message.question}
+                </p>
+              )}
               {!message.pending && message.grounding && <WebSources grounding={message.grounding} />}
+              {!message.pending && message.from === 'droplet' && message.used && !message.local && <UsedLine used={message.used} />}
               {message.actions && message.actions.length > 0 && (
                 <span className="thread__actions">
                   {message.actions.map((action) => (
@@ -171,11 +256,21 @@ export default function ChatThread({ messages, onAction, onReply, done = NO_STEP
                     </time>
                   )}
                   {message.from === 'droplet' && <CopyButton text={[message.text, message.question].filter(Boolean).join('\n\n')} />}
+                  {message.id === lastReply?.id && again && onRetry && (
+                    <button type="button" className="thread__copy" aria-label="Try again" title="Try again" onClick={() => onRetry(message.id)}>
+                      <RestartIcon size={14} aria-hidden="true" />
+                    </button>
+                  )}
+                  {message.id === askedBy?.id && onEdit && editing?.id !== message.id && (
+                    <button type="button" className="thread__copy" aria-label="Edit your message" title="Edit" onClick={() => setEditing({ id: message.id, text: message.text })}>
+                      <PenIcon size={14} aria-hidden="true" />
+                    </button>
+                  )}
                 </span>
               )}
             </li>
             {replies.length > 0 && (
-              <li className="thread__replies">
+              <li className="thread__replies" {...(fresh || lastReply?.fresh ? ({ 'data-reveal': '', style: { '--i': (lastReply?.fresh ? parseRichText(lastReply.text).length : 0) + 3 } as React.CSSProperties } as const) : {})}>
                 <ul aria-label="Suggested replies">
                   {replies.map((reply) => (
                     <li key={reply}>
