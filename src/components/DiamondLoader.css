@@ -1,0 +1,33 @@
+/* Eight squares in a diamond lighting up one after another, 0.1s apart over a 0.8s turn. Pure black on a light screen and pure white on a dark one (--loader). */
+.diamond {
+  flex: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  color: var(--loader);
+}
+
+.diamond__square {
+  opacity: 0;
+  animation: diamond-pixel 0.8s ease-in-out infinite;
+  animation-delay: calc(var(--i) * 0.1s);
+}
+
+@keyframes diamond-pixel {
+  0% {
+    opacity: 0;
+  }
+  1% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Reduced motion: nothing moves, and the whole diamond is shown. */
+@media (prefers-reduced-motion: reduce) {
+  .diamond__square {
+    opacity: 1;
+    animation: none;
+  }
+}

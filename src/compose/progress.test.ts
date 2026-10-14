@@ -63,6 +63,8 @@ describe('a stage in words', () => {
     const context = { from: 'the board on screen, this chat and 2 earlier chats', where: 'your board' }
     expect(stageWords({ stage: 'gathering' })).toBe('Looking at what is saved in this project')
     expect(stageWords({ stage: 'reading' }, context)).toBe('Reading your message alongside the board on screen, this chat and 2 earlier chats')
+    // a long search is cut, so the line stays short
+    expect(stageWords({ stage: 'checking', searched: ['how much does it cost to register a private company with CIPC in South Africa today'] })).toBe('Searched the web for “how much does it cost to register a pri…”. Checking the reply')
     expect(stageWords({ stage: 'checking' }, context)).toBe('Checking the reply fits your board')
     expect(stageWords({ stage: 'applying', where: 'the invoice' })).toBe('Making the changes on the invoice')
   })

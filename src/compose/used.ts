@@ -91,7 +91,7 @@ export function usedOf(request: ComposeRequest, options: { searched?: string[] }
 
 // What a reply is being made from, as a phrase for the progress line: "this chat, your saved palette and 2 earlier chats". Built from the same list as the
 // line under the reply, so what is said while Droplet works is what is listed afterwards. Counts-only items ("What is saved") are left out, and at most
-// four things are named.
+// three things are named (the line is shown in the thread while Droplet works, so it stays short).
 const WORKING_FROM: Record<string, string> = {
   'This chat': 'this chat',
   'The palette on screen': 'the palette on screen',
@@ -100,7 +100,7 @@ const WORKING_FROM: Record<string, string> = {
   'Your saved palette': 'your saved palette',
   'Business name': 'your business name',
   Offer: 'your offer',
-  'What you told me about the business': 'what you have told me about the business',
+  'What you told me about the business': 'what you told me',
   'Your saved invoices': 'your saved invoices',
   'Lines from your notes': 'lines from your notes',
 }
@@ -113,7 +113,7 @@ export function workingFrom(used: Used): string {
     if (phrase && !phrases.includes(phrase)) phrases.push(phrase)
   }
   if (phrases.length === 0) return ''
-  const shown = phrases.slice(0, 4)
+  const shown = phrases.slice(0, 3)
   const more = phrases.length - shown.length
   const all = more > 0 ? [...shown, `${more} more`] : shown
   return all.length === 1 ? all[0] : `${all.slice(0, -1).join(', ')} and ${all[all.length - 1]}`

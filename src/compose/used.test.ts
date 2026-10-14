@@ -115,12 +115,12 @@ describe('what it is working from, in words', () => {
     expect(workingFrom(usedOf(request))).toBe('this chat, your saved palette and 2 earlier chats')
   })
 
-  it('names at most four things and counts the rest, and leaves out counts-only items', () => {
+  it('names at most three things and counts the rest, and leaves out counts-only items', () => {
     const memory = withFact(withIdea(emptyMemory(), 'name', 'Kindred Gifting', '2026-10-05T10:00:00.000Z'), 'brand.values', 'Warm', '2026-10-05T10:00:00.000Z')
     const project = snapshotOfProject({ projectName: 'K', memory, hasPalette: true, boardItems: 3 })
     const request: ComposeRequest = { intent: 'hi', history: [{ role: 'founder', text: 'x' }], memory: { colours }, project, earlierChats: [{ when: '10 October', text: 'a' }], notes: { digests: [{ workspace: 'board', text: 'd' }], found: [] } }
     const phrase = workingFrom(usedOf(request))
-    expect(phrase).toBe('this chat, your saved palette, your business name, what you have told me about the business and 2 more')
+    expect(phrase).toBe('this chat, your saved palette, your business name and 3 more')
     expect(phrase).not.toMatch(/saved\b.*counts/)
   })
 

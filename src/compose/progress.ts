@@ -27,6 +27,10 @@ export type ShownStage = ComposeStage | { stage: 'gathering' } | { stage: 'openi
 // about. Both are worked out in code from the request, never from the model.
 export type StageContext = { from?: string; where?: string }
 
+// The most of a search that is shown in the line.
+const MAX_QUERY_SHOWN = 40
+const shorten = (text: string, max: number) => (text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`)
+
 // A stage in words, for the thread: "Reading your message alongside the board on screen and 2 earlier chats".
 export function stageWords(stage: ShownStage, context: StageContext = {}): string {
   switch (stage.stage) {
@@ -38,7 +42,8 @@ export function stageWords(stage: ShownStage, context: StageContext = {}): strin
     }
     case 'checking': {
       const checked = context.where ? `Checking the reply fits ${context.where}` : 'Checking the reply'
-      return stage.searched && stage.searched.length > 0 ? `Searched the web for “${stage.searched[0]}”. ${checked}` : checked
+      // A long search is cut, so the line stays short.
+      return stage.searched && stage.searched.length > 0 ? `Searched the web for “${shorten(stage.searched[0], MAX_QUERY_SHOWN)}”. ${checked}` : checked
     }
     case 'retrying':
       return 'The first reply did not fit, so I am asking again with what was wrong'

@@ -4,6 +4,7 @@ import { vi } from 'vitest'
 import ChatThread, { type ThreadMessage } from './ChatThread.tsx'
 import DropletLoader from './DropletLoader.tsx'
 import ThinkingDots from './ThinkingDots.tsx'
+import DiamondLoader from './DiamondLoader.tsx'
 import JellyLoader from './JellyLoader.tsx'
 
 describe('DropletLoader', () => {
@@ -79,6 +80,30 @@ describe('ThinkingDots', () => {
   })
 })
 
+describe('DiamondLoader', () => {
+  it('is decoration: hidden from screen readers and not focusable, since the words beside it say what is happening', () => {
+    const { container } = render(<DiamondLoader />)
+    const svg = container.querySelector('svg')!
+    expect(svg).toHaveAttribute('aria-hidden', 'true')
+    expect(svg).toHaveAttribute('focusable', 'false')
+    expect(container.querySelector('[role="status"]')).toBeNull()
+  })
+
+  it('is eight squares in a diamond, each lit a tenth of a second after the one before', () => {
+    const { container } = render(<DiamondLoader />)
+    const squares = [...container.querySelectorAll<SVGRectElement>('.diamond__square')]
+    expect(squares).toHaveLength(8)
+    expect(squares.map((square) => square.style.getPropertyValue('--i'))).toEqual(['0', '1', '2', '3', '4', '5', '6', '7'])
+    expect(squares.map((square) => `${square.getAttribute('x')},${square.getAttribute('y')}`)).toEqual(['8,0', '12,4', '16,8', '12,12', '8,16', '4,12', '0,8', '4,4'])
+  })
+
+  it('is what shows beside the stage while Droplet works', () => {
+    const { container } = render(<ChatThread messages={[{ id: 1, from: 'droplet', text: '', pending: true }]} />)
+    expect(container.querySelector('.diamond')).not.toBeNull()
+    expect(container.querySelector('.jelly')).toBeNull()
+  })
+})
+
 describe('JellyLoader', () => {
   it('is decoration: hidden from screen readers', () => {
     const { container } = render(<JellyLoader />)
@@ -106,16 +131,16 @@ describe('ChatThread', () => {
     { id: 2, from: 'droplet', text: '', pending: true },
   ]
 
-  it('shows the jelly loader and the word "Thinking" while a reply is pending', () => {
+  it('shows the diamond loader and the word "Thinking" while a reply is pending', () => {
     const { container } = render(<ChatThread messages={messages} />)
     expect(screen.getByText('Thinking')).toBeInTheDocument()
-    expect(container.querySelector('.thread__message--pending .jelly')).not.toBeNull()
+    expect(container.querySelector('.thread__message--pending .diamond')).not.toBeNull()
   })
 
   it('shows the reply, and no loader, once it arrives', () => {
     const { container } = render(<ChatThread messages={[messages[0], { id: 2, from: 'droplet', text: 'Start from your costs.' }]} />)
     expect(screen.getByText('Start from your costs.')).toBeInTheDocument()
-    expect(container.querySelector('.jelly')).toBeNull()
+    expect(container.querySelector('.diamond')).toBeNull()
     expect(screen.queryByText('Thinking')).toBeNull()
   })
 
