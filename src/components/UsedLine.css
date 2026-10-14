@@ -1,0 +1,65 @@
+.used {
+  margin-top: 0.375rem;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+/* Quiet: muted text on the page, one line, cut with an ellipsis if it is long. It is a button, so it takes a focus ring like any other. */
+.used__line {
+  display: block;
+  max-width: 100%;
+  padding: 0.125rem 0;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  text-align: left;
+}
+
+.used__text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.used__line:hover .used__text,
+.used__line:focus-visible .used__text,
+.used__line[aria-expanded='true'] .used__text {
+  color: var(--text);
+}
+
+.used__list {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--overlay-10);
+  border-radius: var(--radius-md);
+  background: var(--overlay-06);
+  color: var(--text-muted);
+}
+
+.used__list ul {
+  display: grid;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.used__list li {
+  display: grid;
+  gap: 0.125rem;
+}
+
+.used__list strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.used__not-sent {
+  margin: 0;
+  color: var(--text);
+  font-weight: 600;
+}

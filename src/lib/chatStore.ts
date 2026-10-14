@@ -3,6 +3,7 @@ import { blockSchema, MAX_BLOCKS, type ChatBlock } from '../compose/blocks.ts'
 import { groundingSchema, type Grounding } from '../compose/grounding.ts'
 import { summarySchema } from '../compose/background.ts'
 import { receiptSchema, type Receipt } from '../compose/receipt.ts'
+import { usedSchema, type Used } from '../compose/used.ts'
 import { invoiceResultSchema, type InvoiceResult } from './invoiceGuide.ts'
 import { documentStorage } from './storage.ts'
 
@@ -26,6 +27,8 @@ const messageSchema = z.object({
   grounding: groundingSchema.optional(),
   // What the reply changed on screen and what it left out, kept so the card shows again. The ability to undo it is not kept.
   receipt: receiptSchema.optional(),
+  // What Droplet was given to make the reply, in the app's words, built from the request that was sent. Shown as a quiet line under the reply.
+  used: usedSchema.optional(),
   // A note from the app, not an answer from the model, so it is never sent to the model as part of the conversation.
   local: z.boolean().optional(),
   // A task finished in Guide mode, kept so its card shows again: the invoice's number, client, dates and sums, never anything private.
@@ -54,7 +57,7 @@ export type StoredMessage = z.infer<typeof messageSchema>
 export type StoredChat = z.infer<typeof chatSchema>
 
 // What of a thread is worth keeping: the words, not the replies still being worked on, nor the buttons.
-export function storableMessages(thread: { id: number; from: StoredMessage['from']; text: string; question?: string; blocks?: ChatBlock[]; checks?: Record<string, boolean>; grounding?: Grounding; receipt?: Receipt; result?: InvoiceResult; pending?: boolean; local?: boolean; at?: string }[]): StoredMessage[] {
+export function storableMessages(thread: { id: number; from: StoredMessage['from']; text: string; question?: string; blocks?: ChatBlock[]; checks?: Record<string, boolean>; grounding?: Grounding; receipt?: Receipt; result?: InvoiceResult; used?: Used; pending?: boolean; local?: boolean; at?: string }[]): StoredMessage[] {
   return thread
     .filter((item) => !item.pending && item.text.trim() !== '')
     .map((item) => ({
@@ -66,6 +69,7 @@ export function storableMessages(thread: { id: number; from: StoredMessage['from
       ...(item.checks && Object.keys(item.checks).length > 0 ? { checks: item.checks } : {}),
       ...(item.grounding ? { grounding: item.grounding } : {}),
       ...(item.receipt ? { receipt: item.receipt } : {}),
+      ...(item.used ? { used: item.used } : {}),
       ...(item.result ? { result: item.result } : {}),
       ...(item.local ? { local: true } : {}),
       ...(item.at ? { at: item.at } : {}),
