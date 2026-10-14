@@ -2534,7 +2534,8 @@ describe('what Droplet used', () => {
     await say(user, 'And for a bigger order?')
     await screen.findByText('Second answer.')
     const line = screen.getAllByRole('button', { name: /^Used:/ }).at(-1)!
-    expect(line).toHaveTextContent('Used: this chat')
+    expect(line).toHaveAccessibleName(/^Used: this chat/)
+    expect(line).toHaveTextContent('What I used')
     await user.click(line)
     expect(screen.getByText(/Not sent: addresses, contact details and bank details/)).toBeInTheDocument()
     await waitFor(async () => expect((await loadChatsFor())[0]?.messages.filter((item) => item.used)).toHaveLength(2))

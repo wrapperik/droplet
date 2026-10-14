@@ -4,9 +4,11 @@
   line-height: 1.4;
 }
 
-/* Quiet: muted text on the page, one line, cut with an ellipsis if it is long. It is a button, so it takes a focus ring like any other. */
+/* Quiet: two small muted words and a chevron, never a long line. It is a button, so it takes a focus ring like any other. */
 .used__line {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   max-width: 100%;
   padding: 0.125rem 0;
   border: 0;
@@ -17,10 +19,16 @@
 }
 
 .used__text {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.used__chevron {
+  flex: none;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.used__line[aria-expanded='true'] .used__chevron {
+  transform: rotate(180deg);
 }
 
 .used__line:hover .used__text,

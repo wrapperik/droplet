@@ -75,16 +75,17 @@ describe('the founder\'s messages', () => {
   const css = readFileSync('src/components/ChatThread.css', 'utf8')
   const tokens = readFileSync('src/styles/tokens.css', 'utf8')
 
-  it('are in the message bar\'s own style: its fill, its hairline and its shadow, not blue', () => {
-    expect(css).toMatch(/\.thread__message--you\.glass\s*\{[^}]*background:\s*var\(--intent-fill\)/)
-    expect(css).toMatch(/\.thread__message--you\.glass\s*\{[^}]*border-color:\s*var\(--intent-edge\)/)
-    expect(css).toMatch(/\.thread__message--you\.glass\s*\{[^}]*box-shadow:\s*var\(--intent-shadow\)/)
+  it('are in a plain grey bubble: a flat fill, no blur, no hairline and no shadow, and not blue', () => {
+    const rule = /\.thread__message--you\s*\{([^}]*)\}/.exec(css)?.[1] ?? ''
+    expect(rule).toMatch(/background:\s*var\(--overlay-10\)/)
+    expect(rule).not.toMatch(/box-shadow|border:|border-color|border-width|backdrop/)
+    expect(css).not.toMatch(/\.thread__message--you\.glass/)
     expect(css).not.toMatch(/--bubble|--on-bubble/)
     expect(tokens).not.toMatch(/--bubble|--on-bubble/)
   })
 
-  it('carry the glass class, as the bar does', () => {
+  it('do not carry the glass class: there is no blur behind them', () => {
     const { container } = render(<ChatThread messages={thread} />)
-    expect(container.querySelector('.thread__message--you')).toHaveClass('glass')
+    expect(container.querySelector('.thread__message--you')).not.toHaveClass('glass')
   })
 })

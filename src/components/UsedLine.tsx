@@ -1,4 +1,5 @@
 import { useId, useState } from 'react'
+import { AltArrowDownIcon } from '@solar-icons/react/linear'
 import { NOT_SENT, usedLine, type Used } from '../compose/used.ts'
 import './UsedLine.css'
 
@@ -9,8 +10,10 @@ export default function UsedLine({ used }: { used: Used }) {
   const listId = useId()
   return (
     <div className="used">
-      <button type="button" className="used__line" aria-expanded={open} aria-controls={listId} onClick={() => setOpen((value) => !value)}>
-        <span className="used__text">{usedLine(used)}</span>
+      {/* Short on the page, so it does not add a line of clutter to every reply; the full "Used: ..." line is what a screen reader hears, and what the list opens to. */}
+      <button type="button" className="used__line" aria-label={usedLine(used)} aria-expanded={open} aria-controls={listId} onClick={() => setOpen((value) => !value)}>
+        <span className="used__text">What I used</span>
+        <AltArrowDownIcon className="used__chevron" size={12} aria-hidden="true" />
       </button>
       {open && (
         <div id={listId} className="used__list">

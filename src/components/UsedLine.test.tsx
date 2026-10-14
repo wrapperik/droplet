@@ -12,9 +12,11 @@ const used: Used = {
 }
 
 describe('the line under a reply saying what Droplet used', () => {
-  it('is a quiet line to begin with, and a button that is closed', () => {
+  it('is two quiet words to begin with, with the full line as its name, and a button that is closed', () => {
     render(<UsedLine used={used} />)
     const line = screen.getByRole('button', { name: 'Used: your saved palette, business name' })
+    expect(line).toHaveTextContent('What I used')
+    expect(line).not.toHaveTextContent(/saved palette/)
     expect(line).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByText(NOT_SENT)).not.toBeInTheDocument()
   })
