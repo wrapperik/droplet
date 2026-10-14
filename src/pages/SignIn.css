@@ -3,6 +3,18 @@
   place-items: center;
   min-height: 100dvh;
   padding: 1.5rem 1rem;
+  /* A blue that rises from the foot of the screen and fades out by about the middle, with eased stops so it shows no bands. */
+  background:
+    radial-gradient(
+      140% 75% at 50% 112%,
+      var(--rise-strong) 0%,
+      color-mix(in srgb, var(--rise-strong) 55%, var(--rise-soft)) 22%,
+      var(--rise-soft) 42%,
+      color-mix(in srgb, var(--rise-soft) 45%, transparent) 62%,
+      color-mix(in srgb, var(--rise-soft) 15%, transparent) 76%,
+      transparent 88%
+    ),
+    var(--bg);
 }
 
 .signin__card {

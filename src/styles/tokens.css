@@ -97,6 +97,10 @@
   --glow-core: rgb(31 143 224 / 0.25);
   --glow-halo: rgb(207 233 251 / 0.8);
   --glow-accent: rgb(11 79 138 / 0.14);
+  /* The blue that rises from the foot of the sign-in screen and fades out: Droplet Blue into a Ripple wash. Only the card's glass sits on it,
+     never bare text. */
+  --rise-strong: rgb(31 143 224 / 0.32);
+  --rise-soft: rgb(207 233 251 / 0.7);
 
   /* The wave behind the conversation before anything has been said: pale where it meets the page, deepening to a royal blue. */
   --wave-edge: #8fd3f6;
@@ -163,6 +167,9 @@
   --glow-core: rgb(11 79 138 / 0.85);
   --glow-halo: rgb(31 143 224 / 0.22);
   --glow-accent: rgb(124 192 245 / 0.12);
+  /* On charcoal it rises as Deep Water, a deep navy, into a faint Droplet Blue. */
+  --rise-strong: rgb(11 79 138 / 0.8);
+  --rise-soft: rgb(31 143 224 / 0.14);
 
   /* The same wave on a dark screen: it glows out of the dark instead of covering it, so the text on top keeps its contrast. */
   --wave-edge: rgb(60 170 240 / 0.26);
