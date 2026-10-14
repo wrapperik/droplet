@@ -59,7 +59,7 @@ export function checkInvoiceTurn(turn: InvoiceTurn, invoice: InvoiceSnapshot | u
 
 // The same checks for a reply about the board: the actions are tried against the board the founder is looking at, through the same code that
 // will apply them, including where things are to go, which that code finds and the model never gives.
-export function checkBoardTurn(turn: BoardTurn, board: BoardSnapshot | undefined): string[] {
+export function checkBoardTurn(turn: BoardTurn, board: BoardSnapshot | undefined, founderText = ''): string[] {
   if (turn.actions.every(isScreenAction)) return []
   if (turn.task !== 'ideation') {
     return [`Only an ideation task may include actions on the board. Leave actions empty for the task "${turn.task}", and put your answer in the message.`]
@@ -69,7 +69,7 @@ export function checkBoardTurn(turn: BoardTurn, board: BoardSnapshot | undefined
     let n = 0
     return () => `check-${++n}`
   })()
-  const result = applyBoardTurnActions({ base: stateOfBoardSnapshot(board), actions: turn.actions.filter((action): action is BoardTurnAction => !isScreenAction(action)), view: board.view, newId: counter })
+  const result = applyBoardTurnActions({ base: stateOfBoardSnapshot(board), actions: turn.actions.filter((action): action is BoardTurnAction => !isScreenAction(action)), view: board.view, newId: counter, founderText })
   return result.skipped.map((skipped) => `Action ${skipped.position + 1} (${skipped.action.type}): ${skipped.reason}`)
 }
 
@@ -260,7 +260,7 @@ function checkLibraryAction(action: Extract<ScreenAction, { type: 'open_item' | 
 export function checkTurnFor(turn: AnyTurn, request: ComposeRequest): string[] {
   const talk = [...checkConversation(turn, request), ...checkScreenActions(turn, request)]
   const rest = { ...turn, actions: turn.actions.filter((action) => !isScreenAction(action)) } as AnyTurn
-  if (request.view === 'board') return [...talk, ...checkBoardTurn(rest as BoardTurn, request.board)]
+  if (request.view === 'board') return [...talk, ...checkBoardTurn(rest as BoardTurn, request.board, founderTextOf(request).join('\n'))]
   // An action for the board has no place on another workspace, or when no workspace is open.
   if (rest.actions.some(isBoardAction)) return [...talk, 'Those actions are for the board, which is not the workspace on screen. Leave them out.']
   if (request.view === 'invoice') return [...talk, ...checkInvoiceTurn(rest as InvoiceTurn, request.invoice, founderTextOf(request))]

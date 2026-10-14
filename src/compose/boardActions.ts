@@ -1,20 +1,34 @@
-import type { Point } from '../lib/boardGeometry.ts'
+import { BOARD, GRID, intersects, type Point } from '../lib/boardGeometry.ts'
+import { membersOf } from '../lib/boardFrames.ts'
 import { AI_NOTE, layoutCluster, middleOf, placeCluster, roomInFrame, slotInFrame, spotLoose, spotNear } from '../lib/boardPlacement.ts'
 import { canRedoBoard, canUndoBoard, docOf, reduceBoard, type BoardAction, type BoardState } from '../lib/boardState.ts'
 import { groupFor, instantiateTemplate, placeTemplate, promptsOf, templateById } from '../lib/boardTemplates.ts'
-import { attachedTo, describeItem, isConnector, isFrame, isNode, isRectItem, MAX_ITEMS, type BoardItem, type RectItem } from '../lib/boardTypes.ts'
+import { attachedTo, describeItem, isConnector, isFrame, isNode, isRectItem, MAX_ITEMS, rectOf, SHAPE_COLOURS, FOUNDER_COLOURS, type BoardItem, type FrameItem, type NodeItem, type RectItem } from '../lib/boardTypes.ts'
 import { newId as freshId } from '../lib/ids.ts'
 import { refsOf } from './boardSnapshot.ts'
 import { plural, type Change, type FocusTarget } from './receipt.ts'
-import { MAX_AI_ARROWS, MAX_AI_CLUSTERS, MAX_AI_NOTES, type BoardTurnAction } from './boardSpec.ts'
+import { MAX_AI_ARROWS, MAX_AI_CLUSTERS, MAX_AI_NOTES, MAX_AI_SUMMARY_LINES, type BoardTurnAction } from './boardSpec.ts'
 
 // Turns the model's actions on the board into board actions and applies them through the same reducer a person's edits use. Anything that
 // cannot be done is left out with a plain reason, and the reasons are what goes back to the model if it has to try again. A turn is one step in
 // the history, so one Undo takes back everything the model did.
 //
 // What is done here is also what keeps the model in its place. It names things by their references and never gives a position, a size or a
-// colour: the places come from `boardPlacement`, and a note by Droplet is pink with its name on it, whatever the model said. It can add, and it
-// can gather notes into a frame, but it cannot edit, recolour or delete what the founder made, and it cannot write over a note that has words in it.
+// colour of its own choosing: the places come from `boardPlacement`, and a note by Droplet is pink with its name on it, whatever the model said.
+// It may add, move, tidy and arrange. It may recolour only on the founder's own words (a quote, checked). It may change or delete its own notes at
+// once, but a change to the founder's, or deleting them, is only ever a proposal: it comes back as `pending`, and the interface asks the founder in
+// the chat. It cannot write over a note that has words in it with fill_prompt.
+
+// Words compared the way a person would: capitals, curly quotes, punctuation and spacing do not matter.
+const plainWords = (text: string) =>
+  text
+    .toLowerCase()
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[^\p{L}\p{N}']+/gu, ' ')
+    .trim()
+
+// Words that make a quote a request for a colour.
+const COLOUR_WORDS = /\b(colou?rs?|recolou?r|paint|shade|tint|yellow|mint|green|sky|blue|lilac|purple|peach|orange|grey|gray|white)\b/i
 
 export type BoardSkipped = { position: number; action: BoardTurnAction; reason: string }
 
@@ -25,13 +39,22 @@ type Props = {
   view: Point
   // Makes the id of a new thing. Given so that the server's check and a test need not make random ones.
   newId?: () => string
+  // What the founder has written in this conversation, for the quote that must back a recolour. Without it, nothing is recoloured.
+  founderText?: string
 }
 
-// `changes` is what was done, for the change receipt: notes added to the same place are one line, and so are arrows and filled prompts.
-export type BoardApplyResult = { state: BoardState; skipped: BoardSkipped[]; changes: Change[] }
+// A change to the founder's own work that Droplet proposed and the app will not make until the founder says yes, in the chat. Nothing in the
+// board has changed when one is returned.
+export type PendingBoardEdit =
+  | { kind: 'remove'; ids: string[]; refs: string[]; prompt: string }
+  | { kind: 'edit'; id: string; ref: string; what: 'note' | 'frame'; from: string; to: string; prompt: string }
 
-export function applyBoardTurnActions({ base, actions, view, newId = freshId }: Props): BoardApplyResult {
+// `changes` is what was done, for the change receipt: notes added to the same place are one line, and so are arrows and filled prompts.
+export type BoardApplyResult = { state: BoardState; skipped: BoardSkipped[]; changes: Change[]; pending: PendingBoardEdit[] }
+
+export function applyBoardTurnActions({ base, actions, view, newId = freshId, founderText = '' }: Props): BoardApplyResult {
   const skipped: BoardSkipped[] = []
+  const pending: PendingBoardEdit[] = []
 
   // Undo and redo take back or restore a whole step, so they stand alone.
   const history = actions.find((action) => action.type === 'undo' || action.type === 'redo')
@@ -42,15 +65,15 @@ export function applyBoardTurnActions({ base, actions, view, newId = freshId }: 
       : history.type === 'undo' && !canUndoBoard(base) ? 'There is nothing to undo.'
       : history.type === 'redo' && !canRedoBoard(base) ? 'There is nothing to redo.'
       : null
-    if (reason) return { state: base, skipped: [{ position, action: history, reason }], changes: [] }
-    return { state: reduceBoard(base, { type: history.type }), skipped, changes: [{ kind: 'changed', text: history.type === 'undo' ? 'Took back the last change' : 'Put back the change that was taken back', focus: [] }] }
+    if (reason) return { state: base, skipped: [{ position, action: history, reason }], changes: [], pending }
+    return { state: reduceBoard(base, { type: history.type }), skipped, changes: [{ kind: 'changed', text: history.type === 'undo' ? 'Took back the last change' : 'Put back the change that was taken back', focus: [] }], pending }
   }
 
   // The references mean what they meant when the board was shown, all the way through the turn, even after things are moved.
   const idOf = new Map([...refsOf(docOf(base).items)].map(([id, ref]) => [ref, id]))
   let scratch = base
   const collected: BoardAction[] = []
-  const used = { notes: 0, clusters: 0, templates: 0, arrows: 0 }
+  const used = { notes: 0, clusters: 0, templates: 0, arrows: 0, summaries: 0, arranges: 0 }
   const clustered = new Set<string>()
   // What was done, in the order it was done. Notes put in the same place, arrows and filled prompts are counted into one line each.
   const changes: Change[] = []
@@ -234,11 +257,248 @@ export function applyBoardTurnActions({ base, actions, view, newId = freshId }: 
         return
       }
 
+
+      case 'move_to_frame': {
+        const frame = find(action.frame)
+        if (!frame) return skip(missing(action.frame))
+        if (!isFrame(frame)) return skip(`${name(frame)} is not a frame. Name a frame to move things into.`)
+        const moving: NodeItem[] = []
+        for (const ref of action.things) {
+          const item = find(ref)
+          if (!item) return skip(missing(ref))
+          if (!isNode(item)) return skip(`${ref} is not a note, a shape or some text, so it cannot be moved into a frame.`)
+          if (moving.some((other) => other.id === item.id)) return skip(`${ref} is named twice.`)
+          moving.push(item)
+        }
+        const already = moving.filter((item) => membersOf(items(), frame).some((member) => member.id === item.id))
+        if (already.length === moving.length) return skip(`${moving.length === 1 ? 'That is' : 'Those are'} already in ${name(frame)}.`)
+        // Each goes in the first clear place in the frame, one after another, with the others that are moving out of the way.
+        let spots = items().filter((item) => !moving.some((other) => other.id === item.id))
+        const steps: BoardAction[] = []
+        for (const item of moving) {
+          if (already.includes(item)) continue
+          const rect = slotInFrame(spots, frame, { w: item.w, h: item.h })
+          if (!rect) return skip(`${name(frame)} has no room for ${item === moving[0] && moving.length === 1 ? 'it' : 'all of them'} (${roomInFrame(items(), frame)} more would fit). Tidy it first, or move fewer.`)
+          spots = [...spots, { ...item, x: rect.x, y: rect.y }]
+          steps.push({ type: 'move', ids: [item.id], dx: rect.x - item.x, dy: rect.y - item.y })
+        }
+        if (!run(steps.filter((step) => step.type !== 'move' || step.dx !== 0 || step.dy !== 0))) return skip('Those could not be moved.')
+        const moved = moving.filter((item) => !already.includes(item))
+        changes.push({ kind: 'changed', text: `${plural(moved.length, 'thing')} moved into ${quoted(words(frame))}`, focus: moved.map((item) => ({ kind: 'item' as const, id: item.id, how: 'moved' as const })) })
+        return
+      }
+
+      case 'tidy': {
+        let targets: FrameItem[]
+        if (action.frame) {
+          const frame = find(action.frame)
+          if (!frame) return skip(missing(action.frame))
+          if (!isFrame(frame)) return skip(`${name(frame)} is not a frame. Name a frame to tidy, or leave frame out to tidy every frame.`)
+          targets = [frame]
+        } else {
+          targets = items().filter(isFrame)
+        }
+        let tidied = 0
+        for (const listed of targets) {
+          const frame = items().find((item) => item.id === listed.id) as FrameItem | undefined
+          if (!frame) continue
+          const members = [...membersOf(items(), frame)].sort((a, b) => a.y - b.y || a.x - b.x)
+          if (members.length < 2) {
+            if (action.frame) return skip(`${name(frame)} holds fewer than two things, so there is nothing to tidy.`)
+            continue
+          }
+          const layout = layoutCluster(members.map((item) => ({ w: item.w, h: item.h })))
+          const fitted = { x: frame.x, y: frame.y, w: layout.frame.w, h: layout.frame.h }
+          if (fitted.x + fitted.w > BOARD.w || fitted.y + fitted.h > BOARD.h) {
+            if (action.frame) return skip(`${name(frame)} would not fit on the board once tidied.`)
+            continue
+          }
+          const others = items().filter(isRectItem).filter((item) => item.id !== frame.id && !members.some((member) => member.id === item.id)).map(rectOf)
+          if (others.some((other) => intersects(fitted, other))) {
+            if (action.frame) return skip(`There is no room to tidy ${name(frame)}: fitting it round its things would run into other things on the board.`)
+            continue
+          }
+          const steps: BoardAction[] = members
+            .map((member, index) => ({ type: 'move' as const, ids: [member.id], dx: frame.x + layout.rects[index].x - member.x, dy: frame.y + layout.rects[index].y - member.y }))
+            .filter((step) => step.dx !== 0 || step.dy !== 0)
+          if (fitted.w !== frame.w || fitted.h !== frame.h) steps.push({ type: 'resize_item', id: frame.id, w: fitted.w, h: fitted.h })
+          if (steps.length === 0) {
+            if (action.frame) return skip(`${name(frame)} is already laid out in a grid.`)
+            continue
+          }
+          if (!run(steps)) {
+            if (action.frame) return skip(`${name(frame)} could not be tidied.`)
+            continue
+          }
+          tidied += 1
+          changes.push({ kind: 'changed', text: `Tidied ${quoted(words(frame))}: ${plural(members.length, 'thing')} in a grid`, focus: [{ kind: 'item', id: frame.id, how: 'moved' }, ...members.map((member) => ({ kind: 'item' as const, id: member.id, how: 'moved' as const }))] })
+        }
+        if (tidied === 0 && !action.frame) return skip('There is no frame with two or more things that can be tidied.')
+        return
+      }
+
+      case 'arrange': {
+        if (used.arranges >= 1) return skip('Only one arrange can be done in a reply.')
+        const frames: FrameItem[] = []
+        for (const ref of action.frames) {
+          const frame = find(ref)
+          if (!frame) return skip(missing(ref))
+          if (!isFrame(frame)) return skip(`${name(frame)} is not a frame. Only frames can be arranged.`)
+          if (frames.some((other) => other.id === frame.id)) return skip(`${ref} is named twice.`)
+          frames.push(frame)
+        }
+        const gap = GRID * 4
+        const origin = { x: Math.min(...frames.map((frame) => frame.x)), y: Math.min(...frames.map((frame) => frame.y)) }
+        const columns = action.layout === 'row' ? frames.length : action.layout === 'column' ? 1 : Math.ceil(Math.sqrt(frames.length))
+        const widths = Array.from({ length: columns }, (_, column) => Math.max(0, ...frames.filter((_, index) => index % columns === column).map((frame) => frame.w)))
+        const rows = Math.ceil(frames.length / columns)
+        const heights = Array.from({ length: rows }, (_, row) => Math.max(0, ...frames.filter((_, index) => Math.floor(index / columns) === row).map((frame) => frame.h)))
+        const targets = frames.map((frame, index) => ({
+          x: origin.x + widths.slice(0, index % columns).reduce((total, width) => total + width + gap, 0),
+          y: origin.y + heights.slice(0, Math.floor(index / columns)).reduce((total, height) => total + height + gap, 0),
+          w: frame.w,
+          h: frame.h,
+        }))
+        if (targets.some((target) => target.x + target.w > BOARD.w || target.y + target.h > BOARD.h)) return skip('Laid out that way, the frames would not fit on the board. Try a different layout.')
+        const moving = new Set(frames.flatMap((frame) => [frame.id, ...membersOf(items(), frame).map((member) => member.id)]))
+        const others = items().filter(isRectItem).filter((item) => !moving.has(item.id)).map(rectOf)
+        if (targets.some((target) => others.some((other) => intersects(target, other)))) return skip('Laid out that way, the frames would land on other things on the board. Move or tidy those first.')
+        const steps: BoardAction[] = frames
+          .map((frame, index) => ({ type: 'move' as const, ids: [frame.id], dx: targets[index].x - frame.x, dy: targets[index].y - frame.y }))
+          .filter((step) => step.dx !== 0 || step.dy !== 0)
+        if (steps.length === 0) return skip('The frames are already laid out that way.')
+        // A frame moved onto the place another still holds takes that one's things with it while it passes, so the order matters. Each order is tried on a
+        // copy, and one is used only if every frame ends where it should with everything it held.
+        const before = new Map(frames.map((frame) => [frame.id, membersOf(items(), frame).map((member) => ({ id: member.id, dx: member.x - frame.x, dy: member.y - frame.y }))]))
+        const worksOut = (order: BoardAction[]) => {
+          let trial = scratch
+          for (const step of order) trial = reduceBoard(trial, step)
+          const after = docOf(trial).items
+          return frames.every((frame, index) => {
+            const now = after.find((item) => item.id === frame.id)
+            if (!now || !isFrame(now) || Math.abs(now.x - targets[index].x) > GRID || Math.abs(now.y - targets[index].y) > GRID) return false
+            return (before.get(frame.id) ?? []).every((member) => {
+              const there = after.find((item) => item.id === member.id)
+              return there !== undefined && isRectItem(there) && Math.abs(there.x - now.x - member.dx) <= GRID && Math.abs(there.y - now.y - member.dy) <= GRID
+            })
+          })
+        }
+        const order = [steps, [...steps].reverse()].find(worksOut)
+        if (!order) return skip('The frames cannot be laid out that way without their things getting mixed up on the way. Tidy them one at a time instead.')
+        if (!run(order)) return skip('The frames could not be arranged.')
+        used.arranges += 1
+        changes.push({ kind: 'changed', text: `${plural(frames.length, 'frame')} arranged in a ${action.layout}`, focus: frames.map((frame) => ({ kind: 'item' as const, id: frame.id, how: 'moved' as const })) })
+        return
+      }
+
+      case 'remove': {
+        const found: BoardItem[] = []
+        for (const ref of action.things) {
+          const item = find(ref)
+          if (!item) return skip(missing(ref))
+          if (!found.some((other) => other.id === item.id)) found.push(item)
+        }
+        const mine = found.filter((item) => item.kind === 'note' && item.author === 'ai')
+        const theirs = found.filter((item) => !mine.includes(item))
+        if (mine.length > 0) {
+          if (!run([{ type: 'delete', ids: mine.map((item) => item.id) }])) return skip('Those could not be deleted.')
+          changes.push({ kind: 'removed', text: `${plural(mine.length, 'note')} by Droplet deleted`, focus: mine.map((item) => ({ kind: 'item' as const, id: item.id, how: 'removed' as const })) })
+        }
+        if (theirs.length > 0) {
+          const kinds = theirs.every((item) => item.kind === 'note') ? 'of your notes' : 'of your things'
+          const sample = theirs.slice(0, 4).map((item) => quoted(words(item))).join(', ')
+          const frames = theirs.filter(isFrame).length
+          pending.push({
+            kind: 'remove',
+            ids: theirs.map((item) => item.id),
+            refs: action.things.filter((ref) => theirs.some((item) => item.id === idOf.get(ref))),
+            prompt: `Delete ${theirs.length} ${kinds}? ${sample}${theirs.length > 4 ? `, and ${theirs.length - 4} more` : ''}.${frames > 0 ? ' What is inside a frame stays on the board.' : ''} Nothing is deleted until you say yes.`,
+          })
+        }
+        return
+      }
+
+      case 'edit_note':
+      case 'rename_frame': {
+        const ref = action.type === 'edit_note' ? action.note : action.frame
+        const target = find(ref)
+        if (!target) return skip(missing(ref))
+        const to = action.type === 'edit_note' ? action.text : action.title
+        if (action.type === 'edit_note') {
+          if (!isNode(target)) return skip(`${name(target)} is not a note, a shape or some text.`)
+          if (target.text.trim() === '') return skip(`${name(target)} has no words yet. Use fill_prompt to write in a prompt, or add_note.`)
+        } else if (!isFrame(target)) {
+          return skip(`${name(target)} is not a frame.`)
+        }
+        const from = isFrame(target) ? target.title : (target as NodeItem).text
+        if (from.trim() === to.trim()) return skip(`${name(target)} already says that.`)
+        if (target.kind === 'note' && target.author === 'ai') {
+          if (!run([{ type: 'set_text', id: target.id, text: to }])) return skip('That could not be changed.')
+          changes.push({ kind: 'changed', text: `A note by Droplet reworded: ${quoted(to.slice(0, 40))}`, focus: [{ kind: 'item', id: target.id, how: 'changed' }] })
+          return
+        }
+        const what = isFrame(target) ? 'frame' : 'note'
+        pending.push({
+          kind: 'edit',
+          id: target.id,
+          ref,
+          what,
+          from,
+          to,
+          prompt: `Droplet suggests changing ${isFrame(target) ? 'the title of a frame' : 'one of your notes'}. Now: ${quoted(from.slice(0, 120))}. Suggested: ${quoted(to.slice(0, 120))}.`,
+        })
+        return
+      }
+
+      case 'colour': {
+        const said = plainWords(action.quote)
+        if (said === '' || !plainWords(founderText).includes(said)) return skip(`quote: "${action.quote}" is not in the founder's words. Recolour only when they asked for a colour, and quote them exactly.`)
+        if (!COLOUR_WORDS.test(action.quote)) return skip(`quote: "${action.quote}" does not ask for a colour. Recolour only when the founder asked for one.`)
+        const painting: BoardItem[] = []
+        for (const ref of action.things) {
+          const item = find(ref)
+          if (!item) return skip(missing(ref))
+          if (item.kind === 'note' && item.author === 'ai') return skip(`${name(item)} is a note by Droplet, which is pink. The founder keeps it as theirs first, and then it can have a colour of their own.`)
+          if (item.kind !== 'note' && item.kind !== 'shape' && item.kind !== 'frame') return skip(`${name(item)} has no colour to change. Only notes, shapes and frames do.`)
+          if (item.kind === 'note' && !(FOUNDER_COLOURS as readonly string[]).includes(action.colour)) return skip(`A note cannot be ${action.colour}. Notes can be ${FOUNDER_COLOURS.join(', ')}.`)
+          if (!(SHAPE_COLOURS as readonly string[]).includes(action.colour)) return skip(`${action.colour} is not a colour the founder can give a thing.`)
+          painting.push(item)
+        }
+        const todo = painting.filter((item) => ('colour' in item ? item.colour : null) !== action.colour)
+        if (todo.length === 0) return skip(`${painting.length === 1 ? 'That is' : 'Those are'} already ${action.colour}.`)
+        if (!run([{ type: 'set_colour', ids: todo.map((item) => item.id), colour: action.colour }])) return skip('That could not be recoloured.')
+        changes.push({ kind: 'changed', text: `${plural(todo.length, 'thing')} made ${action.colour}`, focus: todo.map((item) => ({ kind: 'item' as const, id: item.id, how: 'changed' as const })) })
+        return
+      }
+
+      case 'summary_frame': {
+        if (used.summaries >= 1) return skip('Only one summary can be written in a reply.')
+        const lines = [...action.decided.map((line) => `Decided: ${line}`), ...action.open.map((line) => `Open: ${line}`), ...action.next.map((line) => `Next: ${line}`)]
+        if (lines.length === 0) return skip('There is nothing to put in a summary.')
+        if (lines.length > MAX_AI_SUMMARY_LINES) return skip(`A summary has at most ${MAX_AI_SUMMARY_LINES} lines.`)
+        if (used.notes + lines.length > MAX_AI_NOTES) return skip(`That would be more than ${MAX_AI_NOTES} notes in one reply, which is the most.`)
+        if (!room(lines.length + 1)) return skip('The board already holds as many things as it can.')
+        const layout = layoutCluster(lines.map(() => ({ ...AI_NOTE })))
+        const origin = placeCluster(items(), layout, view, [])
+        if (!origin) return skip('There is no clear space on the board for a summary that size.')
+        const frameId = newId()
+        const noteIds = lines.map(() => newId())
+        const steps: BoardAction[] = [
+          { type: 'add_frame', id: frameId, rect: { ...origin, ...layout.frame }, title: 'Where things stand', colour: 'white' },
+          ...lines.map((line, index): BoardAction => ({ type: 'add_note', id: noteIds[index], rect: { x: origin.x + layout.rects[index].x, y: origin.y + layout.rects[index].y, ...AI_NOTE }, text: line, author: 'ai' })),
+        ]
+        if (!run(steps)) return skip('The summary could not be written on the board.')
+        used.summaries += 1
+        used.notes += lines.length
+        changes.push({ kind: 'added', text: `A summary frame, ${plural(lines.length, 'note')}`, focus: [frameId, ...noteIds].map((id) => ({ kind: 'item' as const, id, how: 'added' as const })) })
+        return
+      }
+
       case 'undo':
       case 'redo':
         return
     }
   })
 
-  return { state: collected.length > 0 ? reduceBoard(base, { type: 'batch', actions: collected }) : base, skipped, changes }
+  return { state: collected.length > 0 ? reduceBoard(base, { type: 'batch', actions: collected }) : base, skipped, changes, pending }
 }

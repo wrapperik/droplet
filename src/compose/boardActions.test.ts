@@ -101,13 +101,20 @@ describe('add_note', () => {
 })
 
 describe('what it never does', () => {
-  it('has no way to name a place, a size or a colour: the schema carries none, and a thing that does is not an action it can send', () => {
+  it('has no way to name a place or a size: the schema carries none, and a thing that does is not an action it can send', () => {
     const shape = JSON.stringify(boardActionSchema.options.map((option) => Object.keys((option as { shape: Record<string, unknown> }).shape)))
-    for (const forbidden of ['"x"', '"y"', '"w"', '"h"', '"colour"', '"color"', '"left"', '"top"', '"width"', '"height"', '"author"']) expect(shape).not.toContain(forbidden)
+    for (const forbidden of ['"x"', '"y"', '"w"', '"h"', '"color"', '"left"', '"top"', '"width"', '"height"', '"author"']) expect(shape).not.toContain(forbidden)
   })
 
-  it('has no action that edits, recolours, resizes or deletes, or saves', () => {
-    for (const bad of ['delete_note', 'remove_note', 'edit_note', 'set_text', 'set_colour', 'resize_note', 'move_note', 'delete', 'save', 'export', 'clear_board']) {
+  it('names a colour only in the one action that recolours, and only with the founder\'s words quoted beside it', () => {
+    const withColour = boardActionSchema.options.filter((option) => 'colour' in (option as { shape: Record<string, unknown> }).shape)
+    expect(withColour).toHaveLength(1)
+    expect(Object.keys((withColour[0] as { shape: Record<string, unknown> }).shape)).toContain('quote')
+    expect(boardActionSchema.safeParse({ type: 'colour', things: ['n1'], colour: 'pink', quote: 'make it pink' }).success).toBe(false)
+  })
+
+  it('has no action that resizes, saves or clears the board, and no free-form edit of the founder\'s things', () => {
+    for (const bad of ['delete_note', 'remove_note', 'set_text', 'set_colour', 'resize_note', 'move_note', 'delete', 'save', 'export', 'clear_board']) {
       expect(boardActionSchema.safeParse({ type: bad, note: 'n1', text: 'x' }).success, bad).toBe(false)
     }
   })

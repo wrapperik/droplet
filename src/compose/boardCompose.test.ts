@@ -47,13 +47,13 @@ describe('the board actions', () => {
     }
   })
 
-  it('cannot delete, edit, recolour, move, resize, save or export, and the schema sent to the model has no way to', () => {
-    for (const bad of ['delete_note', 'edit_note', 'set_colour', 'move_note', 'resize_note', 'save', 'export_board', 'set_text', 'clear']) expect(ok({ type: bad, note: 'n1', text: 'x' }), bad).toBe(false)
+  it('cannot resize, save or export, and the schema sent to the model has no way to name a place or a size', () => {
+    for (const bad of ['delete_note', 'set_colour', 'move_note', 'resize_note', 'save', 'export_board', 'set_text', 'clear']) expect(ok({ type: bad, note: 'n1', text: 'x' }), bad).toBe(false)
     const schema = JSON.stringify(turnJsonSchema('board'))
     // export_item is the library's: it exports what is saved, never the board on screen.
-    for (const word of ['delete', 'edit', 'recolour', 'save', 'export_board', 'export_brand_sheet', 'set_palette', 'set_colour', 'add_line']) expect(schema).not.toContain(`"${word}`)
-    for (const place of ['"x"', '"y"', '"w"', '"h"', '"colour"', '"position"']) expect(schema).not.toContain(place)
-    for (const word of ['add_note', 'fill_prompt', 'cluster', 'add_template', 'connect']) expect(schema).toContain(word)
+    for (const word of ['save', 'export_board', 'export_brand_sheet', 'set_palette', 'set_colour', 'add_line']) expect(schema).not.toContain(`"${word}`)
+    for (const place of ['"x"', '"y"', '"w"', '"h"', '"position"']) expect(schema).not.toContain(place)
+    for (const word of ['add_note', 'fill_prompt', 'cluster', 'add_template', 'connect', 'move_to_frame', 'tidy', 'arrange', 'remove', 'edit_note', 'rename_frame', 'summary_frame']) expect(schema).toContain(word)
   })
 
   it('cannot be a palette or invoice action', () => {
@@ -68,7 +68,7 @@ describe('the board actions', () => {
   })
 
   it('tell the board\'s actions from the others', () => {
-    for (const type of ['add_note', 'fill_prompt', 'cluster', 'add_template', 'connect']) expect(isBoardAction({ type })).toBe(true)
+    for (const type of ['add_note', 'fill_prompt', 'cluster', 'add_template', 'connect', 'move_to_frame', 'tidy', 'arrange', 'remove', 'edit_note', 'rename_frame', 'colour', 'summary_frame']) expect(isBoardAction({ type })).toBe(true)
     expect(isBoardAction({ type: 'set_colour' })).toBe(false)
     expect(isBoardAction({ type: 'undo' })).toBe(false)
     expect(isInvoiceAction({ type: 'add_note' })).toBe(false)
@@ -112,9 +112,9 @@ describe('what the composer is told about the board', () => {
   it('has a prompt for the board, which says what it may and may not do and when it may act', () => {
     expect(systemPromptFor('board', 'advanced')).toBe(BOARD_SYSTEM_PROMPT)
     for (const rule of [
-      /You never choose where anything goes, how big it is or what colour it is/,
-      /You can only add/,
-      /cannot edit, recolour, move/,
+      /You never choose where anything goes or how big it is, and your own notes are always pink/,
+      /only ever a proposal/,
+      /only when the founder's own words ask for a colour/,
       /Act only when the founder asks you to/,
       /You never act on your own/,
       /makes your notes pink and puts your name on them/,
@@ -125,7 +125,7 @@ describe('what the composer is told about the board', () => {
     ]) {
       expect(BOARD_SYSTEM_PROMPT).toMatch(rule)
     }
-    for (const word of ['add_note', 'fill_prompt', 'cluster', 'add_template', 'connect', 'undo', 'redo']) expect(BOARD_SYSTEM_PROMPT).toContain(word)
+    for (const word of ['add_note', 'fill_prompt', 'cluster', 'add_template', 'connect', 'move_to_frame', 'tidy', 'arrange', 'remove', 'edit_note', 'rename_frame', 'colour', 'summary_frame', 'undo', 'redo']) expect(BOARD_SYSTEM_PROMPT).toContain(word)
     expect(BOARD_SYSTEM_PROMPT).not.toContain('set_palette')
     expect(BOARD_SYSTEM_PROMPT).not.toContain('add_line')
     expect(BOARD_SYSTEM_PROMPT).not.toContain('—')
@@ -299,7 +299,7 @@ describe('a summary, in the conversation', () => {
   })
 
   it('is asked for in the prompt as a message, with the founder\'s own words kept out of it and nothing invented', () => {
-    for (const rule of [/A summary, a wrap-up or "where have I got to" is a message, not an action/, /\*\*Decided\*\*, \*\*Still open\*\* and \*\*Next\*\*/, /Never invent a decision, a figure or a fact/, /you cannot remember a name or an offer for the project/]) {
+    for (const rule of [/A summary, a wrap-up or "where have I got to" is a message, not an action/, /\*\*Decided\*\*, \*\*Still open\*\* and \*\*Next\*\*/, /Never invent a decision, a figure or a fact/, /propose it \(the propose field/]) {
       expect(BOARD_SYSTEM_PROMPT).toMatch(rule)
     }
     expect(BOARD_SYSTEM_PROMPT).not.toContain('write_summary')

@@ -8,10 +8,11 @@ import { TASKS } from './taskNames.ts'
 // What the composer may do on the business-idea board, and what it is told about it. The same rules as for the palette and the invoice: the
 // actions are things a person can do on the board, they go through the same reducer, and the composer never saves.
 //
-// Four things are kept out of its hands on purpose:
+// Things kept out of its hands on purpose:
 // - It never chooses where anything goes, how big it is or what colour it is. It says what to add and where it belongs (in a frame, near a note,
 //   or just on the board), and the app finds the place, draws it pink, and puts "Droplet" on it, so the founder can tell whose it is.
-// - It can only add. It cannot edit, recolour, move (except to group notes the founder asked it to group), or delete what the founder made.
+// - What it may do to the founder's things is limited. It may move and tidy them (always shown in the receipt, with Undo this), but it cannot delete or
+//   rewrite them without a yes in the chat, and it may recolour them only when the founder's own words ask for a colour. Its own notes it may change freely.
 // - It acts only when asked. Nothing in the app asks it in the background.
 // - It is sent the board only when the founder sends a message, and it cannot save.
 
@@ -26,6 +27,12 @@ export const MAX_BOARD_ACTIONS = 24
 export const MAX_AI_NOTES = 12
 export const MAX_AI_CLUSTERS = 4
 export const MAX_AI_ARROWS = 12
+// The most it moves, tidies or arranges in one reply, and the most it asks to delete or change at once.
+export const MAX_AI_MOVES = 20
+export const MAX_AI_REMOVALS = 30
+export const MAX_AI_SUMMARY_LINES = 9
+// The colours it may give a thing, which are the founder's own: never pink, which is Droplet's.
+export const AI_COLOURS = SHAPE_COLOURS
 
 // A thing on the board, by the short name it is given in the board the model is shown: f for a frame, n for a note, s for a shape, t for text
 // and a for an arrow, counting from 1 in the order shown.
@@ -66,6 +73,46 @@ export const boardActionSchema = z.discriminatedUnion('type', [
     from: refSchema,
     to: refSchema,
     label: z.string().trim().max(60).optional().describe('A few words on the arrow, such as "leads to".'),
+  }),
+  z.object({
+    type: z.enum(['move_to_frame']),
+    things: z.array(refSchema).min(1).max(MAX_AI_MOVES).describe('Notes, shapes or text to move into the frame. The app finds a clear place for each inside it.'),
+    frame: refSchema.describe('The frame (f1, f2...) they go into.'),
+  }),
+  z.object({
+    type: z.enum(['tidy']),
+    frame: refSchema.optional().describe('One frame whose contents are laid out in a neat grid, and the frame fitted round them. Leave out to tidy every frame that holds two or more things.'),
+  }),
+  z.object({
+    type: z.enum(['arrange']),
+    layout: z.enum(['row', 'column', 'grid']).describe('How to lay the frames out, with even gaps. What is inside each frame moves with it.'),
+    frames: z.array(refSchema).min(2).max(12).describe('The frames to lay out, in the order they should come.'),
+  }),
+  z.object({
+    type: z.enum(['remove']),
+    things: z.array(refSchema).min(1).max(MAX_AI_REMOVALS).describe('Things to delete. Your own notes go at once. The founder\'s own are not deleted: the app asks them in the chat first, and only a yes deletes them.'),
+  }),
+  z.object({
+    type: z.enum(['edit_note']),
+    note: refSchema.describe('A note, shape or text with words in it.'),
+    text: text(300).describe('The new words. On one of your own notes it is changed at once. On one of the founder\'s it is only a suggestion, shown in the chat with Accept and Dismiss.'),
+  }),
+  z.object({
+    type: z.enum(['rename_frame']),
+    frame: refSchema,
+    title: text(60).describe('The new title. Shown to the founder as a suggestion in the chat, with Accept and Dismiss.'),
+  }),
+  z.object({
+    type: z.enum(['colour']),
+    things: z.array(refSchema).min(1).max(MAX_AI_MOVES).describe('Notes, shapes or frames to recolour.'),
+    colour: z.enum(AI_COLOURS).describe('A founder colour. Never pink. A note cannot be white.'),
+    quote: z.string().trim().min(1).max(200).describe('The founder\'s own words from <request> or <conversation> that ask for this colour, copied exactly. If they did not ask for a colour, do not recolour anything.'),
+  }),
+  z.object({
+    type: z.enum(['summary_frame']),
+    decided: z.array(text(100)).max(4).describe('What the board has settled, one short line each. Only what the notes really show is decided.'),
+    open: z.array(text(100)).max(4).describe('What is still unanswered.'),
+    next: z.array(text(100)).max(3).describe('Small, concrete next steps.'),
   }),
   z.object({ type: z.enum(['undo']) }),
   z.object({ type: z.enum(['redo']) }),

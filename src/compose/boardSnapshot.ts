@@ -1,9 +1,9 @@
-import { clamp, type Point } from '../lib/boardGeometry.ts'
+import { clamp, intersects, type Point } from '../lib/boardGeometry.ts'
 import { frameOf, membersOf } from '../lib/boardFrames.ts'
 import { docOf, openBoard, type BoardState } from '../lib/boardState.ts'
 import { TEMPLATE_IDS, promptsOf, templateById, templateOfGroup } from '../lib/boardTemplates.ts'
 import { createHistory } from '../lib/history.ts'
-import { attachedTo, isConnector, isFrame, isNode, type BoardItem, type ConnectorItem, type End } from '../lib/boardTypes.ts'
+import { attachedTo, isConnector, isFrame, isNode, rectOf, type BoardItem, type ConnectorItem, type End, type FrameItem, type NodeItem } from '../lib/boardTypes.ts'
 import { MAX_SNAPSHOT_ITEMS, type BoardItemSnapshot, type BoardSnapshot } from './boardSpec.ts'
 
 // The board as a plain object: what goes to the model with a request, and what the server rebuilds to check the model's actions against.
@@ -123,6 +123,20 @@ export function describeBoard(snapshot: BoardSnapshot): Record<string, unknown> 
     const frame = item && isNode(item) ? frameOf(items, item) : null
     return frame ? frame.id : null
   }
+  // How a frame's contents sit, coarsely and without coordinates: so the model can tell a tangled frame from a neat one and offer to tidy it.
+  const sitting = (frame: FrameItem) => {
+    const members = membersOf(items, frame)
+    const frameRect = rectOf(frame)
+    const overlapping = members.some((a, at) => members.slice(at + 1).some((b) => intersects(rectOf(a), rectOf(b))))
+    const stickingOut = members.some((member) => member.x < frameRect.x || member.y < frameRect.y || member.x + member.w > frameRect.x + frameRect.w || member.y + member.h > frameRect.y + frameRect.h)
+    return { things: members.length, ...(overlapping ? { overlapping: true } : {}), ...(stickingOut ? { stickingOut: true } : {}) }
+  }
+  // The frame nearest a thing that is in none, by the middle of each, so "these loose notes belong in that frame" can be said.
+  const nearestFrame = (item: NodeItem) => {
+    const middle = { x: item.x + item.w / 2, y: item.y + item.h / 2 }
+    const distance = (frame: FrameItem) => Math.hypot(frame.x + frame.w / 2 - middle.x, frame.y + frame.h / 2 - middle.y)
+    return items.filter(isFrame).sort((a, b) => distance(a) - distance(b))[0]?.id
+  }
   const selected = new Set(snapshot.selection)
   const templateOfRef = new Map(snapshot.items.flatMap((item) => ('template' in item && item.template ? [[item.ref, item.template] as const] : [])))
 
@@ -132,6 +146,7 @@ export function describeBoard(snapshot: BoardSnapshot): Record<string, unknown> 
       title: plain(frame.title) || 'untitled',
       template: templateOfRef.get(frame.id),
       holds: membersOf(items, frame).map((member) => member.id),
+      layout: sitting(frame),
       selected: selected.has(frame.id) || undefined,
     })),
     things: items.filter(isNode).map((item) => ({
@@ -140,6 +155,7 @@ export function describeBoard(snapshot: BoardSnapshot): Record<string, unknown> 
       text: plain(wordsOf(item)) || 'empty',
       by: item.kind === 'note' ? (item.author === 'ai' ? 'Droplet' : 'the founder') : 'the founder',
       inFrame: holder(item.id) ?? undefined,
+      ...(holder(item.id) === null && items.some(isFrame) ? { nearestFrame: nearestFrame(item) } : {}),
       selected: selected.has(item.id) || undefined,
     })),
     arrows: items.filter(isConnector).map((arrow) => ({
