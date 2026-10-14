@@ -95,8 +95,10 @@ export function createComposeHandler(deps: ComposeHandlerDeps): (request: Reques
         log: (entry) => deps.record(user.id, entry),
       })
       return json(reply.status, reply.body)
-    } catch {
-      // Anything unexpected, including the database being unreachable: said plainly, and never with what went wrong inside.
+    } catch (error) {
+      // Anything unexpected, including the database being unreachable: said plainly, and never with what went wrong inside. The cause goes to
+      // the function's own log (the Supabase dashboard), as a message only, never with what the founder asked.
+      console.error('compose failed:', error instanceof Error ? error.message : String(error))
       return json(500, { error: 'unavailable', message: 'Something went wrong while composing. Try again.' })
     }
   }

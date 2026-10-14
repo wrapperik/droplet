@@ -189,6 +189,8 @@ export async function handleCompose(body: unknown, deps: ComposeServiceDeps): Pr
     }
   } catch (error) {
     if (error instanceof ComposeError) return fail(error.kind, error.kind === 'quota' ? error.message : undefined)
+    // The cause, for the server's own log only, as a message and never with what the founder asked.
+    console.error('compose: unexpected error:', error instanceof Error ? error.message : String(error))
     await deps.log({ at: new Date(started).toISOString(), intent: request.intent, outcome: 'error', mode: asked, error: 'unexpected', ms: now() - started })
     return { status: 500, body: { error: 'unavailable', message: 'Something went wrong while composing. Try again.' } }
   }
