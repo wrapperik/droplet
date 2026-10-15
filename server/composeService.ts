@@ -39,9 +39,9 @@ const STATUS: Record<ComposeError['kind'], number> = {
 }
 
 const MESSAGES: Record<ComposeError['kind'], string> = {
-  no_key: 'No Gemini API key is set. Add GEMINI_API_KEY to .env.local and restart the dev server.',
-  bad_key: 'The Gemini API key was refused. Check GEMINI_API_KEY in .env.local.',
-  bad_model: 'The Gemini model was not found. Check GEMINI_MODEL in .env.local.',
+  no_key: 'No API key is set for the model. Add GEMINI_API_KEY (or, with AI_PROVIDER=deepseek, DEEPSEEK_API_KEY) to .env.local and restart the dev server.',
+  bad_key: 'The model\'s API key was refused. Check GEMINI_API_KEY (or DEEPSEEK_API_KEY) in .env.local.',
+  bad_model: 'The model was not found. Check the model name in .env.local (GEMINI_BASE_MODEL, or DEEPSEEK_MODEL with AI_PROVIDER=deepseek).',
   bad_request: 'The model rejected the request.',
   rate_limited: 'The model is receiving too many requests. Try again in a minute.',
   quota: 'The free daily limit for the model is used up. Try again later, or set GEMINI_BASE_MODEL in .env to another model.',

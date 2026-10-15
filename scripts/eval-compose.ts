@@ -18,7 +18,7 @@ import { TEST_REQUESTS, type TestRequest } from '../src/compose/testRequests.ts'
 
 const configured = callerFromEnv(process.env)
 if (!configured.call) {
-  console.error('No GEMINI_API_KEY. Run with: node --env-file=.env scripts/eval-compose.ts')
+  console.error('No API key. Set GEMINI_API_KEY (or AI_PROVIDER=deepseek and DEEPSEEK_API_KEY). Run with: node --env-file=.env scripts/eval-compose.ts')
   process.exit(1)
 }
 const call: ModelCaller = configured.call

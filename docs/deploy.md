@@ -140,3 +140,14 @@ Nothing needs deploying to work on the app: in development the app asks the dev 
 ## Files attached to a message
 
 A founder can attach up to three files (pictures, PDFs, text files) to a message, which the `compose` function sends to Gemini. The request body limit of the function is now 12 MB, so redeploy it (`npm run deploy:compose`) before using attachments on the live site. No migration is needed, and the files are never stored. If the deployed function refuses a large PDF, lower `MAX_PDF_BYTES` and `MAX_TOTAL_BYTES` in `src/compose/attachments.ts`.
+
+## Using DeepSeek instead of Gemini (temporary)
+
+`AI_PROVIDER=deepseek` with `DEEPSEEK_API_KEY` (and optionally `DEEPSEEK_MODEL`, default `deepseek-chat`) makes DeepSeek answer every message, in the dev server (`.env`) and in the deployed function (as secrets). Gemini is used again when `AI_PROVIDER` is unset or `gemini`. While it is on, there is no web search and no Advanced, and a picture or a PDF cannot be read (the model is told so and says so; a text file still works). On the deployed function:
+
+```bash
+npx supabase secrets set AI_PROVIDER=deepseek DEEPSEEK_API_KEY=your-deepseek-key
+npm run deploy:compose
+```
+
+To go back: `npx supabase secrets unset AI_PROVIDER` (and redeploy is not needed, the function reads its secrets when it starts).

@@ -29,3 +29,31 @@ describe('the models and limits, from the environment', () => {
     expect(JSON.stringify(callerFromEnv({ GEMINI_API_KEY: 'SECRET' }))).not.toContain('SECRET')
   })
 })
+
+describe('choosing the provider', () => {
+  it('is Gemini unless AI_PROVIDER says deepseek', () => {
+    expect(callerFromEnv({ GEMINI_API_KEY: 'g' }).provider).toBe('gemini')
+    expect(callerFromEnv({ AI_PROVIDER: 'gemini', GEMINI_API_KEY: 'g' }).provider).toBe('gemini')
+    expect(callerFromEnv({ AI_PROVIDER: 'something else', GEMINI_API_KEY: 'g' }).provider).toBe('gemini')
+  })
+
+  it('uses DeepSeek with its own key and model when asked, and ignores the Gemini settings', () => {
+    const configured = callerFromEnv({ AI_PROVIDER: ' DeepSeek ', DEEPSEEK_API_KEY: 'd', DEEPSEEK_MODEL: 'deepseek-reasoner', GEMINI_API_KEY: 'g', GEMINI_BASE_MODEL: 'gemini-x' })
+    expect(configured.provider).toBe('deepseek')
+    expect(configured.call).not.toBeNull()
+    expect(configured.baseModel).toBe('deepseek-reasoner')
+    expect(configured.advancedModel).toBe('deepseek-reasoner')
+  })
+
+  it('defaults the DeepSeek model, offers no Advanced, and keeps the hourly limit', () => {
+    const configured = callerFromEnv({ AI_PROVIDER: 'deepseek', DEEPSEEK_API_KEY: 'd', COMPOSE_LIMIT_PER_HOUR: '30', COMPOSE_ADVANCED_PER_DAY: '10' })
+    expect(configured.baseModel).toBe('deepseek-chat')
+    expect(configured.advancedPerDay).toBe(0)
+    expect(configured.limitPerHour).toBe(30)
+  })
+
+  it('has no caller without its own key: a Gemini key does not stand in for a DeepSeek one', () => {
+    expect(callerFromEnv({ AI_PROVIDER: 'deepseek', GEMINI_API_KEY: 'g' }).call).toBeNull()
+    expect(callerFromEnv({ DEEPSEEK_API_KEY: 'd' }).call).toBeNull()
+  })
+})
