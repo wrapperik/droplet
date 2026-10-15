@@ -50,7 +50,7 @@ export function composePlugin(env: Record<string, string>): Plugin {
     configureServer(server) {
       server.config.logger.info(
         call && provider === 'deepseek'
-          ? `  compose: AI_PROVIDER=deepseek, so every message is answered by ${baseModel} (no web search, and pictures and PDFs cannot be read)`
+          ? `  compose: AI_PROVIDER=deepseek, so every message is answered by ${baseModel} (no web search; pictures are read, a PDF is a best guess)`
           : call
           ? `  compose: Quick uses ${baseModel}; Advanced uses ${advancedModel} with web search, ${advancedPerDay} answers a day${advancedModel === baseModel ? '' : ', and Quick answers when Advanced is busy'}`
           : `  compose: no ${provider === 'deepseek' ? 'DEEPSEEK_API_KEY' : 'GEMINI_API_KEY'} set, so /api/compose will say so (see .env.example)`,

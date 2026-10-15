@@ -1,11 +1,14 @@
+import type { InlineFile } from './attachments.ts'
 import { ComposeError, type ModelCaller, type ModelReply, type Usage } from './compose.ts'
 
 // A second model provider, for when Gemini cannot be used (its free key has no billing, a quota is spent): DeepSeek, over its OpenAI-style chat API. It is
 // chosen by AI_PROVIDER=deepseek (see composeEnv.ts) and meant as a stand-in. The key is passed in and sent only in a header; it is never put in a URL, a body
 // or an error message. This file only ever runs on a server.
 //
-// What it cannot do, on purpose and honestly: it does not search the web, and it cannot read a picture or a PDF (DeepSeek's chat models take text only). A text
-// file attached to a message still works, since its words are part of the prompt. When a picture or a PDF comes, the model is told it cannot see it, so it says so.
+// What it does and does not do: it does not search the web. DeepSeek-V4.1-Flash reads pictures, sent as `image_url` blocks with a base64 data address (JPEG, PNG,
+// GIF, WebP, from the API's own documentation). A PDF is sent as a `file` block with its base64 data, which is a guess from that documentation (it describes the
+// block for images and does not say PDFs are accepted). If the API refuses a request that has files in it (a 400), it is sent once more without them, and the
+// model is told it could not see them, so it says so instead of guessing. A text file is part of the prompt and always works.
 // It is asked for JSON (the API's `json_object` mode, which does not take a schema), with the schema written into the instructions, and every reply is
 // still checked by the same Zod schema and rules as a Gemini reply, with the same retry and fallback.
 
@@ -48,14 +51,21 @@ function readUsage(reply: ChatReply): Usage | undefined {
   return { prompt: count(reply.usage.prompt_tokens), answer: count(reply.usage.completion_tokens), thinking: count(reply.usage.completion_tokens_details?.reasoning_tokens) }
 }
 
-// What is said in place of a picture or a PDF the model cannot see.
+// How a file goes in the message: a picture by its data address, a PDF as a file block.
+const blockOf = (file: InlineFile) =>
+  file.mime === 'application/pdf'
+    ? { type: 'file', file: { filename: 'attachment.pdf', file_data: `data:${file.mime};base64,${file.data}` } }
+    : { type: 'image_url', image_url: { url: `data:${file.mime};base64,${file.data}` } }
+
+// What is said in place of a picture or a PDF the model could not be given.
 const unseen = (count: number) =>
-  `\n\n<files_not_readable>\nThe founder attached ${count === 1 ? 'a picture or a PDF' : `${count} pictures or PDFs`}, which you cannot see or read in this mode. Say so plainly in your reply, do not guess what ${count === 1 ? 'it shows' : 'they show'}, and offer to help if they paste the words from ${count === 1 ? 'it' : 'them'} into the message.\n</files_not_readable>`
+  `\n\n<files_not_readable>\nThe founder attached ${count === 1 ? 'a picture or a PDF' : `${count} pictures or PDFs`}, which you could not be given this time. Say so plainly in your reply, do not guess what ${count === 1 ? 'it shows' : 'they show'}, and offer to help if they paste the words from ${count === 1 ? 'it' : 'them'} into the message.\n</files_not_readable>`
 
 export function createDeepSeekCaller(options: DeepSeekOptions): ModelCaller {
   const { apiKey, model = DEFAULT_DEEPSEEK_MODEL, thinking = DEFAULT_DEEPSEEK_THINKING, reasoningEffort, endpoint = ENDPOINT, timeoutMs = DEFAULT_TIMEOUT_MS, overloadRetryMs = OVERLOAD_RETRY_MS, fetchImpl = fetch } = options
 
-  const send = async (system: string, user: string): Promise<Response> => {
+  // `files` are put in the user message beside the words: a picture as an image block, a PDF as a file block.
+  const send = async (system: string, user: string, files: InlineFile[] = []): Promise<Response> => {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
     try {
@@ -66,7 +76,7 @@ export function createDeepSeekCaller(options: DeepSeekOptions): ModelCaller {
           model,
           messages: [
             { role: 'system', content: system },
-            { role: 'user', content: user },
+            { role: 'user', content: files.length === 0 ? user : [{ type: 'text', text: user }, ...files.map(blockOf)] },
           ],
           response_format: { type: 'json_object' },
           thinking: { type: thinking },
@@ -88,13 +98,15 @@ export function createDeepSeekCaller(options: DeepSeekOptions): ModelCaller {
     // JSON mode needs the word "json" and the shape asked for in the instructions: the schema is written into them. DeepSeek never searches, so the version
     // of the request that says search is not available is the one it is given.
     const instructions = `${system}\n\nReply with only a JSON object that matches this JSON schema, and nothing else:\n${JSON.stringify(schema)}`
-    const words = `${userWithoutSearch ?? user}${files.length > 0 ? unseen(files.length) : ''}`
+    const words = userWithoutSearch ?? user
 
-    let response = await send(instructions, words)
+    let response = await send(instructions, words, files)
     if (response.status === 503) {
       await new Promise((resolve) => setTimeout(resolve, overloadRetryMs))
-      response = await send(instructions, words)
+      response = await send(instructions, words, files)
     }
+    // The API refused the request with the files in it (a PDF it does not take, or a picture it cannot read): once more without them, saying so to the model.
+    if (response.status === 400 && files.length > 0) response = await send(instructions, `${words}${unseen(files.length)}`)
 
     if (!response.ok) {
       const body = (await response.json().catch(() => ({}))) as ChatReply

@@ -65,13 +65,38 @@ describe('the DeepSeek caller', () => {
     expect(bodyOf(calls[0]).messages[1].content).toBe('search is NOT available')
   })
 
-  it('tells the model it cannot see a picture or a PDF, rather than pretending, and sends no file', async () => {
+  it('sends a picture as an image block with its data address, and a PDF as a file block, beside the words', async () => {
     const { impl, calls } = fakeFetch([json(reply('{}'))])
-    await createDeepSeekCaller({ apiKey: 'k', fetchImpl: impl })({ ...request, files: [{ mime: 'image/png', data: 'SECRETPIXELS' }] })
-    const sent = String(calls[0].init.body)
-    expect(sent).toContain('files_not_readable')
-    expect(sent).toMatch(/cannot see or read in this mode/)
-    expect(sent).not.toContain('SECRETPIXELS')
+    await createDeepSeekCaller({ apiKey: 'k', fetchImpl: impl })({ ...request, files: [{ mime: 'image/png', data: 'PIXELS' }, { mime: 'application/pdf', data: 'PDFDATA' }] })
+    const content = bodyOf(calls[0]).messages[1].content as unknown as Record<string, unknown>[]
+    expect(content[0]).toEqual({ type: 'text', text: request.user })
+    expect(content[1]).toEqual({ type: 'image_url', image_url: { url: 'data:image/png;base64,PIXELS' } })
+    expect(content[2]).toEqual({ type: 'file', file: { filename: 'attachment.pdf', file_data: 'data:application/pdf;base64,PDFDATA' } })
+    // the system message is still plain words: the API takes images only from the user
+    expect(typeof bodyOf(calls[0]).messages[0].content).toBe('string')
+  })
+
+  it('sends plain words, not blocks, when there are no files', async () => {
+    const { impl, calls } = fakeFetch([json(reply('{}'))])
+    await createDeepSeekCaller({ apiKey: 'k', fetchImpl: impl })(request)
+    expect(typeof bodyOf(calls[0]).messages[1].content).toBe('string')
+  })
+
+  it('tries once more without the files when the API refuses them, and tells the model it could not see them', async () => {
+    const { impl, calls } = fakeFetch([json({ error: { message: 'unsupported file type' } }, 400), json(reply('{"ok":true}'))])
+    const answer = await createDeepSeekCaller({ apiKey: 'k', fetchImpl: impl })({ ...request, files: [{ mime: 'application/pdf', data: 'SECRETPDF' }] })
+    expect(typeof answer === 'string' ? answer : answer.text).toBe('{"ok":true}')
+    expect(calls).toHaveLength(2)
+    const second = JSON.stringify(bodyOf(calls[1]))
+    expect(second).toContain('files_not_readable')
+    expect(second).toMatch(/could not be given this time/)
+    expect(second).not.toContain('SECRETPDF')
+  })
+
+  it('does not retry a 400 that has no files in it, since there is nothing to take out', async () => {
+    const { impl, calls } = fakeFetch([json({ error: { message: 'bad' } }, 400)])
+    await expect(createDeepSeekCaller({ apiKey: 'k', fetchImpl: impl })(request)).rejects.toMatchObject({ kind: 'bad_request' })
+    expect(calls).toHaveLength(1)
   })
 
   it('tries once more after a busy server, and says so when it still fails', async () => {

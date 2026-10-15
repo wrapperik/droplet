@@ -143,7 +143,7 @@ A founder can attach up to three files (pictures, PDFs, text files) to a message
 
 ## Using DeepSeek instead of Gemini (temporary)
 
-`AI_PROVIDER=deepseek` with `DEEPSEEK_API_KEY` (and optionally `DEEPSEEK_MODEL`, default `deepseek-flash`, DeepSeek-V4.1-Flash, with thinking switched off for speed unless `DEEPSEEK_THINKING=enabled`) makes DeepSeek answer every message, in the dev server (`.env`) and in the deployed function (as secrets). Gemini is used again when `AI_PROVIDER` is unset or `gemini`. While it is on, there is no web search and no Advanced, and a picture or a PDF cannot be read (the model is told so and says so; a text file still works). On the deployed function:
+`AI_PROVIDER=deepseek` with `DEEPSEEK_API_KEY` (and optionally `DEEPSEEK_MODEL`, default `deepseek-flash`, DeepSeek-V4.1-Flash, with thinking switched off for speed unless `DEEPSEEK_THINKING=enabled`) makes DeepSeek answer every message, in the dev server (`.env`) and in the deployed function (as secrets). Gemini is used again when `AI_PROVIDER` is unset or `gemini`. While it is on, there is no web search and no Advanced, and a picture is read (sent as an image block) while a PDF is a best guess (sent as a file block; if the API refuses it, it is sent again without and the model says it could not read it). A text file always works. On the deployed function:
 
 ```bash
 npx supabase secrets set AI_PROVIDER=deepseek DEEPSEEK_API_KEY=your-deepseek-key
