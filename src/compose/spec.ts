@@ -11,6 +11,7 @@ import { isScreenAction, SCREEN_WORKSPACES, screenActionSchemas, type ScreenActi
 import { TASKS, type Task } from './taskNames.ts'
 import { BRAND_PARTS } from '../lib/brandParts.ts'
 import { GUIDE_STEPS } from '../lib/invoiceGuide.ts'
+import { HARMONY_IDS, RULE_IDS } from '../lib/harmony.ts'
 
 export { TASKS, type Task }
 
@@ -22,7 +23,10 @@ export { TASKS, type Task }
 // and fills the interface. It never draws it, and it never saves: only the founder's Save commits to memory.
 
 export const COLOUR_ROLES = ['primary', 'accent', 'background', 'text'] as const
-export const HARMONIES = ['analogous', 'complementary', 'triad', 'monochrome'] as const
+// The harmonies a generate action may name: every rule. Custom is not one, because it works nothing out.
+export const HARMONIES = RULE_IDS
+// The harmony the workspace is on, which may be Custom, so the founder can have moved colours by hand.
+export const WORKSPACE_HARMONIES = HARMONY_IDS
 
 const sentence = (max: number) => z.string().trim().min(1).max(max)
 
@@ -127,7 +131,7 @@ export const workspaceSnapshotSchema = z.object({
     .min(2)
     .max(8),
   selectedId: z.number().int(),
-  harmony: z.enum(HARMONIES),
+  harmony: z.enum(WORKSPACE_HARMONIES),
   // Where the parts of the screen sit is not the model's business and is no longer sent. These are still accepted, and ignored, so a request
   // from a browser that has not been updated yet still parses.
   hidden: z.array(z.string().max(20)).max(10).optional(),

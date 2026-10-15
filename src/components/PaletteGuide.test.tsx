@@ -13,13 +13,14 @@ import { canUndoState, docOf, openWorkspace, reduce, type WorkspaceAction } from
 import PaletteWorkspace from './PaletteWorkspace.tsx'
 
 // The whole workspace, wired to the real reducer as Home does, in either mode.
-function Harness({ mode = 'guide', initial, onFinished = () => {} }: { mode?: 'guide' | 'workspace'; initial?: PaletteBlock[]; onFinished?: (result: PaletteResult) => void }) {
+type Slots = { start: HTMLElement; end: HTMLElement; shelf: HTMLElement }
+function Harness({ mode = 'guide', initial, onFinished = () => {}, slots }: { mode?: 'guide' | 'workspace'; initial?: PaletteBlock[]; onFinished?: (result: PaletteResult) => void; slots?: Slots }) {
   const [state, setState] = useState(() => openWorkspace(initial ?? starterBlocks()))
   const [progress, setProgress] = useState<BrandProgress>(startBrandGuide())
   const dispatch = useCallback((action: WorkspaceAction) => setState((current) => reduce(current, action)), [])
   return (
     <>
-      <PaletteWorkspace mode={mode} projectId="duckstack" projectName="DuckStack" state={state} dispatch={dispatch} progress={progress} onProgress={setProgress} onFinished={onFinished} />
+      <PaletteWorkspace mode={mode} projectId="duckstack" projectName="DuckStack" state={state} dispatch={dispatch} progress={progress} onProgress={setProgress} onFinished={onFinished} headerSlots={slots} />
       <output data-testid="hexes">{docOf(state).blocks.map((block) => block.hex).join(' ')}</output>
       <output data-testid="can-undo">{String(canUndoState(state))}</output>
       <output data-testid="roles">{JSON.stringify(docOf(state).blocks.map((block) => block.role ?? null))}</output>
@@ -52,21 +53,61 @@ describe('the brand workspace in Guide mode', () => {
     render(<Harness />)
     expect(screen.getByRole('region', { name: BRAND_TITLES.colours })).toBeInTheDocument()
     for (const id of BRAND_PARTS.slice(1)) expect(screen.queryByRole('region', { name: BRAND_TITLES[id] })).not.toBeInTheDocument()
+    // the key pairs are on the right, under the palette, until the Contrast step puts them on the left
+    expect(screen.getByRole('region', { name: 'Contrast of the key pairs' })).toBeInTheDocument()
     expect(screen.getByText('Step 1 of 3')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument()
   })
 
-  it('has the same three parts on the task bar as Workspace mode, with the same names, and marks the current one as the step', () => {
+  it('has the three parts as steps on the task bar, which Workspace mode does not have, and marks the current one as the step', () => {
     const { unmount } = render(<Harness mode="workspace" />)
-    const workspaceNames = within(bar()).getAllByRole('button').map((button) => button.querySelector('.taskbar__label')?.textContent)
+    expect(screen.queryByRole('group', { name: 'Parts of the brand' })).not.toBeInTheDocument()
     unmount()
     render(<Harness mode="guide" />)
-    expect(within(bar()).getAllByRole('button').map((button) => button.querySelector('.taskbar__label')?.textContent)).toEqual(workspaceNames)
-    expect(workspaceNames).toEqual(['Colours', 'Roles', 'Contrast'])
+    expect(within(bar()).getAllByRole('button').map((button) => button.querySelector('.taskbar__label')?.textContent)).toEqual(['Colours', 'Roles', 'Contrast'])
     expect(part('Colours')).toHaveAttribute('aria-current', 'step')
     expect(part('Contrast')).toHaveAttribute('aria-disabled', 'true')
     expect(part('Contrast')).toHaveTextContent('not reached yet')
+  })
+
+  it('has the same toolbar as Workspace mode, and the palette on the right with the sample document, and the step on the left', () => {
+    render(<Harness />)
+    const toolbar = screen.getByRole('toolbar', { name: 'Palette toolbar' })
+    for (const name of ['Undo', 'Redo', 'Generate random', 'Full screen']) expect(within(toolbar).getByRole('button', { name })).toBeInTheDocument()
+    const steps = screen.getByRole('region', { name: 'Step 1 of 3: Colours' })
+    const palette = screen.getByRole('region', { name: 'The palette' })
+    expect(steps.compareDocumentPosition(palette) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(within(palette).getByRole('region', { name: 'Document preview' })).toBeInTheDocument()
+    // no card round the step
+    expect(steps.querySelector('.workspace__card')).toBeNull()
+  })
+
+  it('puts nothing in the header, and the stepper in the shelf, in Guide mode only', async () => {
+    const slots = { start: document.createElement('div'), end: document.createElement('div'), shelf: document.createElement('div') }
+    document.body.append(slots.start, slots.end, slots.shelf)
+    const { unmount } = render(<Harness slots={slots} />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Saved?$/ })).toBeEnabled())
+    expect(slots.start.children).toHaveLength(0)
+    expect(slots.end.children).toHaveLength(0)
+    expect(within(slots.shelf).getByRole('group', { name: 'Parts of the brand' })).toBeInTheDocument()
+    unmount()
+    const empty = { start: document.createElement('div'), end: document.createElement('div'), shelf: document.createElement('div') }
+    render(<Harness mode="workspace" slots={empty} />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Saved?$/ })).toBeEnabled())
+    expect(empty.shelf.children).toHaveLength(0)
+  })
+
+  it('hides the steps and the stepper in full screen, and brings them back', async () => {
+    const user = userEvent.setup()
+    render(<Harness />)
+    await user.click(screen.getByRole('button', { name: 'Full screen' }))
+    expect(screen.queryByRole('group', { name: 'Parts of the brand' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Step 1 of 3: Colours' })).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'The palette' })).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('group', { name: 'Parts of the brand' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Step 1 of 3: Colours' })).toBeInTheDocument()
   })
 
   it('says in its lead that the Colours step asks for colours the founder likes, and keeps the other leads', () => {
@@ -242,7 +283,9 @@ describe('the brand workspace in Guide mode', () => {
     rerender(<Harness mode="workspace" />)
     expect(screen.getByRole('region', { name: 'Document preview' })).toBe(preview)
     expect(hexes()).toEqual(chosen)
-    for (const id of BRAND_PARTS) expect(screen.getByRole('region', { name: BRAND_TITLES[id] })).toBeInTheDocument()
+    // Workspace mode has the colour tools together, with no steps
+    expect(screen.getByRole('region', { name: 'The colour tools' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: BRAND_TITLES.colours })).not.toBeInTheDocument()
     rerender(<Harness mode="guide" />)
     expect(screen.getByRole('region', { name: 'Document preview' })).toBe(preview)
     expect(hexes()).toEqual(chosen)

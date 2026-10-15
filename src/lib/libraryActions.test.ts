@@ -156,3 +156,18 @@ describe('forgetting', () => {
     expect(memory.business?.details.name).toBe('Kindred Gifting')
   })
 })
+
+describe('forgetting a named palette', () => {
+  it('forgets that one and leaves the working palette and the other palettes', async () => {
+    const entry = (id: string, name: string) => ({ id, name, savedAt: '2026-10-06T09:00:00.000Z', blocks: [{ id: 1, hex: '#0E1A2B' }, { id: 2, hex: '#F4F8FB' }] })
+    await savePalette(PROJECT, { blocks: [{ id: 1, hex: '#0E1A2B' }, { id: 2, hex: '#F4F8FB' }], palettes: [entry('a', 'Spring'), entry('b', 'Summer')] })
+    expect(await forgetLibraryItem(PROJECT, { kind: 'palette', id: 'a' })).toBe(true)
+    const saved = await loadPalette(PROJECT)
+    expect(saved?.palettes?.map((palette) => palette.name)).toEqual(['Summer'])
+    expect(saved?.blocks).toHaveLength(2)
+  })
+
+  it('says it could not when there is no such palette', async () => {
+    expect(await forgetLibraryItem(PROJECT, { kind: 'palette', id: 'zzz' })).toBe(false)
+  })
+})

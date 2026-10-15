@@ -8,6 +8,7 @@ import { COLOUR_ROLES, pairResult, resolveRoles, type ColourRole } from './palet
 import type { PaletteSave } from './paletteSave.ts'
 import type { LogoSave } from './logoSave.ts'
 import { checkInvoice } from './invoiceReadiness.ts'
+import { newestFirst } from './namedPalettes.ts'
 import { currentFacts, isRevisedSinceExport, numbersInUse } from './projectMemory.ts'
 
 // What the founder has made for a project, and where each thing stands, worked out in code from what is saved. It is the Library screen's whole
@@ -70,6 +71,8 @@ export type BrandItem = Base & {
   // Text on background, the pair that matters: worked out in code.
   contrast: { text: string; background: string; ratio: string; passes: boolean; verdict: string }
   exportedAt: string | null
+  // Set on a palette the founder named and kept (not on the working palette): which one, so it can be opened or forgotten.
+  paletteId?: string
 }
 
 export type LogoItem = Base & {
@@ -169,6 +172,28 @@ function businessItem(memory: ProjectMemory): BusinessItem | null {
     facts: rest,
     actions: name || offer ? ['change', 'forget'] : ['change'],
   }
+}
+
+// The palettes the founder named and kept, newest first, each with Open and Forget. They are listed under the working palette.
+function namedPaletteItems(palette: PaletteSave | null): BrandItem[] {
+  return newestFirst(palette?.palettes ?? []).map((entry) => {
+    const roles = resolveRoles(entry.blocks)
+    const pair = pairResult(roles.text.hex, roles.background.hex)
+    const passes = pair.level !== 'fail'
+    return {
+      id: `palette:${entry.id}`,
+      section: 'brand' as const,
+      title: entry.name,
+      status: 'resolved' as const,
+      statusLabel: `Kept ${longDate(entry.savedAt)}`,
+      date: entry.savedAt,
+      swatches: entry.blocks.map((block) => ({ hex: block.hex, role: block.role ?? null })),
+      contrast: { text: roles.text.hex, background: roles.background.hex, ratio: `${pair.ratio.toFixed(1)}:1`, passes, verdict: passes ? `Passes ${pair.level}` : 'Fails AA' },
+      exportedAt: null,
+      paletteId: entry.id,
+      actions: ['open' as const, 'forget' as const],
+    }
+  })
 }
 
 function brandItem(palette: PaletteSave | null): BrandItem | null {
@@ -339,7 +364,7 @@ export function libraryOf(input: LibraryInput): Library {
   const clients = [...memory.clients].sort((a, b) => a.client.name.localeCompare(b.client.name)).map(clientItem)
   const groups: Record<LibrarySection, LibraryItem[]> = {
     business: [businessItem(memory)].flatMap((item) => (item ? [item] : [])),
-    brand: [brandItem(palette)].flatMap((item) => (item ? [item] : [])),
+    brand: [...[brandItem(palette)].flatMap((item) => (item ? [item] : [])), ...namedPaletteItems(palette)],
     logo: [logoItem(memory, logo)],
     ideas: [ideasItem(board)].flatMap((item) => (item ? [item] : [])),
     invoices,

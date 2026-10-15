@@ -1,4 +1,5 @@
-import { clearPalette, loadPalette, savePalette } from './projectStore.ts'
+import { clearPalette, forgetNamedPalette, loadPalette, markPaletteExported, savePalette } from './projectStore.ts'
+import { paletteSaveSchema } from './paletteSave.ts'
 
 const data = {
   blocks: [
@@ -88,5 +89,58 @@ describe('projectStore', () => {
     await savePalette('duckstack', data)
     await clearPalette('duckstack')
     expect(await loadPalette('duckstack')).toBeNull()
+  })
+})
+
+describe('named palettes', () => {
+  const entry = (id: string, name: string, hex = '#1F8FE0') => ({ id, name, blocks: [{ id: 1, hex }, { id: 2, hex: '#0B4F8A' }], savedAt: '2026-10-01T10:00:00.000Z' })
+
+  it('keeps the palettes the founder named with the working palette', async () => {
+    await savePalette('duckstack', { ...data, palettes: [entry('a', 'Spring'), entry('b', 'Summer', '#B5543A')] })
+    const loaded = await loadPalette('duckstack')
+    expect(loaded?.palettes?.map((palette) => palette.name)).toEqual(['Spring', 'Summer'])
+    expect(loaded?.palettes?.[1].blocks[0].hex).toBe('#B5543A')
+  })
+
+  it('still reads a save from before there were any, and a save that does not mention them keeps the ones there are', async () => {
+    window.localStorage.setItem('droplet-project-duckstack-palette', JSON.stringify({ blocks: [{ id: 1, hex: '#1F8FE0' }], savedAt: 'x' }))
+    expect((await loadPalette('duckstack'))?.palettes).toBeUndefined()
+    await savePalette('duckstack', { ...data, palettes: [entry('a', 'Spring')] })
+    await savePalette('duckstack', { blocks: [{ id: 1, hex: '#B5543A' }, { id: 2, hex: '#000000' }] })
+    const loaded = await loadPalette('duckstack')
+    expect(loaded?.blocks[0].hex).toBe('#B5543A')
+    expect(loaded?.palettes?.map((palette) => palette.id)).toEqual(['a'])
+  })
+
+  it('keeps them when the palette is marked as exported', async () => {
+    await savePalette('duckstack', { ...data, palettes: [entry('a', 'Spring')] })
+    await markPaletteExported('duckstack', '2026-10-09T10:00:00.000Z')
+    expect((await loadPalette('duckstack'))?.palettes).toHaveLength(1)
+  })
+
+  it('accepts at most twenty, and a name of 1 to 60 characters', () => {
+    const base = { ...data, savedAt: 'x' }
+    expect(paletteSaveSchema.safeParse({ ...base, palettes: Array.from({ length: 20 }, (_, i) => entry(`id${i}`, `P${i}`)) }).success).toBe(true)
+    expect(paletteSaveSchema.safeParse({ ...base, palettes: Array.from({ length: 21 }, (_, i) => entry(`id${i}`, `P${i}`)) }).success).toBe(false)
+    expect(paletteSaveSchema.safeParse({ ...base, palettes: [entry('a', '')] }).success).toBe(false)
+    expect(paletteSaveSchema.safeParse({ ...base, palettes: [entry('a', 'x'.repeat(61))] }).success).toBe(false)
+  })
+
+  it('forgets one, and leaves the working palette and the others, and does not count as a save', async () => {
+    await savePalette('duckstack', { ...data, palettes: [entry('a', 'Spring'), entry('b', 'Summer')] })
+    const before = (await loadPalette('duckstack'))!
+    expect(await forgetNamedPalette('duckstack', 'a')).toBe(true)
+    const after = (await loadPalette('duckstack'))!
+    expect(after.palettes?.map((palette) => palette.id)).toEqual(['b'])
+    expect(after.blocks).toEqual(before.blocks)
+    expect(after.savedAt).toBe(before.savedAt)
+    expect(await forgetNamedPalette('duckstack', 'b')).toBe(true)
+    expect((await loadPalette('duckstack'))?.palettes).toBeUndefined()
+  })
+
+  it('has nothing to forget when there is no such palette or no save', async () => {
+    expect(await forgetNamedPalette('duckstack', 'a')).toBe(false)
+    await savePalette('duckstack', { ...data, palettes: [entry('a', 'Spring')] })
+    expect(await forgetNamedPalette('duckstack', 'zzz')).toBe(false)
   })
 })

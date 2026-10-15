@@ -1,0 +1,161 @@
+/* The brand's toolbar: a flat row of glass pills across the top of the frame. No container: each pill is its own piece of glass. */
+.btool {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-bottom: 0.75rem;
+}
+
+.btool__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.btool__cluster {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+/* A pill of glass: translucent, blurred, a hairline edge and a soft shadow. */
+.btool__pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 2.5rem;
+  padding: 0 1rem 0 0.875rem;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--glass-fill-fallback);
+  box-shadow: var(--shadow-sm);
+  color: var(--text);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .btool__pill {
+    background: var(--glass-fill);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.5);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.5);
+  }
+}
+
+.btool__pill:not(:disabled):hover {
+  background: var(--accent-tint-soft);
+  box-shadow: var(--shadow-md);
+}
+
+.btool__pill--icon {
+  width: 2.5rem;
+  padding: 0;
+}
+
+/* A disabled pill keeps its shape and fades, so Undo with nothing to undo reads as waiting, not missing. */
+.btool__pill:disabled {
+  color: var(--text-muted);
+  cursor: default;
+  opacity: 0.55;
+}
+
+.btool__pill[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+/* The one action that makes something new. */
+.btool__pill--primary {
+  border-color: transparent;
+  background: var(--button);
+  color: var(--on-button);
+}
+
+.btool__pill--primary:not(:disabled):hover {
+  background: var(--button);
+}
+
+.btool__pill--blocked {
+  color: var(--text-muted);
+  cursor: help;
+}
+
+/* The name field is a pill of glass with a label that floats: it sits small at the top while there is a name, and in the middle while the field is empty. */
+.btool__name {
+  position: relative;
+  width: 12.5rem;
+  height: 2.5rem;
+}
+
+.btool__name-input {
+  width: 100%;
+  height: 100%;
+  padding: 1rem 1rem 0.1875rem;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--glass-fill-fallback);
+  box-shadow: var(--shadow-sm);
+  color: var(--text);
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .btool__name-input {
+    background: var(--glass-fill);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.5);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.5);
+  }
+}
+
+.btool__name-input[aria-invalid='true'] {
+  border-color: var(--status-outstanding);
+}
+
+.btool__name-label {
+  position: absolute;
+  top: 0.25rem;
+  left: 1rem;
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  pointer-events: none;
+  transition:
+    top var(--duration-fast) var(--ease-out),
+    font-size var(--duration-fast) var(--ease-out);
+}
+
+.btool__name-input:placeholder-shown:not(:focus) + .btool__name-label {
+  top: 0.6875rem;
+  font-size: 0.9375rem;
+}
+
+.btool__note {
+  margin: 0;
+  min-height: 1.125rem;
+  padding-left: 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+.btool__note[data-problem] {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.btool__note:empty {
+  display: none;
+}

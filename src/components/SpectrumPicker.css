@@ -1,0 +1,47 @@
+.spectrum {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: min(100%, 17rem);
+  margin-inline: auto;
+}
+
+/* Saturation grows to the right and brightness to the top, over the hue being picked. */
+.spectrum__area {
+  position: relative;
+  aspect-ratio: 1.15;
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(to top, #000000, rgb(0 0 0 / 0)),
+    linear-gradient(to right, #ffffff, var(--spectrum-hue));
+  box-shadow: inset 0 0 0 1px var(--overlay-10);
+  cursor: crosshair;
+  touch-action: none;
+  outline: none;
+}
+
+.spectrum__area:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.spectrum__point {
+  position: absolute;
+  width: 1.375rem;
+  height: 1.375rem;
+  border: 3px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.4), var(--shadow-sm);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.spectrum__hue {
+  display: grid;
+  grid-template-columns: 5rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}

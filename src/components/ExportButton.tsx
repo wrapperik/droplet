@@ -10,6 +10,8 @@ type Props = {
   failedMessage?: string
   // When set, the file cannot be made yet. Pressing the button then says why and calls `onBlocked`, instead of exporting.
   blocked?: { reason: string; onBlocked: () => void }
+  // The button as an icon alone, in the glass row of the brand's toolbar. Its words stay for a screen reader, and show as a tooltip.
+  iconOnly?: boolean
 }
 
 type Phase = 'idle' | 'working' | 'done' | 'failed'
@@ -26,6 +28,7 @@ export default function ExportButton({
   doneMessage = 'Brand sheet downloaded.',
   failedMessage = 'Could not make the brand sheet.',
   blocked,
+  iconOnly = false,
 }: Props) {
   const [phase, setPhase] = useState<Phase>('idle')
   const [note, setNote] = useState('')
@@ -52,15 +55,15 @@ export default function ExportButton({
     <>
       <button
         type="button"
-        className={`workspace__button workspace__button--fixed${blocked ? ' workspace__button--blocked' : ''}`}
+        className={iconOnly ? `btool__pill btool__pill--icon${blocked ? ' btool__pill--blocked' : ''}` : `workspace__button workspace__button--fixed${blocked ? ' workspace__button--blocked' : ''}`}
         onClick={start}
         aria-busy={phase === 'working'}
         aria-disabled={blocked ? true : undefined}
         aria-label={blocked ? `${ariaLabel}. ${blocked.reason}` : ariaLabel}
-        title={blocked?.reason}
+        title={blocked?.reason ?? (iconOnly ? 'Download the brand sheet' : undefined)}
       >
         {phase === 'done' ? <CheckIcon size={18} strokeWidth={2.25} aria-hidden="true" /> : <DownloadMinimalisticIcon size={18} aria-hidden="true" />}
-        <span className="workspace__label">
+        <span className={iconOnly ? 'visually-hidden' : 'workspace__label'}>
           {phase === 'working' ? 'Preparing' : phase === 'done' ? 'Exported' : phase === 'failed' ? 'Not exported' : 'Export'}
         </span>
       </button>

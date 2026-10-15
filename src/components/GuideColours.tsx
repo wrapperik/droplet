@@ -4,6 +4,7 @@ import { normaliseHex } from '../lib/colour.ts'
 import type { GuidePicks } from '../lib/brandGuide.ts'
 import { COLOUR_ROLES, resolveRoles, type PaletteBlock } from '../lib/palette.ts'
 import { MAX_FAVOURITES, OPTIONS_PER_ROUND, cleanFavourites, isOption, paletteOptions, type PaletteOption } from '../lib/paletteOptions.ts'
+import { ColourFields } from './ColourFields.tsx'
 import ColourWheel from './ColourWheel.tsx'
 import ContrastBadge from './ContrastBadge.tsx'
 import './GuideColours.css'
@@ -77,6 +78,7 @@ export default function GuideColours({ picks, onPicks, blocks, showsSaved, onCho
       ) : (
         <div className="gcolours__block">
           <ColourWheel blocks={[{ id: 1, hex: draft }]} selectedId={1} onSelect={() => {}} onChange={(_, hex) => setDraft(hex)} />
+          <ColourFields hex={draft} number={1} onChange={setDraft} />
           <button type="button" className="gcolours__button" onClick={add}>
             <AddCircleIcon size={18} aria-hidden="true" />
             {`Add ${normaliseHex(draft) ?? 'this colour'}`}
@@ -118,7 +120,10 @@ export default function GuideColours({ picks, onPicks, blocks, showsSaved, onCho
                     setNote(`${option.title} chosen. The page now shows it.`)
                   }}
                 >
-                  <span className="gcolours__name">{option.title}</span>
+                  <span className="gcolours__name">
+                    {option.title}
+                    {chosen && <span className="gcolours__chosen"> (chosen)</span>}
+                  </span>
                   <span className="gcolours__note">{option.note}</span>
                   <span className="gcolours__swatches" aria-hidden="true">
                     {option.blocks.map((block) => (

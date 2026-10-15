@@ -16,7 +16,7 @@ describe('snapshots', () => {
   it('describes the workspace in a form the request schema accepts', () => {
     const snapshot = snapshotOfState(state(), 'unsaved')
     expect(workspaceSnapshotSchema.safeParse(snapshot).success).toBe(true)
-    expect(snapshot).toMatchObject({ selectedId: 2, harmony: 'analogous', saved: 'unsaved', canUndo: false, canRedo: false })
+    expect(snapshot).toMatchObject({ selectedId: 2, harmony: 'custom', saved: 'unsaved', canUndo: false, canRedo: false })
     expect(snapshot.blocks[2]).toEqual({ id: 3, hex: '#0E1A2B', role: 'text', locked: true })
   })
 

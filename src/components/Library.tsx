@@ -133,7 +133,9 @@ export default function Library({ projectId, projectName, version = 0, onClose, 
         if (action === 'forget') return askForget(item.id, 'the name and the offer', () => void forget({ kind: 'idea' }, 'the name and the offer'), 'Forget')
         return null
       case 'brand':
+        if (action === 'open' && item.paletteId) return plain('Open', () => void open({ kind: 'brand', paletteId: item.paletteId }, `the palette ${item.title}`), { aria: `Open the palette ${item.title}` })
         if (action === 'open') return plain('Open', () => void open({ kind: 'brand' }, 'the palette'), { aria: 'Open the palette' })
+        if (action === 'forget' && item.paletteId) return askForget(item.id, `the palette ${item.title}`, () => void forget({ kind: 'palette', id: item.paletteId! }, `the palette ${item.title}`), 'Forget')
         if (action === 'export') return plain(working === item.id ? 'Preparing' : 'Export brand sheet', () => void exportItem(item.id, { kind: 'brand' }), { busy: working === item.id })
         if (action === 'copy_hex') return plain('Copy hex codes', () => void copyHex(item))
         return null
@@ -205,7 +207,9 @@ export default function Library({ projectId, projectName, version = 0, onClose, 
         )}
         {replacing && (
           <p className="library__notice library__notice--ask" role="alert">
-            <span>The invoice you have open has changes that are not saved. Opening {replacing.what} loses them.</span>
+            <span>
+              {replacing.target.kind === 'brand' ? 'The palette' : 'The invoice'} you have open has changes that are not saved. Opening {replacing.what} loses them.
+            </span>
             <span className="library__ask">
               <button type="button" className="library__button library__button--danger" onClick={() => void open(replacing.target, replacing.what, true)}>
                 Open anyway
@@ -316,6 +320,7 @@ function Business({ item }: { item: BusinessItem }) {
 function Brand({ item }: { item: BrandItem }) {
   return (
     <div className="library__body">
+      {item.paletteId && <p className="library__name">{item.title}</p>}
       <div className="library__swatches" role="img" aria-label={`Palette: ${item.swatches.map((swatch) => `${swatch.hex}${swatch.role ? `, ${roleLabel(swatch.role)}` : ''}`).join('; ')}`}>
         {item.swatches.map((swatch, index) => (
           <span key={index} className="library__swatch" style={{ background: swatch.hex }} title={swatch.hex} />

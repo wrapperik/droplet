@@ -227,3 +227,26 @@ describe('what the composer is told', () => {
     expect(snapshotOfLibrary(libraryOf({ palette: null, board: null, memory: emptyMemory(), notes: {} }))).toEqual({ brand: false, ideas: null, invoices: [] })
   })
 })
+
+describe('the palettes the founder named', () => {
+  const named = (id: string, name: string, savedAt: string, hex = '#B5543A') => ({ id, name, savedAt, blocks: [{ id: 1, hex: '#0E1A2B', role: 'text' as const }, { id: 2, hex: '#F4F8FB', role: 'background' as const }, { id: 3, hex, role: 'primary' as const }] })
+  const withNamed = (): PaletteSave => ({ ...palette(), palettes: [named('a', 'Spring', '2026-10-06T09:00:00.000Z'), named('b', 'Summer', '2026-10-08T09:00:00.000Z', '#F0A030')] })
+
+  it('lists them under the working palette, newest first, each with Open and Forget', () => {
+    const items = itemsOf<BrandItem>(libraryOf({ palette: withNamed(), board: null, memory: emptyMemory(), notes: {} }), 'brand')
+    expect(items.map((item) => item.title)).toEqual(['Colour palette', 'Summer', 'Spring'])
+    expect(items[0].paletteId).toBeUndefined()
+    expect(items[0].actions).toEqual(['open', 'export', 'copy_hex'])
+    expect(items[1]).toMatchObject({ id: 'palette:b', paletteId: 'b', actions: ['open', 'forget'], status: 'resolved', statusLabel: 'Kept 8 October 2026' })
+    expect(items[1].swatches.map((swatch) => swatch.hex)).toEqual(['#0E1A2B', '#F4F8FB', '#F0A030'])
+    expect(items[1].contrast).toMatchObject({ passes: true })
+  })
+
+  it('has none to list for a palette saved before they existed', () => {
+    expect(itemsOf<BrandItem>(libraryOf({ palette: palette(), board: null, memory: emptyMemory(), notes: {} }), 'brand')).toHaveLength(1)
+  })
+
+  it('does not change what the composer is told about the library', () => {
+    expect(snapshotOfLibrary(libraryOf({ palette: withNamed(), board: null, memory: emptyMemory(), notes: {} }))).toEqual({ brand: true, ideas: null, invoices: [] })
+  })
+})

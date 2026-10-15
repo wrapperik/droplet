@@ -52,7 +52,7 @@ describe('the screen when a task has a panel', () => {
     // The page and the working screen never scroll, so a focused field cannot push the header away or the panel over the chat.
     expect(rule('.home')?.body).toMatch(/overflow:\s*clip/)
     expect(rule('.home__screen')?.body).toMatch(/overflow:\s*clip/)
-    expect(rule('.home__canvas--panes > .home__component')?.body).toMatch(/min-height:\s*0/)
+    expect(rule('.home__canvas--panes > .home__component')?.body).toMatch(/position:\s*relative/)
   })
 
   it('has no separate screen for Guide mode: the brand and the invoice share one canvas class', () => {

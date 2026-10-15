@@ -8,7 +8,7 @@ import { loadLogo } from './logoStore.ts'
 import { loadMemory, saveMemory } from './memoryStore.ts'
 import { resolveRoles } from './palette.ts'
 import { forgetClient, forgetFact, forgetInvoice, markExported, numbersInUse, savedInvoice } from './projectMemory.ts'
-import { loadPalette, markPaletteExported } from './projectStore.ts'
+import { forgetNamedPalette, loadPalette, markPaletteExported } from './projectStore.ts'
 
 // What the library does to what is saved: export it, or forget it. The Library screen and the composer's actions both call these, so a person and
 // Droplet do exactly the same thing. Each works from what is saved, never from a workspace that may hold something else, and says in words how it
@@ -16,7 +16,8 @@ import { loadPalette, markPaletteExported } from './projectStore.ts'
 
 // Where a library item's Open goes. The Library screen asks Home to do it, since the workspaces live there.
 export type OpenTarget =
-  | { kind: 'brand' }
+  // The brand workspace; with `paletteId`, with that named palette loaded into it.
+  | { kind: 'brand'; paletteId?: string }
   | { kind: 'board' }
   | { kind: 'invoice'; id: string }
   | { kind: 'copy_invoice'; id: string }
@@ -58,10 +59,11 @@ export async function exportLibraryItem(projectId: string, projectName: string, 
   return { ok: true, text: 'The invoice was downloaded.' }
 }
 
-export type ForgetTarget = { kind: 'idea' } | { kind: 'invoice'; id: string } | { kind: 'client'; id: string }
+export type ForgetTarget = { kind: 'idea' } | { kind: 'invoice'; id: string } | { kind: 'client'; id: string } | { kind: 'palette'; id: string }
 
 // Forgets one thing the project remembered. The caller asks twice first; this only does it.
 export async function forgetLibraryItem(projectId: string, target: ForgetTarget): Promise<boolean> {
+  if (target.kind === 'palette') return forgetNamedPalette(projectId, target.id)
   const memory = await loadMemory(projectId)
   const next =
     target.kind === 'invoice' ? forgetInvoice(memory, target.id) : target.kind === 'client' ? forgetClient(memory, target.id) : forgetFact(forgetFact(memory, 'business.name'), 'business.offer')

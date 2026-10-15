@@ -1,5 +1,5 @@
 import { shiftHue } from './colour.ts'
-import { generatePalette, replaceableIds, type Harmony } from './harmony.ts'
+import { generatePalette, isRule, replaceableIds, type Harmony } from './harmony.ts'
 import { canRedo, canUndo, commit, createHistory, redo, undo, type History } from './history.ts'
 import { assignRole, withHex, type ColourRole, type PaletteBlock } from './palette.ts'
 import type { PaletteSave } from './paletteSave.ts'
@@ -36,16 +36,22 @@ export type WorkspaceAction =
   // "Keep in mind": Droplet's notes on the project always include the colour.
   | { type: 'toggle_star'; id: number; starred?: boolean }
   | { type: 'set_harmony'; harmony: Harmony }
+  // Chooses a harmony and works the colours that are not kept out from the starting colour (the selected one unless `fromId` says), keeping the tones they
+  // have. `variation` also chooses which arrangement of the tones. Custom has no rule, so it changes the harmony and nothing else.
+  | { type: 'use_harmony'; harmony: Harmony; fromId?: number; variation?: number }
+  // Moves one colour as the starting colour of the harmony: with a rule chosen the others follow it by the rule (kept colours stay); in Custom it is just a change
+  // to that colour.
+  | { type: 'set_base'; id: number; hex: string }
   | { type: 'generate'; fromId?: number }
   | { type: 'undo' }
   | { type: 'redo' }
   // Several actions applied together and undone together.
   | { type: 'batch'; actions: WorkspaceAction[] }
 
-// A workspace with these colours.
+// A workspace with these colours. It starts on Custom: a palette that was saved, or made by hand, is not scrambled by changing one of its colours until a harmony is chosen.
 export function openWorkspace(blocks: PaletteBlock[]): WorkspaceState {
   const doc: Doc = { blocks, reasons: {} }
-  return { history: createHistory(doc), selectedId: blocks[0].id, harmony: 'analogous', variation: 0 }
+  return { history: createHistory(doc), selectedId: blocks[0].id, harmony: 'custom', variation: 0 }
 }
 
 export const docOf = (state: WorkspaceState): Doc => state.history.present
@@ -97,7 +103,8 @@ function step(w: Working, action: WorkspaceAction): Working {
       return {
         doc: { ...w.doc, blocks: next, reasons, businessName: action.businessName ?? w.doc.businessName },
         selectedId: next[0].id,
-        harmony: w.harmony,
+        // The new colours are not known to follow any rule, so the rule is dropped: changing one of them does not move the others.
+        harmony: 'custom',
         variation: 0,
       }
     }
@@ -159,9 +166,24 @@ function step(w: Working, action: WorkspaceAction): Working {
     case 'set_harmony':
       return w.harmony === action.harmony ? w : { ...w, harmony: action.harmony }
 
+    case 'use_harmony': {
+      const base = action.fromId ?? w.selectedId
+      const variation = action.variation ?? w.variation
+      const chosen = { ...w, harmony: action.harmony, variation }
+      if (!isRule(action.harmony) || !blocks.some((b) => b.id === base) || replaceableIds(blocks, base).length === 0) return chosen
+      return { ...withBlocks(chosen, generatePalette(blocks, base, action.harmony, variation)), selectedId: base }
+    }
+
+    case 'set_base': {
+      const current = blocks.find((b) => b.id === action.id)
+      if (!current || current.hex === action.hex) return w
+      const moved = blocks.map((b) => (b.id === action.id ? withHex(b, action.hex) : b))
+      return withBlocks(w, isRule(w.harmony) ? generatePalette(moved, action.id, w.harmony, w.variation) : moved)
+    }
+
     case 'generate': {
       const base = action.fromId ?? w.selectedId
-      if (!blocks.some((b) => b.id === base) || replaceableIds(blocks, base).length === 0) return w
+      if (!isRule(w.harmony) || !blocks.some((b) => b.id === base) || replaceableIds(blocks, base).length === 0) return w
       return { ...withBlocks(w, generatePalette(blocks, base, w.harmony, w.variation)), selectedId: base, variation: w.variation + 1 }
     }
 
@@ -187,7 +209,7 @@ export function reduce(state: WorkspaceState, action: WorkspaceAction): Workspac
 
   const end = step({ doc: state.history.present, selectedId: state.selectedId, harmony: state.harmony, variation: state.variation }, action)
   // Quick edits to the same colour (dragging across the spectrum) are one step.
-  const key = action.type === 'set_hex' ? `colour-${action.id}` : null
+  const key = action.type === 'set_hex' || action.type === 'set_base' ? `colour-${action.id}` : null
   const history = commit(state.history, end.doc, key)
   if (history === state.history && end.selectedId === state.selectedId && end.harmony === state.harmony && end.variation === state.variation) return state
   return { history, selectedId: end.selectedId, harmony: end.harmony, variation: end.variation }

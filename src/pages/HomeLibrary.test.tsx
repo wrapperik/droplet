@@ -166,6 +166,41 @@ describe('the library in Home', () => {
   })
 })
 
+describe('opening a named palette from the library', () => {
+  const summer = { id: 'a', name: 'Summer', savedAt: '2026-10-05T10:00:00.000Z', blocks: [{ id: 1, hex: '#B5543A' }, { id: 2, hex: '#F7EFE6' }, { id: 3, hex: '#3B2A22' }] }
+  const hexes = () => [...document.querySelectorAll('.strip__hex')].map((hex) => hex.textContent)
+
+  it('opens the brand workspace with that palette in it, and the name in the toolbar, as one step that undo takes back', async () => {
+    await savePalette(PROJECT, { blocks: [{ id: 1, hex: '#0E1A2B', role: 'text' }, { id: 2, hex: '#F4F8FB', role: 'background' }], palettes: [summer] })
+    const user = userEvent.setup()
+    renderHome()
+    await openLibrary(user)
+    await user.click(await screen.findByRole('button', { name: 'Open the palette Summer' }))
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Library' })).not.toBeInTheDocument())
+    await waitFor(() => expect(hexes()).toEqual(['#B5543A', '#F7EFE6', '#3B2A22']))
+    expect(await screen.findByRole('textbox', { name: 'Palette name' })).toHaveValue('Summer')
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    await waitFor(() => expect(hexes()).toEqual(['#0E1A2B', '#F4F8FB']))
+  })
+
+  it('puts it into a brand workspace that is already open, after asking if it has colours that are not saved', async () => {
+    await savePalette(PROJECT, { blocks: [{ id: 1, hex: '#0E1A2B', role: 'text' }, { id: 2, hex: '#F4F8FB', role: 'background' }], palettes: [summer] })
+    const user = userEvent.setup()
+    renderHome()
+    await user.click(screen.getByRole('button', { name: 'Choose a task' }))
+    await user.click(await screen.findByRole('menuitem', { name: /Build the brand/ }))
+    await screen.findByRole('button', { name: /^Saved?$/ })
+    await user.click(screen.getByRole('button', { name: 'Add colour' }))
+    await openLibrary(user)
+    await user.click(await screen.findByRole('button', { name: 'Open the palette Summer' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('The palette you have open has changes that are not saved')
+    expect(screen.getByRole('heading', { name: 'Library' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Open anyway' }))
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Library' })).not.toBeInTheDocument())
+    await waitFor(() => expect(hexes()).toEqual(['#B5543A', '#F7EFE6', '#3B2A22']))
+  })
+})
+
 describe('asking Droplet with the library open', () => {
   it('sends what the library holds, with no workspace on screen, and no address or amount', async () => {
     await seed()

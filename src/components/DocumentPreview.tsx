@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import { readableTextColour } from '../lib/colour.ts'
-import { pairResult, type ResolvedRoles } from '../lib/palette.ts'
+import type { ResolvedRoles } from '../lib/palette.ts'
 import {
   SAMPLE_BUSINESS,
   SAMPLE_CLIENT,
@@ -9,7 +9,6 @@ import {
   formatRand,
   invoiceTotals,
 } from '../lib/sampleInvoice.ts'
-import ContrastBadge from './ContrastBadge.tsx'
 import { ReasonTip } from './Toolbar.tsx'
 import './DocumentPreview.css'
 
@@ -24,10 +23,10 @@ type Props = {
 const VAT_PERCENT = Math.round(SAMPLE_VAT_RATE * 100)
 
 // The palette on a real document: a sample invoice drawn with the colours in their roles. The document's own
-// colours are the founder's palette, so they are set here as custom properties and used only inside the page.
+// colours are the founder's palette, so they are set here as custom properties and used only inside the page. How well its text reads is the contrast lines' job,
+// beside it; this only shows the page.
 export default function DocumentPreview({ roles, businessName = SAMPLE_BUSINESS, reason }: Props) {
   const totals = invoiceTotals(SAMPLE_LINES, SAMPLE_VAT_RATE)
-  const body = pairResult(roles.text.hex, roles.background.hex)
 
   const colours = {
     '--doc-background': roles.background.hex,
@@ -100,16 +99,6 @@ export default function DocumentPreview({ roles, businessName = SAMPLE_BUSINESS,
           </div>
         </div>
       </div>
-
-      <p className="preview__verdict">
-        <span className="preview__verdict-label">Text on background</span>
-        <ContrastBadge ratio={body.ratio} level={body.level} />
-      </p>
-      {body.level === 'fail' && (
-        <p className="preview__warning">
-          The text on this page is hard to read. Choose a different Text or Background colour.
-        </p>
-      )}
     </section>
   )
 }

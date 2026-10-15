@@ -227,7 +227,7 @@ export default function InvoiceWorkspace({ mode, projectId, projectName, state, 
       {section(step)}
     </GuideCard>
   ) : (
-    <div className="frame__parts" onFocusCapture={noteFocus}>
+    <div className="wsframe__parts" onFocusCapture={noteFocus}>
       {GUIDE_STEPS.map(section)}
     </div>
   )

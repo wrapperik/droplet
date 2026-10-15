@@ -26,7 +26,7 @@ export function selectorFor(target: FocusTarget): string {
   const id = String(target.id).replace(/["\\]/g, '')
   switch (target.kind) {
     case 'block':
-      return `.palette__block[data-block-id="${id}"]`
+      return `.strip__pill[data-block-id="${id}"]`
     case 'line':
       return `.lines__row[data-line-id="${id}"]`
     case 'item':

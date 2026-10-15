@@ -113,11 +113,10 @@
   cursor: default;
 }
 
-/* The three palettes: cards, one under the other in a narrow panel and side by side in a wide one. */
+/* The three palettes, one under the other: no boxes, each divided from the next by a hairline. The one chosen is outlined and says so in words. */
 .gcolours__options {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-  gap: 0.75rem;
+  display: flex;
+  flex-direction: column;
   width: 100%;
 }
 
@@ -126,24 +125,33 @@
   flex-direction: column;
   gap: 0.5rem;
   padding: 0.75rem;
-  border: 1px solid var(--overlay-10);
+  border: 0;
+  border-top: 1px solid var(--overlay-10);
   border-radius: var(--radius-md);
-  background: var(--overlay-06);
+  background: transparent;
   color: var(--text);
   text-align: left;
 }
 
+.gcolours__card:first-child {
+  border-top: 0;
+}
+
 .gcolours__card:hover {
-  background: var(--accent-tint-soft);
+  background: var(--overlay-06);
 }
 
 .gcolours__card[aria-checked='true'] {
-  border-color: var(--accent);
   background: var(--accent-tint-soft);
-  box-shadow: inset 0 0 0 1px var(--accent);
+  box-shadow: inset 0 0 0 2px var(--accent);
 }
 
 .gcolours__name {
+  font-weight: 600;
+}
+
+.gcolours__chosen {
+  color: var(--accent);
   font-weight: 600;
 }
 

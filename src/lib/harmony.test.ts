@@ -1,5 +1,5 @@
 import { hexToRgb, rgbToHsv } from './colour.ts'
-import { HARMONIES, generatePalette, harmonyColour, replaceableIds } from './harmony.ts'
+import { HARMONIES, HARMONY_DIAGRAM, HARMONY_IDS, HARMONY_NOTES, HARMONY_RULES, RULE_IDS, generatePalette, harmonyColour, harmonyLabel, hueTurnsOf, isRule, replaceableIds, type Harmony } from './harmony.ts'
 import type { PaletteBlock } from './palette.ts'
 
 const blocks: PaletteBlock[] = [
@@ -95,5 +95,69 @@ describe('generatePalette', () => {
     const first = generatePalette(blocks, 1, 'analogous', 0).map((b) => b.hex)
     const second = generatePalette(blocks, 1, 'analogous', 1).map((b) => b.hex)
     expect(second).not.toEqual(first)
+  })
+})
+
+describe('the rules the wheel offers', () => {
+  it('lists the eight in the order the row shows them, Custom first, each with a name and a note', () => {
+    expect(HARMONY_RULES.map((rule) => rule.label)).toEqual(['Custom', 'Analogous', 'Monochromatic', 'Triad', 'Complementary', 'Split complementary', 'Square', 'Double split complementary'])
+    expect(HARMONY_IDS).toEqual(HARMONY_RULES.map((rule) => rule.id))
+    expect(RULE_IDS).not.toContain('custom')
+    expect(RULE_IDS).toHaveLength(7)
+    for (const id of HARMONY_IDS) expect(HARMONY_NOTES[id].length).toBeGreaterThan(10)
+    expect(harmonyLabel('double_split')).toBe('Double split complementary')
+    expect(isRule('custom')).toBe(false)
+    expect(isRule('square')).toBe(true)
+  })
+
+  it('keeps the four classic harmonies, in their order, for the palettes Guide mode builds', () => {
+    expect(HARMONIES.map((entry) => entry.id)).toEqual(['analogous', 'complementary', 'triad', 'monochrome'])
+  })
+
+  it('draws every rule from its starting colour, and the diagram agrees with the turns the maths makes', () => {
+    for (const id of HARMONY_IDS) {
+      const points = HARMONY_DIAGRAM[id]
+      expect(points[0]).toEqual({ angle: 0, radius: 1 })
+      if (id === 'custom') continue
+      // The colours after the first are the turns the maths starts with: every one of the first few turns is a point on the diagram.
+      const angles = points.slice(1).map((point) => ((point.angle % 360) + 360) % 360)
+      const turns = hueTurnsOf(id)
+        .slice(0, angles.length)
+        .map((turn) => ((turn % 360) + 360) % 360)
+      for (const turn of turns) expect([...angles, 0]).toContain(turn)
+    }
+  })
+
+  const near = (actual: number, expected: number) => {
+    const gap = Math.abs(actual - expected) % 360
+    return Math.min(gap, 360 - gap) < 3
+  }
+  const turnedBy = (rule: Harmony, position: number) => turn('#1F8FE0', harmonyColour('#1F8FE0', rule, position))
+
+  it('turns the hue by the angles of the new rules', () => {
+    // split complementary: the two beside the opposite
+    expect(near(turnedBy('split_complementary', 0), 150)).toBe(true)
+    expect(near(turnedBy('split_complementary', 1), 210)).toBe(true)
+    // square: a quarter turn each
+    expect([0, 1, 2].map((position) => near(turnedBy('square', position), 90 * (position + 1)))).toEqual([true, true, true])
+    // double split: a neighbour, then the two beside the opposite
+    expect([30, 180, 210].map((angle, position) => near(turnedBy('double_split', position), angle))).toEqual([true, true, true])
+  })
+
+  it('gives a valid colour for every rule, position and variation', () => {
+    for (const id of HARMONY_IDS) for (let position = 0; position < 8; position += 1) for (let variation = 0; variation < 4; variation += 1) expect(harmonyColour('#1F8FE0', id, position, variation)).toMatch(/^#[0-9A-F]{6}$/)
+  })
+
+  it('fills the other colours by a new rule and leaves the starting colour and the kept ones', () => {
+    for (const rule of ['split_complementary', 'square', 'double_split'] as const) {
+      const result = generatePalette(blocks, 1, rule)
+      expect(result[0].hex).toBe('#1F8FE0')
+      expect(result[3].hex).toBe('#0E1A2B')
+      expect(result[1].hex).not.toBe('#0B4F8A')
+    }
+  })
+
+  it('has no rule in Custom, so nothing is filled in', () => {
+    expect(generatePalette(blocks, 1, 'custom')).toBe(blocks)
   })
 })

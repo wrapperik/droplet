@@ -10,7 +10,7 @@ export type BrandPartId = (typeof BRAND_PARTS)[number]
 export const BRAND_TITLES: Record<BrandPartId, string> = { colours: 'Colours', roles: 'Roles', contrast: 'Contrast' }
 
 export const BRAND_LEADS: Record<BrandPartId, string> = {
-  colours: 'Pick a colour on the wheel, type its code, or let Droplet suggest colours that go with it.',
+  colours: 'Pick a colour on the wheel, type its code, take colours from a picture, or choose a harmony and let the rest follow.',
   roles: 'Say which colour is the main one, the accent, the background and the text, so the preview and the brand sheet use them properly.',
   contrast: 'How easy the text is to read on the background. It is worked out for you, from the colours you chose.',
 }

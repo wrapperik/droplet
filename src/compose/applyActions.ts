@@ -1,4 +1,4 @@
-import { replaceableIds } from '../lib/harmony.ts'
+import { harmonyLabel, replaceableIds } from '../lib/harmony.ts'
 import { createHistory } from '../lib/history.ts'
 import type { PaletteBlock } from '../lib/palette.ts'
 import {
@@ -213,7 +213,7 @@ function describeChange(action: PaletteAction, before: PaletteBlock[], after: Pa
       return { kind: 'changed', text: `Selected ${colour(action.index).toLowerCase()}`, focus: [{ kind: 'block', id: at(action.index).id, how: 'changed' }] }
     case 'generate': {
       const changed = after.filter((block, index) => before[index] && before[index].hex !== block.hex)
-      return { kind: 'changed', text: `Generated ${plural(changed.length, 'colour')} from ${action.harmony === 'monochrome' ? 'a monochrome harmony' : `a ${action.harmony} harmony`}`, focus: changed.map((block) => ({ kind: 'block', id: block.id, how: 'changed' })) }
+      return { kind: 'changed', text: `Generated ${plural(changed.length, 'colour')} from ${action.harmony === 'monochrome' ? 'a monochrome harmony' : `a ${harmonyLabel(action.harmony).toLowerCase()} harmony`}`, focus: changed.map((block) => ({ kind: 'block', id: block.id, how: 'changed' })) }
     }
     default:
       return null

@@ -20,6 +20,15 @@ describe('openWorkspace', () => {
     expect(canUndoState(state)).toBe(false)
   })
 
+  it('starts on Custom, so a saved palette is not scrambled by changing one of its colours, and a new palette drops any rule', () => {
+    expect(fresh().harmony).toBe('custom')
+    const ruled = run(fresh(), { type: 'use_harmony', harmony: 'triad' })
+    expect(ruled.harmony).toBe('triad')
+    const replaced = run(ruled, { type: 'set_palette', blocks: [{ id: 1, hex: '#B5543A' }, { id: 2, hex: '#F7EFE6' }] })
+    expect(replaced.harmony).toBe('custom')
+    expect(run(fresh(), { type: 'set_base', id: 1, hex: '#E03A1F' }).history.present.blocks.slice(1)).toEqual(starter().slice(1))
+  })
+
   it('has no arrangement: the frame is fixed, so the document holds the colours and the reasons only', () => {
     expect(Object.keys(docOf(fresh())).sort()).toEqual(['blocks', 'reasons'])
   })
@@ -94,7 +103,7 @@ describe('colours', () => {
 
 describe('generate', () => {
   it('fills the colours that are not the starting colour or kept, and the next press differs', () => {
-    let state = run(fresh(), { type: 'toggle_keep', id: 4 }, { type: 'generate' })
+    let state = run(fresh(), { type: 'toggle_keep', id: 4 }, { type: 'set_harmony', harmony: 'analogous' }, { type: 'generate' })
     const first = hexes(state)
     expect(first[0]).toBe('#1F8FE0')
     expect(first[3]).toBe('#0E1A2B')
@@ -205,5 +214,72 @@ describe('keeping a colour in mind', () => {
     const starred = reduce(base, { type: 'toggle_star', id: 2, starred: true })
     expect(reduce(starred, { type: 'toggle_star', id: 2, starred: true })).toBe(starred)
     expect(docOf(reduce(starred, { type: 'set_hex', id: 2, hex: '#123456' })).blocks[1]).toMatchObject({ hex: '#123456', starred: true })
+  })
+})
+
+describe('harmonies and the base colour', () => {
+  const ids = (state: WorkspaceState) => docOf(state).blocks.map((b) => b.id)
+
+  it('chooses a rule and works the other colours out from the selected one in one undo step, leaving the kept ones', () => {
+    const start = run(fresh(), { type: 'toggle_keep', id: 4 })
+    const state = run(start, { type: 'use_harmony', harmony: 'split_complementary' })
+    expect(state.harmony).toBe('split_complementary')
+    expect(hexes(state)[0]).toBe('#1F8FE0')
+    expect(hexes(state)[3]).toBe('#0E1A2B')
+    expect(hexes(state)[1]).not.toBe('#0B4F8A')
+    // keeping a colour and choosing a rule are two steps; choosing the rule is one
+    expect(state.history.past).toHaveLength(start.history.past.length + 1)
+    expect(hexes(run(state, { type: 'undo' }))).toEqual(hexes(start))
+  })
+
+  it('keeps the tones it has when a rule is chosen again, unless it is told which arrangement to use', () => {
+    const once = run(fresh(), { type: 'use_harmony', harmony: 'triad' })
+    expect(once.variation).toBe(0)
+    const other = run(fresh(), { type: 'use_harmony', harmony: 'triad', variation: 3 })
+    expect(other.variation).toBe(3)
+    expect(hexes(other)).not.toEqual(hexes(once))
+  })
+
+  it('works from the colour named, and selects it', () => {
+    const state = run(fresh(), { type: 'use_harmony', harmony: 'square', fromId: 3 })
+    expect(state.selectedId).toBe(3)
+    expect(hexes(state)[2]).toBe('#CFE9FB')
+  })
+
+  it('changes only the rule when Custom is chosen, and when every other colour is kept', () => {
+    const custom = run(fresh(), { type: 'use_harmony', harmony: 'custom' })
+    expect(custom.harmony).toBe('custom')
+    expect(hexes(custom)).toEqual(hexes(fresh()))
+    const locked = openWorkspace(starter().map((b) => (b.id === 1 ? b : { ...b, locked: true })))
+    expect(hexes(run(locked, { type: 'use_harmony', harmony: 'triad' }))).toEqual(hexes(locked))
+  })
+
+  it('moves the others by the rule when the base moves, and the ones that are kept stay', () => {
+    const ruled = run(fresh(), { type: 'toggle_keep', id: 4 }, { type: 'use_harmony', harmony: 'analogous' })
+    const moved = run(ruled, { type: 'set_base', id: 1, hex: '#E03A1F' })
+    expect(hexes(moved)[0]).toBe('#E03A1F')
+    expect(hexes(moved)[3]).toBe('#0E1A2B')
+    expect(hexes(moved)[1]).not.toBe(hexes(ruled)[1])
+    expect(ids(moved)).toEqual([1, 2, 3, 4])
+  })
+
+  it('moves a colour alone in Custom', () => {
+    const custom = run(fresh(), { type: 'use_harmony', harmony: 'custom' })
+    const moved = run(custom, { type: 'set_base', id: 1, hex: '#E03A1F' })
+    expect(hexes(moved)).toEqual(['#E03A1F', ...hexes(custom).slice(1)])
+  })
+
+  it('merges a drag of the base into one undo step, and does nothing for a colour that is not there or does not change', () => {
+    let state = run(fresh(), { type: 'use_harmony', harmony: 'triad' })
+    const before = state.history.past.length
+    state = run(state, { type: 'set_base', id: 1, hex: '#2090E1' }, { type: 'set_base', id: 1, hex: '#2191E2' }, { type: 'set_base', id: 1, hex: '#2292E3' })
+    expect(state.history.past).toHaveLength(before + 1)
+    expect(reduce(state, { type: 'set_base', id: 99, hex: '#000000' })).toBe(state)
+    expect(reduce(state, { type: 'set_base', id: 1, hex: '#2292E3' })).toBe(state)
+  })
+
+  it('does nothing for Generate in Custom', () => {
+    const custom = run(fresh(), { type: 'use_harmony', harmony: 'custom' })
+    expect(reduce(custom, { type: 'generate' })).toBe(custom)
   })
 })

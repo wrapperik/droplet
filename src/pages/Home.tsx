@@ -1366,9 +1366,18 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   const openFromLibrary = useCallback(
     async (target: OpenTarget, options?: { confirmed?: boolean }): Promise<'done' | 'unsaved'> => {
       if (target.kind === 'brand') {
+        const saved = await loadPalette(currentProjectId)
+        // A named palette is loaded into the workspace, as one undo step. Colours that are not saved would be lost by it, so the founder is asked first.
+        const named = target.paletteId ? saved?.palettes?.find((entry) => entry.id === target.paletteId) : undefined
+        if (named && workspaceRef.current && !options?.confirmed && paletteHasChanges(workspaceRef.current, saved)) return 'unsaved'
         // A saved palette is whole, so a brand opened from it in Guide mode opens on its last part, where every part before it can be gone back to.
-        if (!workspaceRef.current && (await loadPalette(currentProjectId))) setBrandGuide({ step: BRAND_PARTS[BRAND_PARTS.length - 1], reached: BRAND_PARTS.length - 1 })
+        if (!workspaceRef.current && saved) setBrandGuide({ step: BRAND_PARTS[BRAND_PARTS.length - 1], reached: BRAND_PARTS.length - 1 })
         await openWorkspaceFor('brand')
+        if (named) {
+          const loaded = reduce(workspaceRef.current!, { type: 'set_palette', blocks: named.blocks })
+          workspaceRef.current = loaded
+          setWorkspace(loaded)
+        }
         return 'done'
       }
       if (target.kind === 'board') {

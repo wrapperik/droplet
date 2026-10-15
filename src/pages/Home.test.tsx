@@ -75,8 +75,8 @@ const renderHome = () =>
 
 const loadChatsFor = () => loadChats('duckstack')
 
-// The task bar of whichever workspace is open: the parts of the brand or of the invoice, or the board's tools. Null when none is.
-const taskBar = () => screen.queryByRole('group', { name: /^Parts of the (brand|invoice)$/ }) ?? screen.queryByRole('toolbar', { name: 'Board tools' })
+// The task bar of whichever workspace is open: the parts of the invoice (or of the brand in Guide mode), the board's tools, or the brand's own toolbar. Null when none is.
+const taskBar = () => screen.queryByRole('group', { name: /^Parts of the (brand|invoice)$/ }) ?? screen.queryByRole('toolbar', { name: 'Board tools' }) ?? screen.queryByRole('toolbar', { name: 'Palette toolbar' })
 
 // In Workspace mode the client's name is in the Client part of the panel, which is always there.
 const clientName = async (_user: ReturnType<typeof userEvent.setup>) => screen.getByLabelText('Client or company name')
@@ -184,7 +184,7 @@ describe('asking Droplet to fill in the invoice', () => {
     expect(asked[0].view).toBe('invoice')
     expect(asked[1].view).toBe('brand')
     expect(asked[1].workspace).toBeDefined()
-    await waitFor(() => expect(within(screen.getByRole('group', { name: 'Parts of the brand' })).getByRole('button', { name: /^Colours/ })).toBeInTheDocument())
+    await waitFor(() => expect(within(screen.getByRole('toolbar', { name: 'Palette toolbar' })).getByRole('button', { name: 'Generate random' })).toBeInTheDocument())
   })
 
   it('leaves the invoice alone when the composer only answers', async () => {
@@ -1302,7 +1302,7 @@ describe('with storage that takes its time', () => {
     const user = userEvent.setup()
     renderHome()
     await pickTask(user, /Build the brand/)
-    await user.click(await screen.findByRole('button', { name: /Save/ }))
+    await user.click(await screen.findByRole('button', { name: 'Save' }))
     await waitFor(() => expect(slow.documents.has('duckstack/palette')).toBe(true))
     expect(window.localStorage.getItem('droplet-project-duckstack-palette')).toBeNull()
   })

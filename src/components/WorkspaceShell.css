@@ -1,20 +1,18 @@
 /* The frame every task with a panel uses, in both modes: the thing being made on the left, three fifths of the width, and the tools panel on the right, two
    fifths, each scrolling on its own, with an optional footer under the panel. It fills the working screen and does not scroll as a whole. */
-.frame {
+.wsframe {
   container-type: inline-size;
   display: flex;
   flex-direction: column;
-  /* Fills the space the canvas gives it by stretching (a percentage height here would undo the stretch and let the frame grow past the screen). */
-  flex: 1 1 auto;
-  align-self: stretch;
-  width: 100%;
+  /* Pinned to the edges of the space the screen gives it (its parent is positioned), not sized by its content or by a percentage: a flex parent
+     whose height is not fixed lets a frame grow to its content, which pushed the panes past the screen. */
+  position: absolute;
+  inset: 0;
   max-width: 90rem;
-  min-width: 0;
-  min-height: 0;
   margin-inline: auto;
 }
 
-.frame__stage {
+.wsframe__stage {
   display: grid;
   /* The thing gets the larger share. The panel never goes narrower than its fields need. */
   grid-template-columns: minmax(0, 3fr) minmax(20rem, 2fr);
@@ -24,8 +22,22 @@
   min-height: 0;
 }
 
+/* Tools on the left and the thing on the right (the brand): the larger share still goes to the thing, so the columns swap places and so do their sizes. */
+.wsframe[data-swap] .wsframe__stage {
+  grid-template-columns: minmax(20rem, 2fr) minmax(0, 3fr);
+}
+
+/* The tools hidden (full screen): the thing has the whole width. */
+.wsframe[data-full] .wsframe__stage {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.wsframe__side[hidden] {
+  display: none;
+}
+
 /* The panel and its footer, one above the other. */
-.frame__side {
+.wsframe__side {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
@@ -34,7 +46,7 @@
 }
 
 /* A pane: as tall as the space it is given, scrolling on its own. A little padding keeps the cards' shadows and focus rings from being cut off at its edges. */
-.frame__pane {
+.wsframe__pane {
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
@@ -42,14 +54,14 @@
   padding: 0.25rem;
 }
 
-.frame__pane--panel {
+.wsframe__pane--panel {
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 1rem;
 }
 
-.frame__pane--thing {
+.wsframe__pane--thing {
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -57,18 +69,18 @@
 
 /* Too narrow for the two side by side: one column that scrolls as a whole, the panel (and its footer) first and the thing beneath it. */
 @container (max-width: 42rem) {
-  .frame__stage {
+  .wsframe__stage {
     display: flex;
     flex-direction: column;
     gap: 1.25rem;
     overflow-y: auto;
   }
 
-  .frame__pane {
+  .wsframe__pane {
     overflow: visible;
   }
 
-  .frame__side {
+  .wsframe__side {
     order: -1;
   }
 }
@@ -180,7 +192,7 @@
 }
 
 /* Every part of a task in the panel, one under the other (Workspace mode). */
-.frame__parts {
+.wsframe__parts {
   display: flex;
   flex-direction: column;
   gap: 1rem;

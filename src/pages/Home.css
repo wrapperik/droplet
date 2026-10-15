@@ -160,7 +160,8 @@
 }
 
 .home__canvas--panes > .home__component {
-  display: flex;
+  /* The frame is pinned inside this box, so its size is the box's and nothing else's. */
+  position: relative;
   flex: 1;
   min-width: 0;
   min-height: 0;

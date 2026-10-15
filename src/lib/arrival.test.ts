@@ -28,7 +28,7 @@ describe('when each change starts', () => {
 
 describe('where a thing is on screen', () => {
   it('is found by what kind of thing it is', () => {
-    expect(selectorFor({ kind: 'block', id: 3, how: 'added' })).toBe('.palette__block[data-block-id="3"]')
+    expect(selectorFor({ kind: 'block', id: 3, how: 'added' })).toBe('.strip__pill[data-block-id="3"]')
     expect(selectorFor({ kind: 'line', id: 2, how: 'added' })).toBe('.lines__row[data-line-id="2"]')
     expect(selectorFor({ kind: 'item', id: 'abc', how: 'added' })).toBe('[data-item-id="abc"]')
     expect(selectorFor({ kind: 'part', id: 'client', how: 'added' })).toBe('[data-part="client"]')
@@ -96,7 +96,7 @@ describe('the sequence, with motion', () => {
 
   it('leaves colours and windows to their own way of arriving, and only rings them', () => {
     const block = document.createElement('label')
-    block.className = 'palette__block'
+    block.className = 'strip__pill'
     block.setAttribute('data-block-id', '5')
     document.body.append(block)
     const animate = withAnimate(block)

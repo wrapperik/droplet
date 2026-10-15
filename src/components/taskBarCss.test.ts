@@ -61,22 +61,21 @@ describe('the task bar every workspace shares', () => {
 
 describe('the frame every task shares', () => {
   it('puts the thing three fifths and the panel two fifths, each scrolling on its own', () => {
-    expect(rule('.frame__stage', shell)[0].body).toMatch(/grid-template-columns:\s*minmax\(0, 3fr\) minmax\(20rem, 2fr\)/)
-    expect(rule('.frame__pane', shell)[0].body).toMatch(/overflow-y:\s*auto/)
-    expect(rule('.frame__stage', shell)[0].body).toMatch(/min-height:\s*0/)
+    expect(rule('.wsframe__stage', shell)[0].body).toMatch(/grid-template-columns:\s*minmax\(0, 3fr\) minmax\(20rem, 2fr\)/)
+    expect(rule('.wsframe__pane', shell)[0].body).toMatch(/overflow-y:\s*auto/)
+    expect(rule('.wsframe__stage', shell)[0].body).toMatch(/min-height:\s*0/)
   })
 
   it('does not scroll as a whole, and fills the screen', () => {
-    // It stretches to the canvas: a percentage height would undo the stretch and let it grow past the screen.
-    const frame = rule('.frame', shell)[0].body
-    expect(frame).toMatch(/align-self:\s*stretch/)
-    expect(frame).toMatch(/min-height:\s*0/)
-    expect(frame).not.toMatch(/height:\s*100%/)
+    // It is pinned to the edges of its parent: a percentage height or a stretch lets it grow to its content.
+    const frame = rule('.wsframe', shell)[0].body
+    expect(frame).toMatch(/position:\s*absolute/)
+    expect(frame).toMatch(/inset:\s*0/)
   })
 
   it('becomes one column under 42rem, the panel (and its footer) first', () => {
     expect(shell).toMatch(/@container \(max-width: 42rem\)/)
-    expect(shell).toMatch(/\.frame__side\s*\{[^}]*order:\s*-1/)
+    expect(shell).toMatch(/\.wsframe__side\s*\{[^}]*order:\s*-1/)
   })
 
   it('has no review proportion of its own: the panes are the same for every part', () => {

@@ -1,0 +1,49 @@
+/* Tabs on a hairline, the current one underlined. No box round them. */
+.stabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--overlay-10);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.stabs::-webkit-scrollbar {
+  display: none;
+}
+
+.stabs__tab {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem 0.625rem;
+  border: 0;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.stabs__tab:hover {
+  color: var(--text);
+}
+
+/* The underline is a 2px bar on the hairline, so the current tab is told apart by more than its colour. */
+.stabs__tab[aria-selected='true'] {
+  color: var(--text);
+}
+
+.stabs__tab[aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  right: 0.5rem;
+  bottom: -1px;
+  left: 0.5rem;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--text);
+}

@@ -56,6 +56,49 @@ beforeEach(() => {
   Object.values(exports).forEach((mock) => mock.mockClear().mockResolvedValue(true))
 })
 
+const entry = (id: string, name: string) => ({ id, name, savedAt: '2026-10-06T09:00:00.000Z', blocks: [{ id: 1, hex: '#0E1A2B', role: 'text' as const }, { id: 2, hex: '#F4F8FB', role: 'background' as const }] })
+
+describe('the palettes the founder named', () => {
+  const fillNamed = () => savePalette(PROJECT, { blocks: [{ id: 1, hex: '#0E1A2B' }, { id: 2, hex: '#F4F8FB' }], palettes: [entry('a', 'Spring'), entry('b', 'Summer')] })
+
+  it('lists them in the Brand section and opens one in the brand workspace', async () => {
+    await fillNamed()
+    const props = setup()
+    const brand = within(await screen.findByRole('region', { name: 'Brand' }))
+    expect(brand.getAllByRole('listitem')).toHaveLength(3)
+    expect(brand.getByText('Summer')).toBeInTheDocument()
+    await userEvent.click(brand.getByRole('button', { name: 'Open the palette Spring' }))
+    expect(props.onOpen).toHaveBeenCalledWith({ kind: 'brand', paletteId: 'a' }, { confirmed: false })
+  })
+
+  it('forgets one only after asking twice, and leaves the others', async () => {
+    await fillNamed()
+    const props = setup()
+    const brand = within(await screen.findByRole('region', { name: 'Brand' }))
+    await userEvent.click(brand.getByRole('button', { name: 'Forget the palette Spring' }))
+    expect((await loadPalette(PROJECT))?.palettes).toHaveLength(2)
+    expect(brand.getByText('Forget the palette Spring?')).toBeInTheDocument()
+    await userEvent.click(brand.getByRole('button', { name: 'Keep' }))
+    expect((await loadPalette(PROJECT))?.palettes).toHaveLength(2)
+    await userEvent.click(brand.getByRole('button', { name: 'Forget the palette Spring' }))
+    await userEvent.click(brand.getByRole('button', { name: 'Forget' }))
+    await waitFor(async () => expect((await loadPalette(PROJECT))?.palettes?.map((palette) => palette.id)).toEqual(['b']))
+    expect(await screen.findByText('Forgot the palette Spring.')).toBeInTheDocument()
+    expect(props.onChanged).toHaveBeenCalled()
+  })
+
+  it('asks before replacing a palette that is open with unsaved changes, and says it is the palette', async () => {
+    await fillNamed()
+    const onOpen = vi.fn(async (_target: unknown, options?: { confirmed?: boolean }) => (options?.confirmed ? ('done' as const) : ('unsaved' as const)))
+    setup({ onOpen })
+    const brand = within(await screen.findByRole('region', { name: 'Brand' }))
+    await userEvent.click(brand.getByRole('button', { name: 'Open the palette Spring' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('The palette you have open has changes that are not saved')
+    await userEvent.click(screen.getByRole('button', { name: 'Open anyway' }))
+    expect(onOpen).toHaveBeenLastCalledWith({ kind: 'brand', paletteId: 'a' }, { confirmed: true })
+  })
+})
+
 describe('the library screen', () => {
   it('on a project with nothing saved, says what makes each thing and offers the workspace', async () => {
     const props = setup()
