@@ -1,8 +1,9 @@
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
-import { AltArrowLeftIcon, AltArrowRightIcon, BuildingsIcon, CalendarIcon, CheckCircleIcon, CheckIcon, ListCheckIcon, SaleIcon, UserIcon } from '@solar-icons/react/linear'
+import { AnimatePresence } from 'framer-motion'
+import { BuildingsIcon, CalendarIcon, CheckCircleIcon, ListCheckIcon, SaleIcon, UserIcon } from '@solar-icons/react/linear'
 import type { Icon } from '@solar-icons/react/lib/types'
 import { useDismiss } from '../../hooks/useDismiss.ts'
+import { useGuideCard } from '../../hooks/useGuideCard.ts'
 import { exportInvoice } from '../../lib/exportInvoice.ts'
 import { partsDone, type Issue } from '../../lib/invoiceReadiness.ts'
 import {
@@ -27,6 +28,8 @@ import { canRedoInvoice, canUndoInvoice, type InvoiceAction, type InvoiceState }
 import { scrollToPart } from '../../lib/partNav.ts'
 import { forgetBusiness, forgetClient, forgetInvoice, markExported, settingOn } from '../../lib/projectMemory.ts'
 import ExportButton from '../ExportButton.tsx'
+import GuideCard from '../GuideCard.tsx'
+import GuideFooter from '../GuideFooter.tsx'
 import PartSection from '../PartSection.tsx'
 import TaskBar, { type BarItem } from '../TaskBar.tsx'
 import WorkspaceShell, { type HeaderSlots } from '../WorkspaceShell.tsx'
@@ -104,22 +107,12 @@ export default function InvoiceWorkspace({ mode, projectId, projectName, state, 
   const closeFinish = useCallback(() => setFinishing(false), [])
   useDismiss(finishing, closeFinish, finishRef)
 
-  // The part on screen in Guide mode. When the founder moves to a part, its first field takes the cursor as soon as the part is there (after the last one has gone),
-  // never when the guide first opens: the message bar keeps the cursor then.
-  const cardEl = useRef<HTMLDivElement | null>(null)
-  const moved = useRef(false)
-  const cardRef = useCallback((node: HTMLDivElement | null) => {
-    cardEl.current = node
-    if (!node || !moved.current) return
-    moved.current = false
-    // A field first (the heading comes before them on the page), or the part itself when it has none.
-    const field = node.querySelector<HTMLElement>('input, textarea, select') ?? node.querySelector<HTMLElement>('[data-part]') ?? node
-    field.focus({ preventScroll: true })
-  }, [])
+  // The part on screen in Guide mode: where the cursor goes when the founder moves to it (the same for every task).
+  const { cardRef, markMoved, focusProblem } = useGuideCard()
 
   const move = (next: GuideProgress) => {
     if (next === progress) return
-    moved.current = true
+    markMoved()
     setBlocked([])
     setFinishNote('')
     onProgress(next)
@@ -127,7 +120,7 @@ export default function InvoiceWorkspace({ mode, projectId, projectName, state, 
 
   const showBlocked = (issues: Issue[]) => {
     setBlocked(issues)
-    cardEl.current?.querySelector<HTMLElement>('[aria-invalid="true"], input, textarea, select')?.focus({ preventScroll: true })
+    focusProblem()
   }
 
   const next = () => {
@@ -211,63 +204,28 @@ export default function InvoiceWorkspace({ mode, projectId, projectName, state, 
   )
 
   const footer = guided && (
-    <div className="guide__actions">
-      <button type="button" className="workspace__button" onClick={() => move(back(progress))} disabled={index === 0}>
-        <AltArrowLeftIcon size={18} aria-hidden="true" />
-        <span>Back</span>
-      </button>
-      {last ? (
-        <div className="confirm" ref={finishRef}>
-          <button type="button" className="workspace__button workspace__button--primary" onClick={finish} aria-haspopup="dialog" aria-expanded={finishing}>
-            <CheckIcon size={18} aria-hidden="true" />
-            <span>Finish</span>
-          </button>
-          <AnimatePresence>
-            {finishing && <ConfirmNote above projectName={projectName} items={items} notesOn={settingOn(memory, 'notes')} confirmLabel="Save and finish" onConfirm={(ids) => void confirmFinish(ids)} onCancel={closeFinish} />}
-          </AnimatePresence>
-        </div>
-      ) : (
-        <button type="button" className="workspace__button workspace__button--primary guide__next" onClick={next}>
-          <span>Continue</span>
-          <AltArrowRightIcon size={18} aria-hidden="true" />
-        </button>
-      )}
-      <div className="guide__missing" role="alert">
-        {finishNote ? (
-          <p>{finishNote}</p>
-        ) : (
-          stillBlocked.length > 0 && (
-            <>
-              <p className="guide__missing-title">{last ? 'Before you can finish:' : 'Before you go on:'}</p>
-              <ul>
-                {stillBlocked.slice(0, 4).map((issue) => (
-                  <li key={issue.id}>{issue.text}</li>
-                ))}
-                {stillBlocked.length > 4 && <li>{`And ${stillBlocked.length - 4} more.`}</li>}
-              </ul>
-            </>
-          )
-        )}
-      </div>
-    </div>
+    <GuideFooter
+      canBack={index > 0}
+      onBack={() => move(back(progress))}
+      last={last}
+      onNext={next}
+      onFinish={finish}
+      finishRef={finishRef}
+      finishExpanded={finishing}
+      finishPopup={
+        <AnimatePresence>
+          {finishing && <ConfirmNote above projectName={projectName} items={items} notesOn={settingOn(memory, 'notes')} confirmLabel="Save and finish" onConfirm={(ids) => void confirmFinish(ids)} onCancel={closeFinish} />}
+        </AnimatePresence>
+      }
+      missing={stillBlocked.map((issue) => issue.text)}
+      note={finishNote}
+    />
   )
 
   const panel = guided ? (
-    <AnimatePresence mode="wait" initial={false}>
-      <motion.div
-        key={step}
-        ref={cardRef}
-        tabIndex={-1}
-        className="guide__card"
-        initial={{ opacity: 0, y: 8, filter: 'blur(4px)' }}
-        animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-        exit={{ opacity: 0, y: -6, filter: 'blur(4px)' }}
-        transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
-      >
-        <p className="guide__count">{`Step ${index + 1} of ${GUIDE_STEPS.length}`}</p>
-        {section(step)}
-      </motion.div>
-    </AnimatePresence>
+    <GuideCard stepKey={step} cardRef={cardRef} position={index + 1} of={GUIDE_STEPS.length}>
+      {section(step)}
+    </GuideCard>
   ) : (
     <div className="frame__parts" onFocusCapture={noteFocus}>
       {GUIDE_STEPS.map(section)}

@@ -43,6 +43,42 @@ export function rgbToHsv({ r, g, b }: Rgb): Hsv {
   return { h, s: max === 0 ? 0 : delta / max, v: max }
 }
 
+export type Hsl = { h: number; s: number; l: number } // h 0 to 360, s and l 0 to 1
+
+export function rgbToHsl({ r, g, b }: Rgb): Hsl {
+  const red = r / 255
+  const green = g / 255
+  const blue = b / 255
+  const max = Math.max(red, green, blue)
+  const min = Math.min(red, green, blue)
+  const l = (max + min) / 2
+  const delta = max - min
+  if (delta === 0) return { h: 0, s: 0, l }
+  const s = delta / (1 - Math.abs(2 * l - 1))
+  let h: number
+  if (max === red) h = ((green - blue) / delta) % 6
+  else if (max === green) h = (blue - red) / delta + 2
+  else h = (red - green) / delta + 4
+  h *= 60
+  if (h < 0) h += 360
+  return { h, s, l }
+}
+
+export function hslToRgb({ h, s, l }: Hsl): Rgb {
+  const chroma = (1 - Math.abs(2 * l - 1)) * s
+  const sector = (((h % 360) + 360) % 360) / 60
+  const x = chroma * (1 - Math.abs((sector % 2) - 1))
+  const [r1, g1, b1] =
+    sector < 1 ? [chroma, x, 0]
+    : sector < 2 ? [x, chroma, 0]
+    : sector < 3 ? [0, chroma, x]
+    : sector < 4 ? [0, x, chroma]
+    : sector < 5 ? [x, 0, chroma]
+    : [chroma, 0, x]
+  const offset = l - chroma / 2
+  return { r: (r1 + offset) * 255, g: (g1 + offset) * 255, b: (b1 + offset) * 255 }
+}
+
 export function hsvToRgb({ h, s, v }: Hsv): Rgb {
   const chroma = v * s
   const sector = (((h % 360) + 360) % 360) / 60

@@ -271,3 +271,58 @@ describe('a chat with a finished task in it', () => {
     expect(chatSchema.safeParse(chat).success).toBe(false)
   })
 })
+
+describe('a chat with a finished palette in it', () => {
+  const palette = {
+    kind: 'palette' as const,
+    title: 'Brand palette',
+    colours: [
+      { hex: '#1F8FE0', role: 'primary' as const },
+      { hex: '#0B4F8A', role: 'accent' as const },
+      { hex: '#CFE9FB', role: 'background' as const },
+      { hex: '#0E1A2B', role: 'text' as const },
+    ],
+    ratio: 13.9,
+    level: 'AAA' as const,
+  }
+  const invoice = { invoiceId: 'inv-1', title: 'Invoice', number: 'INV-0007', client: 'Karoo Candles', totalCents: 255_000, issueDate: '2026-10-10', dueDate: '2026-10-24', lines: 1 }
+
+  it('is kept, is called after what was finished, and the card is kept with the message', () => {
+    const messages = [{ id: 1, from: 'droplet' as const, text: 'The brand palette is finished and saved.', result: palette }]
+    expect(chatHasBegun(messages)).toBe(true)
+    expect(chatTitle(messages)).toBe('Brand palette')
+    const stored = storableMessages([{ id: 1, from: 'droplet', text: 'Finished.', result: palette }])
+    expect(stored[0].result).toEqual(palette)
+    const chat = { id: 'c1', title: 'Brand palette', updatedAt: '2026-10-10T08:00:00.000Z', messages: stored }
+    expect(chatSchema.parse(chat).messages[0].result).toEqual(palette)
+  })
+
+  it('still reads a chat saved when only invoices had a card, which has no kind', () => {
+    const old = { id: 'c1', title: 'Invoice INV-0007', updatedAt: '2026-10-10T08:00:00.000Z', messages: [{ id: 1, from: 'droplet', text: 'Finished.', result: invoice }] }
+    expect(chatSchema.parse(old).messages[0].result).toEqual(invoice)
+  })
+
+  it('reads an invoice card and a palette card in the same chat', () => {
+    const chat = {
+      id: 'c1',
+      title: 'x',
+      updatedAt: '2026-10-10T08:00:00.000Z',
+      messages: [
+        { id: 1, from: 'droplet', text: 'a', result: palette },
+        { id: 2, from: 'droplet', text: 'b', result: invoice },
+      ],
+    }
+    const parsed = chatSchema.parse(chat)
+    expect(parsed.messages[0].result).toEqual(palette)
+    expect(parsed.messages[1].result).toEqual(invoice)
+  })
+
+  it('refuses a palette card with a colour that is not a hex code, too few colours, or no ratio', () => {
+    const bad = (result: unknown) => chatSchema.safeParse({ id: 'c1', title: 'x', updatedAt: '2026-10-10T08:00:00.000Z', messages: [{ id: 1, from: 'droplet', text: 'x', result }] }).success
+    expect(bad({ ...palette, colours: [{ hex: 'blue' }, { hex: '#FFFFFF' }] })).toBe(false)
+    expect(bad({ ...palette, colours: [{ hex: '#FFFFFF' }] })).toBe(false)
+    const { ratio: _ratio, ...noRatio } = palette
+    expect(bad(noRatio)).toBe(false)
+    expect(bad(palette)).toBe(true)
+  })
+})

@@ -1,5 +1,5 @@
 import { MagicWand3Icon } from '@solar-icons/react/linear'
-import { HARMONIES, generatePalette, type Harmony } from '../lib/harmony.ts'
+import { HARMONIES, HARMONY_NOTES, generatePalette, type Harmony } from '../lib/harmony.ts'
 import type { PaletteBlock } from '../lib/palette.ts'
 import './HarmonyCards.css'
 
@@ -12,13 +12,6 @@ type Props = {
   canGenerate: boolean
   onHarmonyChange: (harmony: Harmony) => void
   onGenerate: () => void
-}
-
-const WHAT_IT_IS: Record<Harmony, string> = {
-  analogous: 'Neighbours on the colour wheel. Calm, and rarely clashes.',
-  complementary: 'Opposites on the wheel. Lively, with strong contrast.',
-  triad: 'Three colours spaced evenly round the wheel. Bold and balanced.',
-  monochrome: 'One hue in lighter and darker tones. Quiet and consistent.',
 }
 
 // The harmony choice and the Generate button: each harmony as a card with a preview of the palette it would make from the selected
@@ -45,7 +38,7 @@ export default function HarmonyCards({ blocks, selectedId, harmony, variation, c
                 ))}
               </span>
               <span className="harmonies__name">{option.label}</span>
-              <span className="harmonies__note">{WHAT_IT_IS[option.id]}</span>
+              <span className="harmonies__note">{HARMONY_NOTES[option.id]}</span>
             </button>
           )
         })}
