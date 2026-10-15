@@ -1,9 +1,10 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
-import { CheckIcon, CopyIcon, PenIcon, RestartIcon } from '@solar-icons/react/linear'
+import { CheckIcon, CopyIcon, DocumentIcon, FileTextIcon, GalleryIcon, PenIcon, RestartIcon } from '@solar-icons/react/linear'
 import type { ChatBlock } from '../compose/blocks.ts'
 import type { JourneyStep } from '../compose/journey.ts'
 import type { Grounding } from '../compose/grounding.ts'
 import type { Receipt } from '../compose/receipt.ts'
+import type { AttachmentNote } from '../compose/attachments.ts'
 import type { Used } from '../compose/used.ts'
 import UsedLine from './UsedLine.tsx'
 import type { InvoiceResult } from '../lib/invoiceGuide.ts'
@@ -37,6 +38,8 @@ export type ThreadMessage = {
   text: string
   // Droplet is still working on this reply.
   pending?: boolean
+  // Files the founder attached to this message: their names and kinds, kept with the message. What was in them is never kept.
+  attachments?: AttachmentNote[]
   // A table or a checklist shown under the words, drawn by the interface from data.
   blocks?: ChatBlock[]
   // The ticks the founder made on a checklist, by `block:item`, kept with the message.
@@ -129,7 +132,9 @@ export default function ChatThread({ messages, onAction, onReply, done = NO_STEP
   // with buttons or a card is the app's question. Only while nothing is being worked on.
   const lastIndex = messages.length - 1
   const lastReply = messages[lastIndex]
-  const again = !busy && lastReply?.from === 'droplet' && !lastReply.pending && !lastReply.local && !lastReply.receipt && !lastReply.result && !(lastReply.actions && lastReply.actions.length > 0)
+  // A message that had files cannot be sent again: they are not kept.
+  const hadFiles = (messages[lastIndex - 1]?.attachments?.length ?? 0) > 0
+  const again = !busy && !hadFiles && lastReply?.from === 'droplet' && !lastReply.pending && !lastReply.local && !lastReply.receipt && !lastReply.result && !(lastReply.actions && lastReply.actions.length > 0)
   const askedBy = again && messages[lastIndex - 1]?.from === 'you' ? messages[lastIndex - 1] : undefined
 
   return (
@@ -160,10 +165,11 @@ export default function ChatThread({ messages, onAction, onReply, done = NO_STEP
                 <span className="thread__pending">
                   {/* <DropletLoader /> */}
                   {/* <ThinkingDots /> */}
-                  <DiamondLoader />
                   <span className="thread__pending-text">{progress?.words ?? 'Thinking'}</span>
                   {/* The seconds are drawn but not read out: the log is a live region, and it would announce the time every second. */}
-                  {progress?.elapsed && <span className="thread__elapsed" aria-hidden="true">· {progress.elapsed}</span>}
+                  {progress?.elapsed && <span className="thread__elapsed" aria-hidden="true"> · {progress.elapsed}</span>}
+                  {/* The loader follows the words on the same line, so the line starts where the reply will, and reads as the reply being written. */}
+                  <DiamondLoader />
                   {onStop && (
                     <button type="button" className="thread__stop" onClick={onStop}>
                       Stop
@@ -210,6 +216,16 @@ export default function ChatThread({ messages, onAction, onReply, done = NO_STEP
                 </form>
               ) : (
                 message.text
+              )}
+              {message.from === 'you' && message.attachments && message.attachments.length > 0 && (
+                <ul className="thread__files" aria-label="Attached files">
+                  {message.attachments.map((file, at) => (
+                    <li key={at} className="thread__file">
+                      {file.kind === 'image' ? <GalleryIcon size={14} aria-hidden="true" /> : file.kind === 'pdf' ? <DocumentIcon size={14} aria-hidden="true" /> : <FileTextIcon size={14} aria-hidden="true" />}
+                      <span>{file.name}</span>
+                    </li>
+                  ))}
+                </ul>
               )}
               {!message.pending && message.result && renderResult?.(message)}
               {!message.pending && message.blocks && message.blocks.length > 0 && (

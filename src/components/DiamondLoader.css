@@ -1,8 +1,11 @@
 /* Eight squares in a diamond lighting up one after another, 0.1s apart over a 0.8s turn. Pure black on a light screen and pure white on a dark one (--loader). */
 .diamond {
-  flex: none;
-  width: 1.25rem;
-  height: 1.25rem;
+  /* Small and inline, sitting on the line of text it follows. */
+  display: inline-block;
+  width: 0.875rem;
+  height: 0.875rem;
+  margin-left: 0.5rem;
+  vertical-align: -0.125em;
   color: var(--loader);
 }
 
