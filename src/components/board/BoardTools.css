@@ -28,14 +28,75 @@
   color: var(--accent);
 }
 
-.boardtool__options {
+/* The options of the tool in hand: a small strip centred directly under the bar, in the bar's own glass, with a label saying which tool they are for. It
+   is out of the bar's flow (absolute, placed against the bar by the component), so the bar never changes width or height for it, and it sits over the
+   board like the bar does. Its glass is drawn behind it for the same reason as the bar's: a backdrop blur on the strip itself would make its
+   contents blur only what is inside it. */
+.boardstrip {
+  position: absolute;
+  /* Until the component has placed it against the bar, just under the tool. */
+  top: calc(100% + 0.75rem);
+  left: 0;
+  z-index: 5;
+  translate: -50% 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.5rem;
+  padding: 0.25rem 0.75rem 0.25rem 1rem;
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-md);
+  white-space: nowrap;
+  isolation: isolate;
+}
+
+.boardstrip::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--glass-fill-fallback);
+  box-shadow: inset 0 0 0 1px var(--glass-border);
+}
+
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .boardstrip::before {
+    background: var(--glass-fill);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.5);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.5);
+  }
+}
+
+.boardstrip__label {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.boardstrip__controls {
   display: flex;
   align-items: center;
   gap: 0.375rem;
-  /* Clipped while it slides open, with room left so the ring of the chosen colour is not cut off. */
-  padding: 0.25rem;
-  margin: -0.25rem;
-  overflow: hidden;
+  position: relative;
+  padding-left: 0.75rem;
+}
+
+/* A divider between the label and the controls, drawn as between the tools of the bar. */
+.boardstrip__controls::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 1px;
+  height: 1.5rem;
+  background: var(--overlay-10);
+  transform: translateY(-50%);
+}
+
+/* While the strip is shown the tool's tooltip is not, since it would be drawn over the strip. The strip's label says which tool it is for. */
+.taskbar .taskbar__item:has(.boardstrip) > .taskbar__tip {
+  display: none;
 }
 
 .boardtool__colours {

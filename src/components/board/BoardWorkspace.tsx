@@ -10,6 +10,7 @@ import TaskBar, { type BarItem } from '../TaskBar.tsx'
 import WorkspaceShell, { type HeaderSlots } from '../WorkspaceShell.tsx'
 import BoardCanvas, { type BoardHandle } from './BoardCanvas.tsx'
 import BoardExportMenu from './BoardExportMenu.tsx'
+import EmptyBoard from './EmptyBoard.tsx'
 import { exportBlockedReason, exportBoard, type BoardFormat } from '../../lib/boardExport.ts'
 import { ArrowTool, FrameTool, SelectTool, ShapeTool, StickyTool, TemplatesTool, TextTool } from './BoardTools.tsx'
 
@@ -109,7 +110,7 @@ export default function BoardWorkspace({ projectId, projectName = 'Droplet', sta
       }
       headerSlots={headerSlots}
     />
-    <BoardCanvas state={state} dispatch={dispatch} reason={REASONS.board} controlRef={boardRef} decide={{ memory, remember, forget }} topInset={topInset} />
+    <BoardCanvas state={state} dispatch={dispatch} reason={REASONS.board} controlRef={boardRef} decide={{ memory, remember, forget }} topInset={topInset} empty={<EmptyBoard onTemplate={(id) => boardRef.current?.addTemplate(id)} />} />
     </>
   )
 }

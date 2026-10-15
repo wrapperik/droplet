@@ -6,7 +6,8 @@
      its padding and the screen's width included, instead of hugging the items. */
   position: relative;
   display: flex;
-  /* A safety net for a very narrow screen or a tool with its options open: one row is the rule on a laptop. */
+  /* A safety net for a narrow workspace (the board's seven labelled tools need about 780px): one row is the rule on a laptop. The options of the board's tool in
+     hand are not in the bar: they are in a strip under it, so no tool makes the bar wider. */
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;

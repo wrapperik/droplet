@@ -274,6 +274,19 @@
   color: var(--text);
 }
 
+/* The layer that holds the empty-board panel: the size of the view below the header and the bar, with the panel in the middle of it. The layer takes no
+   presses, so the board beneath it still gets them (a double-click on the empty board still adds a note); only the panel does. */
+.board__empty {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  /* The top is set to the height of what covers the board; the bottom leaves the zoom controls and the board's label clear. */
+  padding: 1.5rem 1.5rem 4.5rem;
+  pointer-events: none;
+}
+
 .board__zoom {
   position: absolute;
   right: 0.75rem;

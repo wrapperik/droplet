@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type RefObject } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from 'react'
 import {
   BOARD_H,
   BOARD_W,
@@ -71,6 +71,8 @@ type Props = {
   // When the board fills the screen, how many pixels at the top are covered by the header and the toolbar. The board is drawn starting below
   // that, so none of it is stuck behind them. Without it (0) the board is a box of its own.
   topInset?: number
+  // Shown in the middle of the view while there is nothing on the board (the workspace gives it the way to start). It takes presses only where it is.
+  empty?: ReactNode
   // Lets a selected note, shape or text be remembered as the business name or the offer, after a confirm in the selection bar.
   decide?: Decide
 }
@@ -101,7 +103,7 @@ const CREATION: Tool[] = ['sticky', 'shape', 'text', 'frame']
 // The board: a fixed area with a clear edge that scrolls, pans and zooms. Notes, shapes, text and frames are placed on it, moved, resized,
 // written in and deleted, and joined with arrows, with the pointer or the keyboard. It never grows past its edge, and nothing can be moved
 // off it.
-export default function BoardCanvas({ state, dispatch, reason, controlRef, decide, topInset = 0 }: Props) {
+export default function BoardCanvas({ state, dispatch, reason, controlRef, decide, topInset = 0, empty }: Props) {
   const { selection, tool } = state
   const items = docOf(state).items
   const viewportRef = useRef<HTMLDivElement>(null)
@@ -791,6 +793,12 @@ export default function BoardCanvas({ state, dispatch, reason, controlRef, decid
             {showBar && barStyle && <SelectionBar key={selection.join(',')} selected={selectedNow} held={held} dispatch={dispatch} say={say} style={barStyle} template={groupTemplate ? { name: groupTemplate.name, reset: resetTemplate } : null} decide={decide} />}
           </div>
         </div>
+
+        {empty && items.length === 0 && (
+          <div className="board__empty" style={{ paddingTop: topInset + 24 }}>
+            {empty}
+          </div>
+        )}
 
         <div className="board__zoom glass glass--strong" role="group" aria-label="Zoom">
           <button type="button" className="board__zoom-button" aria-label="Zoom out" onClick={() => changeZoom(stepZoom(zoom, -1))}>

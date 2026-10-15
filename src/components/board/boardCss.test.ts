@@ -49,4 +49,51 @@ describe('the board stylesheet', () => {
     expect(rule.body).toMatch(/top:\s*auto/)
     expect(rule.body).toMatch(/bottom:/)
   })
+
+  it('keeps the zoom controls and the reason label in different corners, the zoom at the bottom right', () => {
+    const zoom = rules.find((r) => r.selector === '.board__zoom')!
+    const label = rules.find((r) => r.selector === '.board__label')!
+    expect(zoom.body).toMatch(/right:/)
+    expect(zoom.body).not.toMatch(/left:/)
+    expect(label.body).toMatch(/left:/)
+    expect(label.body).not.toMatch(/right:/)
+  })
+
+  it('has a layer for the empty-board panel that takes no presses, so the board beneath it still gets them', () => {
+    const layer = rules.find((r) => r.selector === '.board__empty')!
+    expect(layer.body).toMatch(/pointer-events:\s*none/)
+  })
+})
+
+const toolsCss = readFileSync('src/components/board/BoardTools.css', 'utf8')
+const toolRules = [...toolsCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(([, selector, body]) => ({ selector: selector.replace(/\/\*[\s\S]*?\*\//g, '').trim(), body }))
+const emptyCss = readFileSync('src/components/board/EmptyBoard.css', 'utf8')
+
+describe('the options strip under the bar', () => {
+  it("is out of the bar's flow, so the options of the tool in hand can never make the bar wider", () => {
+    const rule = toolRules.find((r) => r.selector === '.boardstrip')!
+    expect(rule.body).toMatch(/position:\s*absolute/)
+    expect(toolsCss).not.toContain('.boardtool__options')
+  })
+
+  it("draws its glass behind it from the same tokens as the bar's", () => {
+    const rule = toolRules.find((r) => r.selector === '.boardstrip::before')!
+    expect(rule.body).toContain('var(--glass-fill-fallback)')
+    expect(toolsCss).toMatch(/\.boardstrip::before\s*\{[^}]*var\(--glass-fill\)/)
+  })
+
+  it('takes the tooltip of its tool away while it is shown, so the two are not drawn over each other', () => {
+    const rule = toolRules.find((r) => r.selector.includes(':has(.boardstrip)'))!
+    expect(rule.body).toMatch(/display:\s*none/)
+  })
+})
+
+describe('the empty-board panel', () => {
+  it('takes presses only on the panel itself', () => {
+    expect(emptyCss).toMatch(/\.emptyboard\s*\{[^}]*pointer-events:\s*auto/)
+  })
+
+  it('fades in only when motion is allowed', () => {
+    expect(emptyCss).toMatch(/@media \(prefers-reduced-motion: no-preference\)\s*\{\s*\.emptyboard\s*\{[^}]*animation:/)
+  })
 })
