@@ -190,12 +190,15 @@ export const MODES = ['base', 'advanced'] as const
 export type Mode = (typeof MODES)[number]
 export const modeOf = (request: { mode?: Mode }): Mode => request.mode ?? 'base'
 
+// The longest message a founder can send. Long enough to paste in a brief, an email or a few paragraphs of notes.
+export const MAX_INTENT_CHARS = 4000
+
 export const composeRequestSchema = z.object({
   // Files the founder attached to this message (a picture, a PDF, a text file), for the model to read. For this message only: never stored.
   attachments: attachmentsField.optional(),
   // Absent means base.
   mode: z.enum(MODES).optional(),
-  intent: z.string().trim().min(1).max(600),
+  intent: z.string().trim().min(1).max(MAX_INTENT_CHARS),
   // The conversation so far, oldest first, so a follow-up such as "make it warmer" makes sense.
   history: z
     .array(z.object({ role: z.enum(['founder', 'droplet']), text: z.string().trim().min(1).max(1500) }))

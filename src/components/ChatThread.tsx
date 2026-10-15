@@ -5,6 +5,7 @@ import type { JourneyStep } from '../compose/journey.ts'
 import type { Grounding } from '../compose/grounding.ts'
 import type { Receipt } from '../compose/receipt.ts'
 import type { AttachmentNote } from '../compose/attachments.ts'
+import { MAX_INTENT_CHARS } from '../compose/spec.ts'
 import type { Used } from '../compose/used.ts'
 import UsedLine from './UsedLine.tsx'
 import type { InvoiceResult } from '../lib/invoiceGuide.ts'
@@ -194,7 +195,7 @@ export default function ChatThread({ messages, onAction, onReply, done = NO_STEP
                     aria-label="Edit your message"
                     value={editing.text}
                     rows={2}
-                    maxLength={600}
+                    maxLength={MAX_INTENT_CHARS}
                     autoFocus
                     onChange={(event) => setEditing({ id: message.id, text: event.target.value })}
                     onKeyDown={(event) => {

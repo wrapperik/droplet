@@ -26,6 +26,8 @@
    no bubble: plain text on the left. */
 .thread__message--you {
   align-self: flex-end;
+  /* A long message keeps the founder's line breaks. */
+  white-space: pre-wrap;
   padding: 0.625rem 1rem;
   border-radius: var(--radius-lg);
   background: var(--overlay-10);

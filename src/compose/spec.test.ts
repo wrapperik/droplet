@@ -1,5 +1,5 @@
 import { chatTurn, openSnapshot, validOpenTurn } from './fixtures.ts'
-import { allowanceSchema, composeRequestSchema, modeOf, turnJsonSchema, turnSchema, workspaceSnapshotSchema } from './spec.ts'
+import { allowanceSchema, composeRequestSchema, MAX_INTENT_CHARS, modeOf, turnJsonSchema, turnSchema, workspaceSnapshotSchema } from './spec.ts'
 
 describe('a turn that asks a question', () => {
   const ask = { ...chatTurn, question: 'Do you know what one box costs you?', replies: ['Yes', 'Not sure yet'] }
@@ -116,7 +116,10 @@ describe('workspaceSnapshotSchema', () => {
 describe('composeRequestSchema', () => {
   it('needs an intent and limits its length', () => {
     expect(composeRequestSchema.safeParse({ intent: '' }).success).toBe(false)
-    expect(composeRequestSchema.safeParse({ intent: 'x'.repeat(601) }).success).toBe(false)
+    expect(composeRequestSchema.safeParse({ intent: 'x'.repeat(MAX_INTENT_CHARS + 1) }).success).toBe(false)
+    // long enough to paste in a brief or a few paragraphs of notes
+    expect(composeRequestSchema.safeParse({ intent: 'x'.repeat(MAX_INTENT_CHARS) }).success).toBe(true)
+    expect(composeRequestSchema.safeParse({ intent: 'x'.repeat(3000) }).success).toBe(true)
     expect(composeRequestSchema.safeParse({ intent: 'a colour palette' }).success).toBe(true)
   })
 

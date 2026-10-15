@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { CloseCircleIcon, FileTextIcon, GalleryIcon, DocumentIcon, LayersMinimalisticIcon, PaperclipIcon, ReplyIcon, TuningIcon } from '@solar-icons/react/linear'
 import { useDismiss } from '../hooks/useDismiss.ts'
 import type { Attachment, AttachmentKind } from '../compose/attachments.ts'
-import type { Mode } from '../compose/spec.ts'
+import { MAX_INTENT_CHARS, type Mode } from '../compose/spec.ts'
 import { ACCEPT, checkRoom, readAttachment, sizeLabel, type PendingFile } from '../lib/attachFile.ts'
 import type { Hint } from '../lib/composerHints.ts'
 import type { TaskId } from '../lib/tasks.ts'
@@ -38,6 +38,11 @@ type Props = {
 }
 
 // The two equal ways in: describe what you need, or choose a task from the menu.
+// The tallest the field grows before it scrolls: about ten lines.
+const MAX_FIELD_PX = 240
+// The count of characters is shown once the message is this close to the limit.
+const COUNT_SHOWN_FROM = MAX_INTENT_CHARS * 0.8
+
 export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false, busy = false, showTip = true, hints }: Props) {
   const [text, setText] = useState('')
   // The workspaces menu (the five tasks), and the menu of kinds of file to attach. One menu is open at a time.
@@ -58,7 +63,7 @@ export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false
   const setWorkMode = useWorkMode((state) => state.setMode)
   const wrapRef = useRef<HTMLDivElement>(null)
   const chipRef = useRef<HTMLButtonElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   const formRef = useRef<HTMLFormElement>(null)
   const close = useCallback(() => {
     setMenuOpen(false)
@@ -73,6 +78,22 @@ export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false
   }, [docked])
 
   // A message can be only files: then it asks Droplet to read them.
+  // The field grows with what is written, up to a limit, and scrolls inside after that: a pasted brief or a few paragraphs are all in view, and the bar
+  // does not push the thread off the screen. It shrinks again when the text goes.
+  useLayoutEffect(() => {
+    const field = inputRef.current
+    if (!field) return
+    field.style.height = 'auto'
+    field.style.height = `${Math.min(field.scrollHeight, MAX_FIELD_PX)}px`
+  }, [text])
+
+  // Enter sends, as before; Shift and Enter start a new line. Not while an input method (Chinese, Japanese, accents) is still composing a character.
+  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
+    event.preventDefault()
+    formRef.current?.requestSubmit()
+  }
+
   const canSend = (text.trim().length > 0 || files.length > 0) && !busy && !reading
 
   const submit = (event: FormEvent) => {
@@ -216,16 +237,23 @@ export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false
           <PaperclipIcon size={22} aria-hidden="true" />
         </button>
         <input ref={pickerRef} type="file" multiple className="visually-hidden" tabIndex={-1} aria-label="Choose files to attach" onChange={(event) => void took(event)} />
-        <input
+        <textarea
           ref={inputRef}
           className="intent__input"
-          type="text"
+          rows={1}
           value={text}
+          maxLength={MAX_INTENT_CHARS}
           onChange={(event) => setText(event.target.value)}
+          onKeyDown={onKeyDown}
           placeholder={hints?.placeholder ?? 'Write your message...'}
           aria-label="Describe what you need"
           autoComplete="off"
         />
+        {text.length >= COUNT_SHOWN_FROM && (
+          <span className="intent__count" role="status" data-full={text.length >= MAX_INTENT_CHARS || undefined}>
+            {text.length.toLocaleString('en-GB')} / {MAX_INTENT_CHARS.toLocaleString('en-GB')}
+          </span>
+        )}
         <button
           type="button"
           className="intent__mode"

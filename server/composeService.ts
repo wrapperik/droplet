@@ -122,7 +122,7 @@ export async function handleCompose(body: unknown, deps: ComposeServiceDeps): Pr
 
   const parsed = composeRequestSchema.safeParse(body)
   if (!parsed.success) {
-    return { status: 400, body: { error: 'bad_request', message: 'Send a request with an intent of up to 600 characters.' } }
+    return { status: 400, body: { error: 'bad_request', message: 'Send a request with a message of up to 4,000 characters.' } }
   }
   const request = parsed.data
   const asked = modeOf(request)

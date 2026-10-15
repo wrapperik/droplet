@@ -31,7 +31,7 @@ describe('handleCompose', () => {
     })
     expect((await handleCompose({ intent: '' }, value)).status).toBe(400)
     expect((await handleCompose('hello', value)).status).toBe(400)
-    expect((await handleCompose({ intent: 'x'.repeat(601) }, value)).status).toBe(400)
+    expect((await handleCompose({ intent: 'x'.repeat(4001) }, value)).status).toBe(400)
     expect(called).toBe(false)
   })
 

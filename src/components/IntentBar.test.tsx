@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { WORK_MODE_STORAGE_KEY } from '../lib/workMode.ts'
@@ -249,5 +249,73 @@ describe('attaching files, and the workspaces menu beside the bar', () => {
     render(<IntentBar />)
     await user.click(screen.getByRole('button', { name: /Show me a menu of available workspaces/ }))
     expect(screen.getByRole('menu', { name: 'Workspaces' })).not.toHaveClass('task-menu--right')
+  })
+})
+
+describe('a long message in the bar', () => {
+  const field = () => screen.getByLabelText('Describe what you need') as HTMLTextAreaElement
+
+  it('is a field that grows with what is written, up to a limit, and then scrolls', async () => {
+    let tall = 80
+    const scroll = vi.spyOn(HTMLTextAreaElement.prototype, 'scrollHeight', 'get').mockImplementation(() => tall)
+    try {
+      const user = userEvent.setup()
+      render(<IntentBar />)
+      await user.type(field(), 'a')
+      expect(field().style.height).toBe('80px')
+      tall = 160
+      await user.type(field(), 'b')
+      expect(field().style.height).toBe('160px')
+      // past the most it grows, it stops and scrolls inside
+      tall = 900
+      await user.type(field(), 'c')
+      expect(field().style.height).toBe('240px')
+      // and it shrinks again when the text goes
+      tall = 48
+      await user.clear(field())
+      expect(field().style.height).toBe('48px')
+    } finally {
+      scroll.mockRestore()
+    }
+  })
+
+  it('sends on Enter and starts a new line on Shift and Enter, keeping the line breaks', async () => {
+    const user = userEvent.setup()
+    const onSubmitIntent = vi.fn()
+    render(<IntentBar onSubmitIntent={onSubmitIntent} />)
+    await user.type(field(), 'First line{Shift>}{Enter}{/Shift}Second line')
+    expect(onSubmitIntent).not.toHaveBeenCalled()
+    expect(field().value).toBe('First line\nSecond line')
+    await user.keyboard('{Enter}')
+    expect(onSubmitIntent).toHaveBeenCalledWith('First line\nSecond line', 'base')
+    expect(field().value).toBe('')
+  })
+
+  it('does not send on Enter while an input method is still composing', () => {
+    const onSubmitIntent = vi.fn()
+    render(<IntentBar onSubmitIntent={onSubmitIntent} />)
+    fireEvent.change(field(), { target: { value: 'konnichiwa' } })
+    fireEvent.keyDown(field(), { key: 'Enter', isComposing: true })
+    expect(onSubmitIntent).not.toHaveBeenCalled()
+  })
+
+  it('takes up to 4,000 characters, and shows how many are used only when it is close', async () => {
+    const user = userEvent.setup()
+    render(<IntentBar />)
+    expect(field()).toHaveAttribute('maxlength', '4000')
+    expect(screen.queryByText(/\/ 4,000/)).not.toBeInTheDocument()
+    await user.click(field())
+    await user.paste('x'.repeat(3300))
+    expect(screen.getByText('3,300 / 4,000')).toBeInTheDocument()
+  })
+
+  it('sends a message far longer than the old limit of 600 characters', async () => {
+    const user = userEvent.setup()
+    const onSubmitIntent = vi.fn()
+    render(<IntentBar onSubmitIntent={onSubmitIntent} />)
+    await user.click(field())
+    await user.paste('word '.repeat(500).trim())
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    expect(onSubmitIntent.mock.calls[0][0].length).toBeGreaterThan(2000)
   })
 })
