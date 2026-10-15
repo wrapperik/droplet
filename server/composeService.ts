@@ -163,7 +163,12 @@ export async function handleCompose(body: unknown, deps: ComposeServiceDeps): Pr
     // Research: when the founder's own words ask for it and a search is set up, the web is searched here, and what comes back goes to the model to read.
     let web: WebSearched | undefined
     let searchNote: string | undefined
-    if (deps.search && wantsResearch(request.intent)) {
+    if (!deps.search && wantsResearch(request.intent)) {
+      // Asked for research with no search set up: said plainly, so it is clear why nothing was looked up and what to do about it.
+      web = { refused: 'web search is not set up on this server (no TAVILY_API_KEY)' }
+      searchNote = 'Web search is not set up yet (the server has no TAVILY_API_KEY), so this answer is from what I know and may be out of date.'
+      console.warn('compose: research was asked for but TAVILY_API_KEY is not set, so nothing was searched')
+    } else if (deps.search && wantsResearch(request.intent)) {
       const facts = request.project?.facts
       const asked = queryFor(request.intent, { what: facts?.['profile.what'], where: facts?.['profile.where'] })
       if ('refused' in asked) {

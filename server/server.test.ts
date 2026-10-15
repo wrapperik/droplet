@@ -480,7 +480,9 @@ describe('research', () => {
     const without = setupWith(null)
     const reply = await handleCompose(research, without.deps as never)
     expect(reply.status).toBe(200)
-    expect(without.prompts[0]).not.toContain('<web_results')
+    // the model is told why, and so is the founder, instead of the search silently not happening
+    expect(without.prompts[0]).toContain('Not searched: web search is not set up on this server')
+    expect(String(reply.body.note)).toMatch(/Web search is not set up yet/)
     expect(reply.body).not.toHaveProperty('grounding')
   })
 
