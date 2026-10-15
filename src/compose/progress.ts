@@ -9,6 +9,8 @@ import { z } from 'zod'
 export const stageSchema = z.discriminatedUnion('stage', [
   // Asking the model. `search` is true when it may look things up (Advanced), which it decides for itself.
   z.object({ stage: z.literal('reading'), search: z.boolean().optional() }),
+  // The server is searching the web because the founder asked for research. The query is the founder's own words (see webSearch.ts).
+  z.object({ stage: z.literal('searching'), query: z.string().max(200) }),
   // The model answered. If it searched the web, what for (from the API's own metadata, not from the model's words).
   z.object({ stage: z.literal('checking'), searched: z.array(z.string().max(120)).max(5).optional() }),
   // The first reply was not usable, so the model is asked once more with the reasons.
@@ -40,6 +42,8 @@ export function stageWords(stage: ShownStage, context: StageContext = {}): strin
       const from = context.from ? `Reading your message alongside ${context.from}` : 'Reading your message'
       return stage.search ? `${from}, and looking things up if needed` : from
     }
+    case 'searching':
+      return `Searching the web for “${shorten(stage.query, MAX_QUERY_SHOWN)}”`
     case 'checking': {
       const checked = context.where ? `Checking the reply fits ${context.where}` : 'Checking the reply'
       // A long search is cut, so the line stays short.

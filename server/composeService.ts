@@ -2,6 +2,7 @@ import { ComposeError, composeWorkspace, type ModelCaller } from '../src/compose
 import { backgroundRequestSchema, isBackgroundRequest } from '../src/compose/background.ts'
 import { runDigest, runSummarise } from '../src/compose/runBackground.ts'
 import type { ComposeStage } from '../src/compose/progress.ts'
+import { groundingOfSearch, queryFor, wantsResearch, type WebSearched, type WebSearcher } from '../src/compose/webSearch.ts'
 import { composeRequestSchema, modeOf, type Allowance } from '../src/compose/spec.ts'
 import type { CompositionLogEntry } from './compositionLog.ts'
 import { DAY_MS, type AdvancedAllowance, type AdvancedUse, type RateLimiter } from './rateLimit.ts'
@@ -20,6 +21,8 @@ export type ComposeServiceDeps = {
   // Words to use in place of the standard ones for some failures. The dev server says what to do in .env.local, which means nothing to
   // anyone using the deployed app.
   messages?: Partial<Record<ComposeError['kind'], string>>
+  // Searches the web when the founder asks for research. Null when no search key is set: research is then answered from what the model knows, and it says so.
+  search?: WebSearcher | null
   // Told where the work has got to, for the progress the founder sees. Only a stage, never what was written.
   onStage?: (stage: ComposeStage) => void
 }
@@ -157,14 +160,36 @@ export async function handleCompose(body: unknown, deps: ComposeServiceDeps): Pr
   if (!(await deps.limiter.take())) return fail('rate_limited')
 
   try {
-    const result = await composeWorkspace({ ...request, mode }, deps.call, deps.onStage)
+    // Research: when the founder's own words ask for it and a search is set up, the web is searched here, and what comes back goes to the model to read.
+    let web: WebSearched | undefined
+    let searchNote: string | undefined
+    if (deps.search && wantsResearch(request.intent)) {
+      const facts = request.project?.facts
+      const asked = queryFor(request.intent, { what: facts?.['profile.what'], where: facts?.['profile.where'] })
+      if ('refused' in asked) {
+        web = { refused: asked.refused }
+        searchNote = asked.refused
+      } else {
+        deps.onStage?.({ stage: 'searching', query: asked.query.slice(0, 200) })
+        try {
+          const results = await deps.search(asked.query)
+          web = { query: asked.query, results }
+          if (results.length === 0) searchNote = 'The web search found nothing for that.'
+        } catch {
+          // A search that fails is not a failed request: the model answers without, and says so.
+          web = { refused: 'the search service could not be reached' }
+          searchNote = 'The web search could not be reached, so this answer is from what I know and may be out of date.'
+        }
+      }
+    }
+    const result = await composeWorkspace({ ...request, mode }, deps.call, deps.onStage, web)
     const meta = result.meta
     const answeredBy = meta?.answeredBy ?? mode
     // Only an answer Advanced itself gave counts against the founder. Quick answering for Google's busy model does not.
     const spent = answeredBy === 'advanced'
     if (spent) await Promise.resolve(deps.advanced.spend()).catch(() => undefined)
     const busy = asked === 'advanced' && mode === 'advanced' && answeredBy === 'base' ? BUSY_NOTE : undefined
-    const note = [busy ?? degraded, result.note].filter(Boolean).join(' ') || undefined
+    const note = [busy ?? degraded, searchNote, result.note].filter(Boolean).join(' ') || undefined
 
     const use = await usePromise
     const allowance = use ? allowanceOf({ used: use.used + (spent ? 1 : 0), oldestAt: use.oldestAt ?? (spent ? now() : null) }, limit) : undefined
@@ -188,7 +213,7 @@ export async function handleCompose(body: unknown, deps: ComposeServiceDeps): Pr
     })
     return {
       status: 200,
-      body: { outcome: result.outcome, answeredBy, ...(allowance ? { allowance } : {}), turn: result.turn, ...(note ? { note } : {}), ...(result.grounding ? { grounding: result.grounding } : {}) },
+      body: { outcome: result.outcome, answeredBy, ...(allowance ? { allowance } : {}), turn: result.turn, ...(note ? { note } : {}), ...(result.grounding ? { grounding: result.grounding } : web && 'results' in web && web.results.length > 0 ? { grounding: groundingOfSearch(web) } : {}) },
     }
   } catch (error) {
     if (error instanceof ComposeError) return fail(error.kind, error.kind === 'quota' ? error.message : undefined)

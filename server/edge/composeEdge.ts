@@ -1,4 +1,5 @@
 import type { ModelCaller } from '../../src/compose/compose.ts'
+import type { WebSearcher } from '../../src/compose/webSearch.ts'
 import { callerFromEnv, type ComposeEnv } from '../composeEnv.ts'
 import { handleAllowance, handleCompose } from '../composeService.ts'
 import { EVENT_STREAM, eventStream, wantsStream } from '../composeStream.ts'
@@ -28,6 +29,8 @@ export const MAX_BODY_BYTES = 12_000_000
 export type ComposeHandlerDeps = {
   // Null when no API key is set.
   call: ModelCaller | null
+  // Searches the web when the founder asks for research. Null when no search key is set.
+  search?: WebSearcher | null
   // Who the bearer token belongs to, or null if it belongs to no signed-in founder.
   authenticate: (token: string) => Promise<{ id: string } | null>
   // How many compositions this founder asked for since the given time. Throws if it cannot be found out.
@@ -90,6 +93,7 @@ export function createComposeHandler(deps: ComposeHandlerDeps): (request: Reques
 
       const serviceDeps = {
         call: deps.call,
+        search: deps.search ?? null,
         now,
         messages: MESSAGES,
         limiter: { take: async () => (await deps.recentCount(user.id, new Date(now() - HOUR_MS).toISOString())) < deps.limitPerHour },
@@ -131,6 +135,7 @@ export function createEdgeComposeHandler(env: ComposeEnv, fetchImpl: Fetch = fet
 
   return createComposeHandler({
     call: configured.call,
+    search: configured.search,
     limitPerHour: configured.limitPerHour,
     advancedPerDay: configured.advancedPerDay,
 

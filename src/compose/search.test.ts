@@ -249,12 +249,14 @@ describe('what Quick is told, and what it is not', () => {
     const quick = systemPromptFor(view, 'base')
     expect(quick).not.toMatch(/<web_search> says whether you can search Google this time/)
     expect(quick).not.toMatch(/Do not paste links or list sources/)
-    expect(quick).toMatch(/You cannot search the web in this mode/)
+    expect(quick).toMatch(/You cannot search the web yourself in this mode/)
+    // the one exception is research, where the app searches and gives the results
+    expect(quick).toMatch(/when the founder asks you to research something, the app searches for you and includes <web_results>/)
     expect(quick).toMatch(/may be out of date/)
     // there is no Advanced switch in the menu, so Quick never points to one
     expect(quick).not.toMatch(/Advanced/)
     expect(quick).toMatch(/never offer to/)
-    expect(quick).toMatch(/Never claim to have looked something up/)
+    expect(quick).toMatch(/Never claim to have looked something up that is not in <web_results>/)
   })
 
   it('Quick is the default, and Advanced is told how to search', () => {

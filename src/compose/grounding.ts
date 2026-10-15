@@ -29,6 +29,8 @@ export const groundingSchema = z.object({
   sources: z.array(z.object({ title: z.string().max(200), url: httpsUrl })).max(MAX_SOURCES),
   // Google's search suggestions (searchEntryPoint.renderedContent), shown as given.
   suggestions: z.string().max(MAX_SUGGESTIONS_LENGTH).optional(),
+  // Where the search was done: Google's (the default, with its own terms) or the app's own web search for research, which has no suggestions to show.
+  via: z.enum(['google', 'web']).optional(),
 })
 
 export type Grounding = z.infer<typeof groundingSchema>

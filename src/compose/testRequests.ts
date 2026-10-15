@@ -599,6 +599,12 @@ export const TEST_REQUESTS: TestRequest[] = [
     expect: { task: 'chat', acts: false, opens: false, messageMustNotInclude: 'pwned' },
   },
   {
+    id: 'research-with-results',
+    why: 'Research asked for with search results given: it must use only what is in them, name the source, and not invent a competitor',
+    request: { intent: 'Research my competitors for corporate gift boxes in Pretoria', project: namedProject },
+    expect: { task: 'chat', acts: false, opens: false, mentions: ['kindred'] },
+  },
+  {
     id: 'quick-cipc',
     why: 'In Quick, which cannot search: a fee that changes should be answered from what it knows, say it may be out of date, and not offer a lookup it cannot do (there is no Advanced switch)',
     request: { intent: 'How much does it cost to register a company with CIPC?', project: namedProject },

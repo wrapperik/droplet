@@ -433,3 +433,87 @@ describe('background work: a digest of a workspace', () => {
     expect((await handleCompose({ ...digestRequest, workspace: 'logo' }, value)).status).toBe(400)
   })
 })
+
+describe('research', () => {
+  const research = { intent: 'Research the competition for my gift box business' }
+  const found = [{ title: 'Gift boxes', url: 'https://example.co.za/boxes', snippet: 'Boxes from R450.' }]
+  const setupWith = (search: ((query: string) => Promise<typeof found>) | null) => {
+    const prompts: string[] = []
+    const stages: unknown[] = []
+    const deps = {
+      call: async (request: { user: string }) => {
+        prompts.push(request.user)
+        return JSON.stringify({ task: 'chat', message: 'Here is what I found.', actions: [], memoryUsed: [] })
+      },
+      search,
+      limiter: { take: async () => true },
+      advanced: { limit: 0, status: async () => ({ used: 0, oldestAt: null }), spend: () => undefined },
+      log: () => undefined,
+      onStage: (stage: unknown) => void stages.push(stage),
+    }
+    return { deps, prompts, stages }
+  }
+
+  it('searches the web when the founder asks for research, gives the model the results, and returns the pages as sources', async () => {
+    const queries: string[] = []
+    const { deps, prompts, stages } = setupWith(async (query) => {
+      queries.push(query)
+      return found
+    })
+    const reply = await handleCompose(research, deps as never)
+    expect(reply.status).toBe(200)
+    expect(queries).toEqual(['Research the competition for my gift box business'])
+    expect(prompts[0]).toContain('<web_results query="Research the competition for my gift box business">')
+    expect(stages).toContainEqual({ stage: 'searching', query: 'Research the competition for my gift box business' })
+    expect(reply.body.grounding).toEqual({ queries: queries, sources: [{ title: 'Gift boxes', url: 'https://example.co.za/boxes' }], via: 'web' })
+  })
+
+  it('does not search for a message that is not research, or when no search is set up', async () => {
+    const searched: string[] = []
+    const withSearch = setupWith(async (query) => {
+      searched.push(query)
+      return found
+    })
+    await handleCompose({ intent: 'How should I price a gift box?' }, withSearch.deps as never)
+    expect(searched).toEqual([])
+    expect(withSearch.prompts[0]).not.toContain('<web_results')
+    const without = setupWith(null)
+    const reply = await handleCompose(research, without.deps as never)
+    expect(reply.status).toBe(200)
+    expect(without.prompts[0]).not.toContain('<web_results')
+    expect(reply.body).not.toHaveProperty('grounding')
+  })
+
+  it('does not search with a private detail in the message, and says so to the model and in a note', async () => {
+    const searched: string[] = []
+    const { deps, prompts } = setupWith(async (query) => {
+      searched.push(query)
+      return found
+    })
+    const reply = await handleCompose({ intent: 'Research competitors, my email is megan@kindred.example' }, deps as never)
+    expect(searched).toEqual([])
+    expect(prompts[0]).toContain('Not searched:')
+    expect(String(reply.body.note)).toMatch(/private detail/)
+    expect(prompts[0]).not.toMatch(/<web_results query/)
+  })
+
+  it('answers without the search, and says so, when the search service cannot be reached', async () => {
+    const { deps, prompts } = setupWith(async () => {
+      throw new Error('down')
+    })
+    const reply = await handleCompose(research, deps as never)
+    expect(reply.status).toBe(200)
+    expect(prompts[0]).toContain('Not searched: the search service could not be reached')
+    expect(String(reply.body.note)).toMatch(/web search could not be reached/)
+  })
+
+  it('borrows what the business does from the confirmed facts for a short request', async () => {
+    const queries: string[] = []
+    const { deps } = setupWith(async (query) => {
+      queries.push(query)
+      return found
+    })
+    await handleCompose({ intent: 'Do a competitive analysis', project: { projectName: 'K', businessName: '', offer: '', hasPalette: false, hasBusinessDetails: false, clients: 0, invoices: 0, boardItems: 0, facts: { 'profile.what': 'corporate gift boxes', 'profile.where': 'Pretoria' } } }, deps as never)
+    expect(queries).toEqual(['Do a competitive analysis corporate gift boxes Pretoria'])
+  })
+})

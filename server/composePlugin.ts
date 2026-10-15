@@ -40,7 +40,7 @@ function readBody(req: IncomingMessage): Promise<unknown> {
 }
 
 export function composePlugin(env: Record<string, string>): Plugin {
-  const { provider, call, baseModel, advancedModel, limitPerHour, advancedPerDay } = callerFromEnv(env)
+  const { provider, call, search, baseModel, advancedModel, limitPerHour, advancedPerDay } = callerFromEnv(env)
   const limiter = createRateLimiter(limitPerHour, HOUR_MS)
   // On this machine a founder's Advanced answers are counted in memory, so restarting the dev server starts the day again.
   const advanced = createAdvancedAllowance(advancedPerDay)
@@ -82,11 +82,11 @@ export function composePlugin(env: Record<string, string>): Plugin {
           // The stage as it changes, then the reply, as server-sent events. The status is in the result event.
           res.statusCode = 200
           res.setHeader('content-type', EVENT_STREAM)
-          await streamEvents((onStage) => handleCompose(body, { call, limiter, advanced, log: appendComposition, onStage }), (text) => void res.write(text))
+          await streamEvents((onStage) => handleCompose(body, { call, search, limiter, advanced, log: appendComposition, onStage }), (text) => void res.write(text))
           res.end()
           return
         }
-        const reply = await handleCompose(body, { call, limiter, advanced, log: appendComposition })
+        const reply = await handleCompose(body, { call, search, limiter, advanced, log: appendComposition })
         res.statusCode = reply.status
         res.end(JSON.stringify(reply.body))
       })

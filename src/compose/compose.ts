@@ -4,6 +4,7 @@ import { inlineFilesOf, type InlineFile } from './attachments.ts'
 import type { Grounding } from './grounding.ts'
 import { buildUserContent, systemPromptFor } from './prompt.ts'
 import type { ComposeStage } from './progress.ts'
+import type { WebSearched } from './webSearch.ts'
 import { checkTurnFor, withoutRepeatedQuestion } from './rules.ts'
 import { boardTurnSchema } from './boardSpec.ts'
 import { invoiceTurnSchema } from './invoiceSpec.ts'
@@ -115,7 +116,7 @@ function normalise(turn: AnyTurn): AnyTurn {
 
 // `onStage` is told where the loop has got to (asking, checking, trying again), for the progress the founder sees. It is told the stage and nothing the
 // founder wrote, and a listener that throws does not stop the loop.
-export async function composeWorkspace(request: ComposeRequest, call: ModelCaller, onStage?: (stage: ComposeStage) => void): Promise<ComposeResult> {
+export async function composeWorkspace(request: ComposeRequest, call: ModelCaller, onStage?: (stage: ComposeStage) => void, web?: WebSearched): Promise<ComposeResult> {
   const tell = (stage: ComposeStage) => {
     try {
       onStage?.(stage)
@@ -143,11 +144,11 @@ export async function composeWorkspace(request: ComposeRequest, call: ModelCalle
     tell(attempt === 0 ? { stage: 'reading', ...(search ? { search: true } : {}) } : { stage: 'retrying' })
     const raw = await call({
       system,
-      user: buildUserContent(request, sent, search),
+      user: buildUserContent(request, sent, search, web),
       schema,
       mode,
       ...(inlineFilesOf(request.attachments).length > 0 ? { files: inlineFilesOf(request.attachments) } : {}),
-      ...(search ? { search, userWithoutSearch: buildUserContent(request, sent, false) } : {}),
+      ...(search ? { search, userWithoutSearch: buildUserContent(request, sent, false, web) } : {}),
     })
     const reply: ModelReply = typeof raw === 'string' ? { text: raw } : raw
     if (reply.grounding) searches += 1

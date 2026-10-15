@@ -151,3 +151,14 @@ npm run deploy:compose
 ```
 
 To go back: `npx supabase secrets unset AI_PROVIDER` (and redeploy is not needed, the function reads its secrets when it starts).
+
+## Web search for research
+
+Set `TAVILY_API_KEY` (a Tavily key, from tavily.com, which has a free tier) in `.env` and, for the live site, as a secret:
+
+```bash
+npx supabase secrets set TAVILY_API_KEY=your-tavily-key
+npm run deploy:compose
+```
+
+When a founder's own words ask for research ("research", "competitors", "competitive analysis", "look up", "latest trends" and the like), the function searches the web with their message (a short one borrows what the business does and where, from the confirmed facts), gives the model the results to read, and returns the pages as sources. A message with an email, phone number, address or bank detail in it is never searched. It counts toward `COMPOSE_LIMIT_PER_HOUR` and works with either model provider. With no key, or if the search is down, the model answers from what it knows and says so.

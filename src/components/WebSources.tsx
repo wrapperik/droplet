@@ -20,7 +20,7 @@ export default function WebSources({ grounding }: { grounding: Grounding }) {
     <div className="websources">
       {grounding.sources.length > 0 && (
         <div className="websources__sources">
-          <p className="websources__label">Sources from Google Search</p>
+          <p className="websources__label">{grounding.via === 'web' ? `Sources from the web, searched for “${grounding.queries[0] ?? ''}”` : 'Sources from Google Search'}</p>
           <ul>
             {grounding.sources.map((source) => (
               <li key={source.url}>

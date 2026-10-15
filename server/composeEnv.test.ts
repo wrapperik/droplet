@@ -57,3 +57,12 @@ describe('choosing the provider', () => {
     expect(callerFromEnv({ DEEPSEEK_API_KEY: 'd' }).call).toBeNull()
   })
 })
+
+describe('web search for research', () => {
+  it('is set up only when there is a Tavily key, with either provider', () => {
+    expect(callerFromEnv({ GEMINI_API_KEY: 'g' }).search).toBeNull()
+    expect(callerFromEnv({ GEMINI_API_KEY: 'g', TAVILY_API_KEY: 't' }).search).not.toBeNull()
+    expect(callerFromEnv({ AI_PROVIDER: 'deepseek', DEEPSEEK_API_KEY: 'd', TAVILY_API_KEY: 't' }).search).not.toBeNull()
+    expect(callerFromEnv({ AI_PROVIDER: 'deepseek', DEEPSEEK_API_KEY: 'd', TAVILY_API_KEY: '  ' }).search).toBeNull()
+  })
+})
