@@ -55,16 +55,30 @@ export default function ExportButton({
     <>
       <button
         type="button"
-        className={iconOnly ? `btool__pill btool__pill--icon${blocked ? ' btool__pill--blocked' : ''}` : `workspace__button workspace__button--fixed${blocked ? ' workspace__button--blocked' : ''}`}
+        className={iconOnly ? `btool__pill${blocked ? ' btool__pill--blocked' : ''}` : `workspace__button workspace__button--fixed${blocked ? ' workspace__button--blocked' : ''}`}
         onClick={start}
         aria-busy={phase === 'working'}
         aria-disabled={blocked ? true : undefined}
         aria-label={blocked ? `${ariaLabel}. ${blocked.reason}` : ariaLabel}
-        title={blocked?.reason ?? (iconOnly ? 'Download the brand sheet' : undefined)}
+        title={blocked?.reason}
       >
         {phase === 'done' ? <CheckIcon size={18} strokeWidth={2.25} aria-hidden="true" /> : <DownloadMinimalisticIcon size={18} aria-hidden="true" />}
-        <span className={iconOnly ? 'visually-hidden' : 'workspace__label'}>
-          {phase === 'working' ? 'Preparing' : phase === 'done' ? 'Exported' : phase === 'failed' ? 'Not exported' : 'Export'}
+        <span className={iconOnly ? undefined : 'workspace__label'}>
+          {iconOnly
+            ? phase === 'working'
+              ? 'Preparing'
+              : phase === 'done'
+                ? 'Downloaded'
+                : phase === 'failed'
+                  ? 'Not downloaded'
+                  : 'Download'
+            : phase === 'working'
+              ? 'Preparing'
+              : phase === 'done'
+                ? 'Exported'
+                : phase === 'failed'
+                  ? 'Not exported'
+                  : 'Export'}
         </span>
       </button>
       <span className="visually-hidden" role="status">

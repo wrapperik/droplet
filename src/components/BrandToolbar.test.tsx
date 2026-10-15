@@ -7,16 +7,10 @@ const setup = (over: Partial<React.ComponentProps<typeof BrandToolbar>> = {}) =>
   const props: React.ComponentProps<typeof BrandToolbar> = {
     history: { canUndo: true, canRedo: false, undo: vi.fn(), redo: vi.fn() },
     download: <button type="button">Download brand sheet</button>,
-    name: 'My colour theme',
-    onName: vi.fn(),
-    nameProblem: null,
     canSave: true,
     unsaved: true,
     onSave: vi.fn(),
     status: 'Not saved yet',
-    palettes: [],
-    onOpenPalette: vi.fn(),
-    onForgetPalette: vi.fn(),
     canRandom: true,
     onRandom: vi.fn(),
     fullscreen: false,
@@ -30,13 +24,12 @@ const setup = (over: Partial<React.ComponentProps<typeof BrandToolbar>> = {}) =>
 const toolbar = () => screen.getByRole('toolbar', { name: 'Palette toolbar' })
 
 describe('the brand toolbar', () => {
-  it('has Download, Save, the palette name and Saved palettes on the left, and Undo, Redo, Generate random and Full screen on the right', () => {
+  it('has Undo, Redo, Generate random and Full screen on the left, and Download and Save on the right', () => {
     setup()
     const names = within(toolbar())
       .getAllByRole('button')
       .map((button) => button.getAttribute('aria-label') ?? button.textContent)
-    expect(names).toEqual(['Download brand sheet', 'Save', 'Saved palettes', 'Undo', 'Redo', 'Generate random', 'Full screen'])
-    expect(screen.getByRole('textbox', { name: 'Palette name' })).toHaveValue('My colour theme')
+    expect(names).toEqual(['Undo', 'Redo', 'Generate random', 'Full screen', 'Download brand sheet', 'Save'])
   })
 
   it('says where saving stands, quietly', () => {
@@ -44,26 +37,16 @@ describe('the brand toolbar', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Unsaved changes')
   })
 
-  it('saves when Save is pressed, and changes the name as it is typed', async () => {
+  it('saves when Save is pressed', async () => {
     const props = setup()
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
     expect(props.onSave).toHaveBeenCalledOnce()
-    await userEvent.type(screen.getByRole('textbox', { name: 'Palette name' }), 'x')
-    expect(props.onName).toHaveBeenLastCalledWith('My colour themex')
   })
 
   it('shows Save as saved when nothing has changed, and can still save again', async () => {
     const props = setup({ unsaved: false })
     await userEvent.click(screen.getByRole('button', { name: 'Saved' }))
     expect(props.onSave).toHaveBeenCalledOnce()
-  })
-
-  it('holds Save back, and says why as an alert, when the name cannot be used', () => {
-    setup({ name: '', nameProblem: 'Give the palette a name.' })
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
-    expect(screen.getByRole('alert')).toHaveTextContent('Give the palette a name.')
-    expect(screen.getByRole('textbox', { name: 'Palette name' })).toHaveAttribute('aria-invalid', 'true')
-    expect(screen.getByRole('textbox', { name: 'Palette name' })).toHaveAccessibleDescription('Give the palette a name.')
   })
 
   it('waits to save until what was saved has been read', () => {

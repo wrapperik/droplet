@@ -1,3 +1,4 @@
+import { AltArrowDownIcon } from '@solar-icons/react/linear'
 import { COLOUR_ROLES, type ColourRole, type PaletteBlock, type ResolvedRoles } from '../lib/palette.ts'
 import { readableTextColour } from '../lib/colour.ts'
 import './RoleList.css'
@@ -6,11 +7,13 @@ type Props = {
   blocks: PaletteBlock[]
   roles: ResolvedRoles
   onChange: (id: number, role: ColourRole | null) => void
+  // Whether to list who holds each role now under the rows. The workspace leaves it out; the rows already say it.
+  held?: boolean
 }
 
 // Guide mode's Roles step: a compact list, a line for each colour of the palette with a choice of what it is for, and under it the four roles and who holds them
 // now. A role belongs to one colour, so choosing it moves it. A role nobody chose is suggested from the colours, and says so.
-export default function RoleList({ blocks, roles, onChange }: Props) {
+export default function RoleList({ blocks, roles, onChange, held = true }: Props) {
   return (
     <div className="roles">
       <ul className="roles__list">
@@ -30,12 +33,13 @@ export default function RoleList({ blocks, roles, onChange }: Props) {
                   </option>
                 ))}
               </select>
+              <AltArrowDownIcon className="roles__chevron" size={14} aria-hidden="true" />
             </label>
           </li>
         ))}
       </ul>
-      <h3 className="roles__held-title">The roles now</h3>
-      <dl className="roles__held">
+      {held && <h3 className="roles__held-title">The roles now</h3>}
+      {held && <dl className="roles__held">
         {COLOUR_ROLES.map((role) => {
           const held = roles[role.id]
           return (
@@ -49,7 +53,7 @@ export default function RoleList({ blocks, roles, onChange }: Props) {
             </div>
           )
         })}
-      </dl>
+      </dl>}
     </div>
   )
 }

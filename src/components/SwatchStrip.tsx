@@ -22,7 +22,8 @@ type Props = {
   max: number
   min: number
   onSelect: (id: number) => void
-  onAdd: () => void
+  // Without it the strip has no Add colour pill (the brand workspace keeps the row to the palette itself).
+  onAdd?: () => void
   onRemove: (id: number) => void
   onToggleLock: (id: number) => void
   // "Keep in mind": Droplet's notes on the project always include a starred colour.
@@ -110,7 +111,7 @@ export default function SwatchStrip({ blocks, roles, selectedId, max, min, onSel
                     />
                     {selected && (
                       <span className="strip__tick" style={{ background: ink, color: block.hex }} aria-hidden="true">
-                        <CheckIcon size={14} strokeWidth={2.5} />
+                        <CheckIcon size={18} strokeWidth={2.5} />
                       </span>
                     )}
                   </label>
@@ -162,7 +163,7 @@ export default function SwatchStrip({ blocks, roles, selectedId, max, min, onSel
             )
           })}
         </AnimatePresence>
-        {!full && (
+        {onAdd && !full && (
           <div className="strip__cell strip__cell--add">
             <button type="button" className="strip__add" onClick={onAdd} aria-label="Add colour" title="Add colour">
               <AddCircleIcon size={22} aria-hidden="true" />

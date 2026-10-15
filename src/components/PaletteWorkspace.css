@@ -1,55 +1,65 @@
-/* The tools on the left (Workspace mode): tabs, what the tab shows, and the selected colour's value and role. Nothing is boxed; the parts are separated by space
-   and a hairline. */
-.brandtools {
-  container-type: inline-size;
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
+/* Workspace mode: the colour wheel and the palette on top, the roles and the contrast circles under them. The left column is a little narrower than the right.
+   Nothing is boxed; the parts are separated by space. */
+.brandgrid {
+  display: grid;
+  grid-template-columns: minmax(0, 543fr) minmax(0, 707fr);
+  align-items: start;
+  gap: 3rem 4.25rem;
+  min-width: 0;
+  padding-bottom: 1rem;
 }
 
-.brandtools:focus {
+/* Full screen: the colour tools are hidden and the palette and the circles have the whole width. */
+.brandgrid[data-full] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.brandgrid__tools:focus,
+.brandgrid__roles:focus {
   outline: none;
 }
 
-.brandtools__panel {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1.25rem;
+/* The wheel and the palette end on the same line. */
+.brandgrid__tools,
+.brandgrid__palette {
+  align-self: end;
   min-width: 0;
 }
 
-.brandtools__selected {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--overlay-10);
+.brandgrid__roles,
+.brandgrid__contrast {
+  min-width: 0;
 }
 
-.brandtools__heading {
+.brandgrid__roles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.brandgrid__title {
   margin: 0;
-  font-size: 0.9375rem;
+  font-size: 1.125rem;
   font-weight: 600;
 }
 
-/* The palette on the right: the pills, the contrast lines and the sample document, one under the other. */
+.brandgrid__lead {
+  margin: 0 0 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+/* Guide mode: the palette and the contrast circles beside the step's card. */
 .brandview {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 2.5rem;
   min-width: 0;
 }
 
-/* The document is a page: it keeps a readable width and sits in the middle when the pane is very wide (full screen). */
-.brandview .preview {
-  width: 100%;
-  max-width: 56rem;
-  margin-inline: auto;
-}
-
-.brandview .clines {
-  width: 100%;
-  max-width: 56rem;
-  margin-inline: auto;
+/* Too narrow for two columns: one column, the wheel first. */
+@container (max-width: 48rem) {
+  .brandgrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

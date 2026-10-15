@@ -13,6 +13,8 @@ type Props = {
   onChange: (id: number, hex: string) => void
   // A harmony is chosen: a line joins each colour to the middle, so the shape the rule makes can be seen.
   showRule?: boolean
+  // The workspace's wheel: larger, and only the selected colour's marker is drawn (the others are chosen from the palette).
+  large?: boolean
 }
 
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value))
@@ -22,7 +24,7 @@ const PICK_RADIUS_PX = 16
 
 // The colour wheel, with every colour in the palette on it, and a brightness slider under it. Drag a colour to change its hue and saturation. The fields for the
 // exact value (hex, red, green and blue) are in `ColourFields`, so nothing needs the pointer: the wheel is also moved with the arrow keys.
-export default function ColourWheel({ blocks, selectedId, onSelect, onChange, showRule = false }: Props) {
+export default function ColourWheel({ blocks, selectedId, onSelect, onChange, showRule = false, large = false }: Props) {
   const dragRef = useRef<number | null>(null)
   const selected = blocks.find((block) => block.id === selectedId) ?? blocks[0]
   const hsv = hsvOf(selected.hex)
@@ -100,7 +102,7 @@ export default function ColourWheel({ blocks, selectedId, onSelect, onChange, sh
   }
 
   return (
-    <div className="wheel">
+    <div className="wheel" data-large={large || undefined}>
       <div
         className="wheel__disc"
         role="application"
@@ -121,7 +123,7 @@ export default function ColourWheel({ blocks, selectedId, onSelect, onChange, sh
             })}
           </svg>
         )}
-        {blocks.map((block) => {
+        {(large ? [selected] : blocks).map((block) => {
           const at = place(block.hex)
           return (
             <span
