@@ -77,6 +77,21 @@ function BrandSheet({ data }: { data: BrandSheetData }) {
           </View>
         </View>
 
+        {data.typography && (
+          <>
+            <Text style={styles.heading}>Typography</Text>
+            <Text style={styles.bold}>Headings: {data.typography.heading}</Text>
+            <Text style={styles.bold}>Text: {data.typography.body}</Text>
+            <Text style={styles.note}>{data.typography.note} Both are free on Google Fonts.</Text>
+          </>
+        )}
+        {data.voice && (
+          <>
+            <Text style={styles.heading}>Voice</Text>
+            <Text style={styles.bold}>{data.voice}</Text>
+          </>
+        )}
+
         <Text style={styles.footer}>Made with Droplet. Contrast is computed from the WCAG 2.x formula.</Text>
       </Page>
     </Document>

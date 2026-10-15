@@ -1,4 +1,5 @@
 import { hexToRgb } from './colour.ts'
+import { fontPairById, voiceSentence } from './brandType.ts'
 import { COLOUR_ROLES, pairResult, summarisePairs, type PaletteBlock, type ResolvedRoles } from './palette.ts'
 
 const roleLabel = (block: PaletteBlock) => COLOUR_ROLES.find((role) => role.id === block.role)?.label ?? null
@@ -10,10 +11,16 @@ export type BrandSheetData = {
   roles: { label: string; hex: string; chosen: boolean }[]
   keyPair: { textHex: string; backgroundHex: string; ratio: string; verdict: string }
   summary: string
+  // The brand guide's other choices, when they were made: the typefaces to use and how the brand sounds.
+  typography?: { heading: string; body: string; note: string }
+  voice?: string
 }
 
+export type BrandChoicesForSheet = { fonts?: string | null; voice?: string[] }
+
 // Everything the one-page brand sheet says, worked out here in code. The PDF only lays it out.
-export function brandSheetData(blocks: PaletteBlock[], roles: ResolvedRoles, projectName: string, now: Date): BrandSheetData {
+export function brandSheetData(blocks: PaletteBlock[], roles: ResolvedRoles, projectName: string, now: Date, choices: BrandChoicesForSheet = {}): BrandSheetData {
+  const pair = fontPairById(choices.fonts)
   const key = pairResult(roles.text.hex, roles.background.hex)
   const { total, passing } = summarisePairs(blocks)
   return {
@@ -31,6 +38,8 @@ export function brandSheetData(blocks: PaletteBlock[], roles: ResolvedRoles, pro
       verdict: key.level === 'fail' ? 'Fails AA' : `Passes ${key.level}`,
     },
     summary: `${passing} of ${total} pairs of colours reach AA (4.5:1) for body text.`,
+    ...(pair ? { typography: { heading: pair.heading, body: pair.body, note: pair.note } } : {}),
+    ...(choices.voice && choices.voice.length > 0 ? { voice: voiceSentence(choices.voice) } : {}),
   }
 }
 

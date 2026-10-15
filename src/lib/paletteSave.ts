@@ -48,6 +48,9 @@ export const paletteSaveSchema = z.object({
   expanded: z.array(z.string()).optional(),
   // Components taken off the screen, by item id.
   hidden: z.array(z.string()).optional(),
+  // The brand guide's other choices: a typeface pair (by its id in `brandType.ts`) and up to three words for how the brand sounds. Older saves do not have them.
+  fonts: z.string().max(40).optional(),
+  voice: z.array(z.string().max(30)).max(3).optional(),
   savedAt: z.string(),
   // When the saved palette was last exported as a brand sheet, if it has been.
   exportedAt: z.string().optional(),
