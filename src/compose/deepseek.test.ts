@@ -34,11 +34,23 @@ describe('the DeepSeek caller', () => {
     const body = bodyOf(calls[0])
     expect(body.model).toBe(DEFAULT_DEEPSEEK_MODEL)
     expect(body.response_format).toEqual({ type: 'json_object' })
+    // thinking is off by default: much faster
+    expect((body as unknown as { thinking: unknown }).thinking).toEqual({ type: 'disabled' })
     expect(body.messages[0].role).toBe('system')
     expect(body.messages[0].content).toContain('You are the composer.')
     expect(body.messages[0].content).toMatch(/JSON schema/)
     expect(body.messages[0].content).toContain('"task"')
     expect(body.messages[1]).toEqual({ role: 'user', content: request.user })
+  })
+
+  it('can be asked to think, with an effort, and only then sends one', async () => {
+    const on = fakeFetch([json(reply('{}'))])
+    await createDeepSeekCaller({ apiKey: 'k', thinking: 'enabled', reasoningEffort: 'low', fetchImpl: on.impl })(request)
+    expect(bodyOf(on.calls[0])).toMatchObject({ thinking: { type: 'enabled' }, reasoning_effort: 'low' })
+    const off = fakeFetch([json(reply('{}'))])
+    await createDeepSeekCaller({ apiKey: 'k', reasoningEffort: 'high', fetchImpl: off.impl })(request)
+    expect(bodyOf(off.calls[0])).toMatchObject({ thinking: { type: 'disabled' } })
+    expect(bodyOf(off.calls[0])).not.toHaveProperty('reasoning_effort')
   })
 
   it('says which model answered, and the tokens used', async () => {

@@ -9,7 +9,11 @@ import { ComposeError, type ModelCaller, type ModelReply, type Usage } from './c
 // It is asked for JSON (the API's `json_object` mode, which does not take a schema), with the schema written into the instructions, and every reply is
 // still checked by the same Zod schema and rules as a Gemini reply, with the same retry and fallback.
 
-export const DEFAULT_DEEPSEEK_MODEL = 'deepseek-chat'
+// DeepSeek-V4.1-Flash: the small, fast model of the V4.1 family (the older names `deepseek-chat` and `deepseek-reasoner` were retired in July 2026). It thinks by
+// default, which is slow for a chat, so thinking is switched off here unless asked for.
+export const DEFAULT_DEEPSEEK_MODEL = 'deepseek-flash'
+export type DeepSeekThinking = 'disabled' | 'enabled'
+export const DEFAULT_DEEPSEEK_THINKING: DeepSeekThinking = 'disabled'
 const ENDPOINT = 'https://api.deepseek.com/chat/completions'
 const DEFAULT_TIMEOUT_MS = 60_000
 // A busy server (503) is tried once more after a short wait.
@@ -20,6 +24,9 @@ const MAX_TOKENS = 4096
 export type DeepSeekOptions = {
   apiKey: string
   model?: string
+  // Whether the model thinks before it answers. Off by default: much faster, and a turn is a short, structured answer. On, it also takes an effort.
+  thinking?: DeepSeekThinking
+  reasoningEffort?: 'low' | 'high' | 'max'
   // The API's address, for a compatible provider. Defaults to DeepSeek's own.
   endpoint?: string
   timeoutMs?: number
@@ -46,7 +53,7 @@ const unseen = (count: number) =>
   `\n\n<files_not_readable>\nThe founder attached ${count === 1 ? 'a picture or a PDF' : `${count} pictures or PDFs`}, which you cannot see or read in this mode. Say so plainly in your reply, do not guess what ${count === 1 ? 'it shows' : 'they show'}, and offer to help if they paste the words from ${count === 1 ? 'it' : 'them'} into the message.\n</files_not_readable>`
 
 export function createDeepSeekCaller(options: DeepSeekOptions): ModelCaller {
-  const { apiKey, model = DEFAULT_DEEPSEEK_MODEL, endpoint = ENDPOINT, timeoutMs = DEFAULT_TIMEOUT_MS, overloadRetryMs = OVERLOAD_RETRY_MS, fetchImpl = fetch } = options
+  const { apiKey, model = DEFAULT_DEEPSEEK_MODEL, thinking = DEFAULT_DEEPSEEK_THINKING, reasoningEffort, endpoint = ENDPOINT, timeoutMs = DEFAULT_TIMEOUT_MS, overloadRetryMs = OVERLOAD_RETRY_MS, fetchImpl = fetch } = options
 
   const send = async (system: string, user: string): Promise<Response> => {
     const controller = new AbortController()
@@ -62,6 +69,8 @@ export function createDeepSeekCaller(options: DeepSeekOptions): ModelCaller {
             { role: 'user', content: user },
           ],
           response_format: { type: 'json_object' },
+          thinking: { type: thinking },
+          ...(thinking === 'enabled' && reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
           max_tokens: MAX_TOKENS,
           stream: false,
         }),

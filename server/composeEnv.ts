@@ -1,5 +1,5 @@
 import { createGeminiCaller, DEFAULT_ADVANCED_MODEL, DEFAULT_BASE_MODEL, DEFAULT_BASE_THINKING } from '../src/compose/gemini.ts'
-import { createDeepSeekCaller, DEFAULT_DEEPSEEK_MODEL } from '../src/compose/deepseek.ts'
+import { createDeepSeekCaller, DEFAULT_DEEPSEEK_MODEL, type DeepSeekThinking } from '../src/compose/deepseek.ts'
 import type { ModelCaller } from '../src/compose/compose.ts'
 
 // The models and limits, from the environment variables both servers read (the dev server from .env, the Supabase Edge Function from its secrets). The
@@ -34,7 +34,11 @@ export function callerFromEnv(env: ComposeEnv): ConfiguredCaller {
     // A stand-in: one model, no search, so no Advanced (its allowance is 0 and the menu does not offer it). Quick and Advanced are both this model.
     const apiKey = text(env.DEEPSEEK_API_KEY)
     const model = text(env.DEEPSEEK_MODEL) ?? DEFAULT_DEEPSEEK_MODEL
-    return { provider, call: apiKey ? createDeepSeekCaller({ apiKey, model }) : null, baseModel: model, advancedModel: model, limitPerHour, advancedPerDay: 0 }
+    // DEEPSEEK_THINKING=enabled lets it think first (slower, more careful), with DEEPSEEK_REASONING_EFFORT of low, high or max.
+    const thinking: DeepSeekThinking | undefined = text(env.DEEPSEEK_THINKING)?.toLowerCase() === 'enabled' ? 'enabled' : undefined
+    const effort = text(env.DEEPSEEK_REASONING_EFFORT)?.toLowerCase()
+    const reasoningEffort = effort === 'low' || effort === 'high' || effort === 'max' ? effort : undefined
+    return { provider, call: apiKey ? createDeepSeekCaller({ apiKey, model, ...(thinking ? { thinking } : {}), ...(reasoningEffort ? { reasoningEffort } : {}) }) : null, baseModel: model, advancedModel: model, limitPerHour, advancedPerDay: 0 }
   }
   const apiKey = text(env.GEMINI_API_KEY)
   const baseModel = text(env.GEMINI_BASE_MODEL) ?? DEFAULT_BASE_MODEL

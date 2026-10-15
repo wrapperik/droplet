@@ -47,7 +47,7 @@ describe('choosing the provider', () => {
 
   it('defaults the DeepSeek model, offers no Advanced, and keeps the hourly limit', () => {
     const configured = callerFromEnv({ AI_PROVIDER: 'deepseek', DEEPSEEK_API_KEY: 'd', COMPOSE_LIMIT_PER_HOUR: '30', COMPOSE_ADVANCED_PER_DAY: '10' })
-    expect(configured.baseModel).toBe('deepseek-chat')
+    expect(configured.baseModel).toBe('deepseek-flash')
     expect(configured.advancedPerDay).toBe(0)
     expect(configured.limitPerHour).toBe(30)
   })
