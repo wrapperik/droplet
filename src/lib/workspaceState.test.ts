@@ -21,7 +21,7 @@ describe('openWorkspace', () => {
     expect(canUndoState(state)).toBe(false)
   })
 
-  it('uses the project\'s saved layout, expanded tools and hidden components, and keeps a saved panel width', () => {
+  it('ignores the project\'s saved layout, expanded tools and hidden components', () => {
     const saved: PaletteSave = {
       blocks: starter(),
       layout: [
@@ -33,9 +33,14 @@ describe('openWorkspace', () => {
       savedAt: new Date().toISOString(),
     }
     const doc = docOf(openWorkspace(starter(), saved))
-    expect(doc.layout.find((p) => p.id === 'canvas')?.w).toBe(15)
-    expect(doc.expanded).toEqual(['picker'])
-    expect(doc.hidden).toEqual(['preview'])
+    expect(doc.layout).toEqual(DEFAULT_LAYOUT)
+    expect(doc.expanded).toEqual([])
+    expect(doc.hidden).toEqual([])
+  })
+
+  it('opens a save that has no layout', () => {
+    const saved: PaletteSave = { blocks: starter(), savedAt: 'x' }
+    expect(docOf(openWorkspace(starter(), saved)).layout).toEqual(DEFAULT_LAYOUT)
   })
 })
 
@@ -199,11 +204,11 @@ describe('the toolbar', () => {
     expect(layoutIsDefault(docOf(run(moved, { type: 'reset_layout' })))).toBe(true)
   })
 
-  it('opens in the saved order, and notices when it differs from the save', () => {
+  it('opens in the default order whatever order a save holds, and does not call that a change', () => {
     const saved: PaletteSave = { blocks: starter(), layout: DEFAULT_LAYOUT, tools: ['generate', 'role', 'picker'], savedAt: 'x' }
-    expect(docOf(openWorkspace(starter(), saved)).tools).toEqual(['generate', 'role', 'picker'])
+    expect(docOf(openWorkspace(starter(), saved)).tools).toEqual(DEFAULT_TOOLS)
     expect(isUnsaved(docOf(openWorkspace(starter(), saved)), saved)).toBe(false)
-    expect(isUnsaved(docOf(fresh()), saved)).toBe(true)
+    expect(isUnsaved(docOf(fresh()), saved)).toBe(false)
   })
 
   it('completes an order that is missing tools or holds ones that do not exist', () => {
@@ -292,12 +297,12 @@ describe('isUnsaved', () => {
     expect(isUnsaved(docOf(fresh()), saved())).toBe(false)
   })
 
-  it('notices a change to colours, layout, expanded tools or hidden components', () => {
+  it('notices a change to the colours, and not to how the screen is arranged', () => {
     expect(isUnsaved(docOf(run(fresh(), { type: 'set_hex', id: 1, hex: '#000000' })), saved())).toBe(true)
-    expect(isUnsaved(docOf(run(fresh(), { type: 'resize', id: 'canvas', value: 12 })), saved())).toBe(true)
-    expect(isUnsaved(docOf(run(fresh(), { type: 'expand_tool', id: 'picker' })), saved())).toBe(true)
-    expect(isUnsaved(docOf(run(fresh(), { type: 'hide', component: 'role' })), saved())).toBe(true)
-    expect(isUnsaved(docOf(run(fresh(), { type: 'hide', component: 'role' })), saved({ hidden: ['role'] }))).toBe(false)
+    expect(isUnsaved(docOf(run(fresh(), { type: 'resize', id: 'canvas', value: 12 })), saved())).toBe(false)
+    expect(isUnsaved(docOf(run(fresh(), { type: 'expand_tool', id: 'picker' })), saved())).toBe(false)
+    expect(isUnsaved(docOf(run(fresh(), { type: 'hide', component: 'role' })), saved())).toBe(false)
+    expect(isUnsaved(docOf(fresh()), saved({ hidden: ['role'], expanded: ['picker'] }))).toBe(false)
   })
 })
 

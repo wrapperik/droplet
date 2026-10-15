@@ -68,15 +68,15 @@ describe('turnSchema', () => {
     expect(turn({ type: 'set_colour', index: 2, hex: 'blue' })).toBe(false)
     expect(turn({ type: 'set_role', index: 1, role: 'none' })).toBe(true)
     expect(turn({ type: 'set_role', index: 1, role: 'headline' })).toBe(false)
-    expect(turn({ type: 'move_component', component: 'preview', relativeTo: 'canvas', placement: 'right_of' })).toBe(true)
-    expect(turn({ type: 'move_component', component: 'preview', relativeTo: 'canvas', placement: 'diagonally' })).toBe(false)
-    expect(turn({ type: 'hide_component', component: 'canvas' })).toBe(false)
-    expect(turn({ type: 'resize_component', component: 'canvas', size: 'half' })).toBe(true)
-    expect(turn({ type: 'resize_component', component: 'picker', size: 'large' })).toBe(false)
-    expect(turn({ type: 'expand_tool', component: 'picker' })).toBe(true)
-    expect(turn({ type: 'collapse_tool', component: 'role' })).toBe(true)
-    expect(turn({ type: 'expand_tool', component: 'canvas' })).toBe(false)
     expect(turn({ type: 'set_palette', colours: [{ hex: '#000000', name: 'a', rationale: 'b' }], reason: 'x' })).toBe(false)
+  })
+
+  it('has no action that moves, resizes, hides, shows or opens a part of the screen', () => {
+    const turn = (action: unknown) => turnSchema.safeParse({ ...chatTurn, task: 'brand', actions: [action] }).success
+    for (const type of ['move_component', 'resize_component', 'expand_tool', 'collapse_tool', 'reset_layout', 'show_component', 'hide_component']) {
+      expect(turn({ type, component: 'preview', relativeTo: 'canvas', placement: 'above', size: 'half' })).toBe(false)
+      expect(JSON.stringify(turnJsonSchema())).not.toContain(`"${type}"`)
+    }
   })
 
   it('still limits the counts after the reply, though the model\'s schema does not carry them', () => {
@@ -89,7 +89,7 @@ describe('turnJsonSchema', () => {
   const schema = JSON.stringify(turnJsonSchema())
 
   it('names every task and action the model may use', () => {
-    for (const word of ['chat', 'brand', 'logo', 'invoice', 'set_palette', 'set_colour', 'move_component', 'resize_component', 'export_brand_sheet', 'undo']) {
+    for (const word of ['chat', 'brand', 'logo', 'invoice', 'set_palette', 'set_colour', 'export_brand_sheet', 'undo']) {
       expect(schema).toContain(`"${word}"`)
     }
   })
@@ -110,6 +110,12 @@ describe('workspaceSnapshotSchema', () => {
     expect(workspaceSnapshotSchema.safeParse(openSnapshot()).success).toBe(true)
     const bad = { ...openSnapshot(), blocks: [{ id: 1, hex: 'red' }, { id: 2, hex: '#000000' }] }
     expect(workspaceSnapshotSchema.safeParse(bad).success).toBe(false)
+  })
+
+  it('accepts a snapshot from an older browser that still carries the arrangement', () => {
+    const old = { ...openSnapshot(), hidden: ['preview'], expanded: [], tools: ['picker', 'role', 'generate'], layout: [{ id: 'canvas', col: 0, row: 0, w: 24 }] }
+    expect(workspaceSnapshotSchema.safeParse(old).success).toBe(true)
+    expect(composeRequestSchema.safeParse({ intent: 'x', view: 'brand', workspace: old }).success).toBe(true)
   })
 })
 

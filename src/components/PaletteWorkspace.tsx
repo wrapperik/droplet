@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
 import { MagicWand3Icon, PaletteIcon, TagIcon } from '@solar-icons/react/linear'
-import type { Heights, Placement } from '../lib/gridLayout.ts'
 import { replaceableIds } from '../lib/harmony.ts'
 import { resolveRoles, type ColourRole } from '../lib/palette.ts'
 import { exportBrandSheet } from '../lib/exportSheet.ts'
@@ -40,14 +39,12 @@ type Props = {
   // everything the AI does, so the two can do exactly the same things.
   state: WorkspaceState
   dispatch: (action: WorkspaceAction) => void
-  // Reports where each item is drawn and how tall, so the AI can place one component relative to another.
-  onResolved?: (resolved: Placement[], heights: Heights) => void
   headerSlots?: HeaderSlots
 }
 
 // The palette workspace: tools for the colours in the toolbar and windows (the palette canvas, the document preview), on
 // the shared workspace shell. "Save" saves the palette, the tools and the layout.
-export default function PaletteWorkspace({ projectId, projectName, state, dispatch, onResolved, headerSlots }: Props) {
+export default function PaletteWorkspace({ projectId, projectName, state, dispatch, headerSlots }: Props) {
   // What was saved is read from storage, which takes a moment. Until it has arrived the bar says nothing and Save waits.
   const { value: saved, loaded, set: setSaved } = useLoaded<PaletteSave | null>(projectId, () => loadPalette(projectId), null)
   const [saveFailed, setSaveFailed] = useState(false)
@@ -259,7 +256,6 @@ export default function PaletteWorkspace({ projectId, projectName, state, dispat
       unsaved={unsaved}
       onSave={save}
       exportButton={<ExportButton onExport={exportSheet} />}
-      onResolved={onResolved}
       headerSlots={headerSlots}
     />
   )

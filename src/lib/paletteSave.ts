@@ -24,7 +24,8 @@ export const paletteSaveSchema = z.object({
     )
     .min(1)
     .max(8),
-  layout: z.array(placementSchema),
+  // Kept for older saves and still written for now; opening a workspace ignores it, so a save without it is fine.
+  layout: z.array(placementSchema).optional(),
   // The order of the tools in the toolbar, by id.
   tools: z.array(z.string()).optional(),
   // Tools that were dragged out of the toolbar and are windows, by id.

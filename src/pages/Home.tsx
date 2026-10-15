@@ -51,7 +51,6 @@ import { byPinnedThenRecent, chatHasBegun, chatTitle, cleanTitle, hasFounderMess
 import { loadBoard, openBoardForProject, saveBoard } from '../lib/boardStore.ts'
 import { docOf as boardDocOf, isBoardUnsaved, reduceBoard, type BoardAction, type BoardState } from '../lib/boardState.ts'
 import { exportBrandSheet } from '../lib/exportSheet.ts'
-import type { Heights, Placement } from '../lib/gridLayout.ts'
 import { mockProjects, mockUser, type ProjectSummary } from '../lib/mockProjects.ts'
 import { newId } from '../lib/ids.ts'
 import { boardHasChanges, invoiceHasChanges, paletteHasChanges } from '../lib/leaveCheck.ts'
@@ -287,8 +286,6 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   const leaveWorkspacesRef = useRef<() => Promise<void>>(async () => undefined)
   // Opens something from the library, for a reply that asks to. It is defined after the request that calls it.
   const openFromLibraryRef = useRef<(target: OpenTarget) => Promise<'done' | 'unsaved'>>(async () => 'done')
-  // Where each component is drawn and how tall, reported by the grid, for moves relative to another component.
-  const drawnRef = useRef<{ layout: Placement[]; heights: Heights }>({ layout: [], heights: {} })
   useEffect(() => {
     workspaceRef.current = workspace
     invoiceRef.current = invoice
@@ -461,7 +458,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         // In Guide mode the composer is told which step is on screen, so it helps with that one. It cannot move the founder on.
         ...(view === 'invoice' && invoiceOpen && useWorkMode.getState().mode === 'guide' ? { guide: guideOf(invoiceDocOf(invoiceOpen).invoiceId) } : {}),
         ...(view === 'brand' && open
-          ? { workspace: snapshotOfState(open, drawnRef.current.layout.length > 0 ? drawnRef.current.layout : null, saved ? (isUnsaved(docOf(open), saved) ? 'unsaved' : 'saved') : 'none') }
+          ? { workspace: snapshotOfState(open, saved ? (isUnsaved(docOf(open), saved) ? 'unsaved' : 'saved') : 'none') }
           : {}),
         ...(view === 'board' && boardOpen
           ? { board: snapshotOfBoard(boardOpen, boardHandleRef.current?.viewMiddle() ?? { x: 2400, y: 1600 }, boardStatus) }
@@ -620,7 +617,6 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
             base: workspaceRef.current,
             open: (blocks) => openWorkspace(blocks, saved),
             actions: result.turn.actions.filter((action): action is PaletteAction => !isInvoiceAction(action) && !isBoardAction(action) && !isScreenAction(action)),
-            env: drawnRef.current,
           })
         let applied = apply()
         // Only a palette that is on screen goes soft: one this reply opens arrives in its own way.
@@ -1086,7 +1082,6 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
     boardRef.current = null
     viewRef.current = 'brand'
     spaceRef.current = null
-    drawnRef.current = { layout: [], heights: {} }
     setWorkspace(null)
     setInvoice(null)
     setBoard(null)
@@ -1568,9 +1563,6 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
                   state={workspace}
                   dispatch={dispatch}
                   headerSlots={{ start: headerStart, end: headerEnd, shelf: shelfSlot }}
-                  onResolved={(layout, heights) => {
-                    drawnRef.current = { layout, heights }
-                  }}
                 />
               </motion.div>
             )}

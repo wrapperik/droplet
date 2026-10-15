@@ -61,7 +61,8 @@ export const invoiceContentSchema = z.object({
 // still read, so nothing a founder typed before the invoice had a memory is lost.
 export const invoiceSaveSchema = z.object({
   content: invoiceContentSchema.optional(),
-  layout: z.array(placementSchema),
+  // Kept for older saves and still written for now; opening a workspace ignores it, so a save without it is fine.
+  layout: z.array(placementSchema).optional(),
   tools: z.array(z.string()).optional(),
   expanded: z.array(z.string()).optional(),
   hidden: z.array(z.string()).optional(),

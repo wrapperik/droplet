@@ -40,18 +40,26 @@ describe('openArrangement', () => {
     expect(arrangementIsDefault(spec, a)).toBe(true)
   })
 
-  it('uses a saved arrangement, keeps widths within limits, and ignores what the spec does not have', () => {
+  it('ignores a saved layout, tool order, pulled-out tools and hidden parts', () => {
     const a = openArrangement(spec, {
       layout: [{ id: 'page', col: 2, row: 4, w: 3 }, { id: 'ghost', col: 0, row: 0, w: 4 }],
       tools: ['b', 'ghost'],
       expanded: ['a', 'page'],
-      hidden: ['notes'],
+      hidden: ['notes', 'b'],
     })
-    expect(a.layout.find((p) => p.id === 'page')).toMatchObject({ col: 2, row: 4, w: 6 })
-    expect(a.layout.some((p) => p.id === 'ghost')).toBe(false)
-    expect(a.tools).toEqual(['b', 'a'])
-    expect(a.expanded).toEqual(['a'])
-    expect(a.hidden).toEqual(['notes'])
+    expect(a.layout).toEqual(spec.layout)
+    expect(a.tools).toEqual(['a', 'b'])
+    expect(a.expanded).toEqual([])
+    expect(a.hidden).toEqual([])
+    expect(arrangementIsDefault(spec, a)).toBe(true)
+  })
+
+  it('opens a save that has no layout with the defaults', () => {
+    expect(openArrangement(spec, { hidden: ['notes'] }).layout).toEqual(spec.layout)
+  })
+
+  it('still hides what the spec hides by default', () => {
+    expect(openArrangement({ ...spec, defaultHidden: ['notes'] }, { hidden: [] }).hidden).toEqual(['notes'])
   })
 
   it('completes an order and an expanded list', () => {
@@ -101,13 +109,11 @@ describe('reduceArrangement', () => {
 })
 
 describe('arrangementUnsaved', () => {
-  it('compares layout, tool order, expanded tools and what is hidden with a save', () => {
+  it('never counts the arrangement, because a saved one is not applied when a workspace opens', () => {
     const a = open()
-    const saved = { layout: a.layout, tools: ['a', 'b'], expanded: [], hidden: [] }
+    const saved = { layout: a.layout, tools: ['b', 'a'], expanded: ['a'], hidden: ['notes'] }
     expect(arrangementUnsaved(spec, a, saved)).toBe(false)
-    expect(arrangementUnsaved(spec, reduceArrangement(spec, a, { type: 'move_tool', id: 'a', before: null }), saved)).toBe(true)
-    expect(arrangementUnsaved(spec, reduceArrangement(spec, a, { type: 'expand_tool', id: 'a' }), saved)).toBe(true)
-    expect(arrangementUnsaved(spec, reduceArrangement(spec, a, { type: 'hide', component: 'notes' }), saved)).toBe(true)
-    expect(arrangementUnsaved(spec, a, { layout: a.layout })).toBe(false)
+    expect(arrangementUnsaved(spec, reduceArrangement(spec, a, { type: 'move_tool', id: 'a', before: null }), saved)).toBe(false)
+    expect(arrangementUnsaved(spec, reduceArrangement(spec, a, { type: 'hide', component: 'notes' }), {})).toBe(false)
   })
 })

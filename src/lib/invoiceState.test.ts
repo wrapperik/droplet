@@ -30,12 +30,13 @@ describe('opening', () => {
     expect(canUndoInvoice(state)).toBe(false)
   })
 
-  it('opens in the saved arrangement', () => {
+  it('opens with the defaults, whatever arrangement an older save holds', () => {
     const arrangement = { layout: INVOICE_LAYOUT, tools: ['total', 'vat'], expanded: ['client'], hidden: ['terms'] }
     const doc = invoiceDocOf(openInvoiceWorkspace(newContent('2026-10-04'), arrangement))
-    expect(doc.tools.slice(0, 2)).toEqual(['total', 'vat'])
-    expect(doc.expanded).toEqual(['client'])
-    expect(doc.hidden).toEqual(['terms'])
+    expect(doc.tools).toEqual(invoiceDocOf(openInvoiceWorkspace(newContent('2026-10-04'))).tools)
+    expect(doc.expanded).toEqual([])
+    expect(doc.hidden).toEqual([])
+    expect(doc.layout).toEqual(INVOICE_LAYOUT)
   })
 
   it('is the invoice it was opened for, which keeps its id, or a new one with an id of its own', () => {
@@ -185,12 +186,12 @@ describe('isInvoiceUnsaved', () => {
     expect(isInvoiceUnsaved(invoiceDocOf(run(open(), { type: 'add_line' })), saved(), null)).toBe(true)
   })
 
-  it('compares the arrangement with the saved one, or with where things start when none was saved', () => {
+  it('does not count how the workspace is arranged, since a saved arrangement is no longer applied', () => {
     const moved = run(open(), { type: 'expand_tool', id: 'vat' })
-    expect(isInvoiceUnsaved(invoiceDocOf(moved), saved(), null)).toBe(true)
+    expect(isInvoiceUnsaved(invoiceDocOf(moved), saved(), null)).toBe(false)
     const arrangement = { layout: invoiceDocOf(moved).layout, tools: invoiceDocOf(moved).tools, expanded: ['vat'], hidden: [] }
     expect(isInvoiceUnsaved(invoiceDocOf(moved), saved(), arrangement)).toBe(false)
-    expect(isInvoiceUnsaved(invoiceDocOf(open()), saved(), arrangement)).toBe(true)
+    expect(isInvoiceUnsaved(invoiceDocOf(open()), saved(), arrangement)).toBe(false)
   })
 })
 

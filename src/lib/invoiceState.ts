@@ -103,11 +103,10 @@ export const canUndoInvoice = (state: InvoiceState) => canUndo(state.history)
 export const canRedoInvoice = (state: InvoiceState) => canRedo(state.history)
 export const invoiceArrangementIsDefault = (doc: InvoiceDoc) => arrangementIsDefault(INVOICE_SPEC, doc)
 
-// Whether anything differs from what was confirmed: the invoice (against its saved version, if it has one) or how the workspace is
-// arranged (against the saved arrangement, or where things start if none was saved).
+// Whether the invoice differs from what was confirmed (against its saved version, if it has one). How the workspace is arranged is not
+// something that is kept, so it is never a difference (see `arrangementUnsaved`).
 export function isInvoiceUnsaved(doc: InvoiceDoc, saved: SavedInvoice | undefined, arrangement: ArrangementSave | null): boolean {
-  if (!saved || JSON.stringify(doc.content) !== JSON.stringify(saved.content)) return true
-  return arrangement ? arrangementUnsaved(INVOICE_SPEC, doc, arrangement) : !arrangementIsDefault(INVOICE_SPEC, doc)
+  return !saved || JSON.stringify(doc.content) !== JSON.stringify(saved.content) || arrangementUnsaved(INVOICE_SPEC, doc, arrangement ?? {})
 }
 
 const withContent = (doc: InvoiceDoc, content: InvoiceContent): InvoiceDoc => ({ ...doc, content })

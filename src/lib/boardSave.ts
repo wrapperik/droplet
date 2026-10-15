@@ -66,7 +66,8 @@ const connectorSchema = z.object({
 
 export const boardSaveSchema = z.object({
   items: z.array(z.discriminatedUnion('kind', [noteSchema, shapeSchema, textSchema, frameSchema, connectorSchema])).max(MAX_ITEMS),
-  layout: z.array(placementSchema),
+  // Kept for older saves and still written for now; opening a workspace ignores it, so a save without it is fine.
+  layout: z.array(placementSchema).optional(),
   tools: z.array(z.string()).optional(),
   expanded: z.array(z.string()).optional(),
   hidden: z.array(z.string()).optional(),

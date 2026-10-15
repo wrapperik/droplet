@@ -1,6 +1,5 @@
-import { DEFAULT_LAYOUT, docOf, openWorkspace, shownWindows, toolbarTools, type WorkspaceState } from '../lib/workspaceState.ts'
-import { applyTurnActions, type ApplyEnv } from './applyActions.ts'
-import { openSnapshot } from './fixtures.ts'
+import { docOf, openWorkspace, type WorkspaceState } from '../lib/workspaceState.ts'
+import { applyTurnActions } from './applyActions.ts'
 import type { PaletteAction as TurnAction } from './spec.ts'
 
 const blocks = () => [
@@ -9,21 +8,12 @@ const blocks = () => [
   { id: 3, hex: '#CFE9FB' },
   { id: 4, hex: '#0E1A2B' },
 ]
-const drawn = openSnapshot().layout
-const env: ApplyEnv = { layout: drawn, heights: { picker: 9, role: 9, generate: 9, canvas: 29, preview: 30 } }
 const open = (b: ReturnType<typeof blocks>) => openWorkspace(b)
 const fresh = () => openWorkspace(blocks())
 
-const apply = (actions: TurnAction[], base: WorkspaceState | null = fresh()) => applyTurnActions({ base, open, actions, env })
+const apply = (actions: TurnAction[], base: WorkspaceState | null = fresh()) => applyTurnActions({ base, open, actions })
 const reasons = (actions: TurnAction[], base?: WorkspaceState | null) => apply(actions, base).skipped.map((s) => s.reason)
-// For a workspace that has already changed, the environment is what is drawn for that workspace.
-const applyOn = (base: WorkspaceState, actions: TurnAction[]) =>
-  applyTurnActions({
-    base,
-    open,
-    actions,
-    env: { layout: docOf(base).layout.filter((p) => shownWindows(docOf(base)).includes(p.id)), heights: { picker: 40, role: 30, generate: 30, canvas: 29, preview: 50 } },
-  })
+const applyOn = (base: WorkspaceState, actions: TurnAction[]) => applyTurnActions({ base, open, actions })
 const hexes = (state: WorkspaceState | null) => docOf(state!).blocks.map((b) => b.hex)
 
 describe('colours', () => {
@@ -84,130 +74,18 @@ describe('colours', () => {
   })
 })
 
-describe('components and layout', () => {
-  it('hides and shows a component', () => {
-    const hidden = apply([{ type: 'hide_component', component: 'preview' }]).state!
-    expect(docOf(hidden).hidden).toEqual(['preview'])
-    const shown = apply([{ type: 'show_component', component: 'preview', reason: 'To check it on paper.' }], hidden).state!
-    expect(docOf(shown).hidden).toEqual([])
-    expect(docOf(shown).reasons.preview).toBe('To check it on paper.')
-  })
-
-  it('moves a component above another by working out where a person would drop it', () => {
-    const result = apply([{ type: 'move_component', component: 'preview', relativeTo: 'canvas', placement: 'above' }])
-    expect(result.skipped).toEqual([])
-    const layout = docOf(result.state!).layout
-    expect(layout.find((p) => p.id === 'preview')!.row).toBeLessThan(layout.find((p) => p.id === 'canvas')!.row)
-    expect(layout.map((p) => p.id).sort()).toEqual(['canvas', 'generate', 'picker', 'preview', 'role'])
-  })
-
-  it('refuses to put something beside a full-width panel, and says to make it narrower first', () => {
-    const [reason] = reasons([{ type: 'move_component', component: 'preview', relativeTo: 'canvas', placement: 'right_of' }])
-    expect(reason).toMatch(/no room right of "canvas"/)
-    expect(reason).toMatch(/resize_component/)
-  })
-
-  it('allows it once the panel has been made narrower earlier in the same turn', () => {
-    const result = apply([
-      { type: 'resize_component', component: 'canvas', size: 'half' },
-      { type: 'move_component', component: 'preview', relativeTo: 'canvas', placement: 'right_of' },
-    ])
-    expect(result.skipped).toEqual([])
-    const layout = docOf(result.state!).layout
-    const canvas = layout.find((p) => p.id === 'canvas')!
-    const preview = layout.find((p) => p.id === 'preview')!
-    expect(canvas.w).toBe(12)
-    expect(preview.col).toBeGreaterThanOrEqual(canvas.col + canvas.w)
-    expect(preview.row).toBeLessThan(canvas.row + 1)
-  })
-
-  it('will not move or resize a component that is not on screen, and will after it is shown', () => {
-    const hidden = apply([{ type: 'hide_component', component: 'preview' }]).state!
-    const hiddenEnv: ApplyEnv = { ...env, layout: drawn.filter((p) => p.id !== 'preview') }
-    const refused = applyTurnActions({ base: hidden, open, env: hiddenEnv, actions: [{ type: 'move_component', component: 'preview', relativeTo: 'canvas', placement: 'below' }] })
-    expect(refused.skipped[0].reason).toMatch(/not on screen/)
-    const allowed = applyTurnActions({
-      base: hidden,
-      open,
-      env: hiddenEnv,
-      actions: [{ type: 'show_component', component: 'preview' }, { type: 'resize_component', component: 'preview', size: 'half' }],
-    })
-    expect(allowed.skipped).toEqual([])
-  })
-
-  it('reorders the toolbar by putting a tool left of or right of another, and says when it is already there', () => {
-    const left = apply([{ type: 'move_component', component: 'generate', relativeTo: 'picker', placement: 'left_of' }])
-    expect(left.skipped).toEqual([])
-    expect(docOf(left.state!).tools).toEqual(['generate', 'picker', 'role'])
-    const right = apply([{ type: 'move_component', component: 'picker', relativeTo: 'role', placement: 'right_of' }])
-    expect(docOf(right.state!).tools).toEqual(['role', 'picker', 'generate'])
-    expect(reasons([{ type: 'move_component', component: 'role', relativeTo: 'picker', placement: 'right_of' }])[0]).toMatch(/already right of "picker"/)
-  })
-
-  it('will not put a tool above or below another, or a tool and a window against each other', () => {
-    expect(reasons([{ type: 'move_component', component: 'role', relativeTo: 'picker', placement: 'above' }])[0]).toMatch(/side by side/)
-    expect(reasons([{ type: 'move_component', component: 'picker', relativeTo: 'canvas', placement: 'left_of' }])[0]).toMatch(/tool.*window/)
-    expect(reasons([{ type: 'move_component', component: 'canvas', relativeTo: 'picker', placement: 'below' }])[0]).toMatch(/tool.*window/)
-  })
-
-  it('skips a hidden tool in the order, so a tool goes next to one that is on screen', () => {
-    const hidden = apply([{ type: 'hide_component', component: 'role' }]).state!
-    const moved = apply([{ type: 'move_component', component: 'generate', relativeTo: 'picker', placement: 'right_of' }], hidden)
-    expect(moved.skipped[0].reason).toMatch(/already right of/)
-    expect(reasons([{ type: 'move_component', component: 'generate', relativeTo: 'role', placement: 'left_of' }], hidden)[0]).toMatch(/not on screen/)
-  })
-
-  it('refuses to place a component relative to itself', () => {
-    expect(reasons([{ type: 'move_component', component: 'canvas', relativeTo: 'canvas', placement: 'below' }])[0]).toMatch(/relative to itself/)
-  })
-
-  it('resizes a window to a width, and says a tool in the toolbar has only one size', () => {
-    const state = apply([{ type: 'resize_component', component: 'canvas', size: 'two_thirds' }]).state!
-    expect(docOf(state).layout.find((p) => p.id === 'canvas')?.w).toBe(16)
-    expect(reasons([{ type: 'resize_component', component: 'picker', size: 'half' }])[0]).toMatch(/one size.*expand_tool/)
-  })
-
-  it('turns a tool into a window and back, and a window can then be resized and placed like any other', () => {
-    const out = apply([{ type: 'expand_tool', component: 'picker' }]).state!
-    expect(docOf(out).expanded).toEqual(['picker'])
-    expect(toolbarTools(docOf(out))).toEqual(['role', 'generate'])
-    const resized = applyOn(out, [{ type: 'resize_component', component: 'picker', size: 'half' }, { type: 'move_component', component: 'picker', relativeTo: 'canvas', placement: 'below' }])
-    expect(resized.skipped).toEqual([])
-    expect(docOf(resized.state!).layout.find((p) => p.id === 'picker')?.w).toBe(12)
-    const back = applyOn(out, [{ type: 'collapse_tool', component: 'picker' }]).state!
-    expect(docOf(back).expanded).toEqual([])
-    expect(toolbarTools(docOf(back))).toEqual(['picker', 'role', 'generate'])
-  })
-
-  it('says when a tool is already a window or already in the toolbar, and keeps tools and windows apart for moves', () => {
-    const out = apply([{ type: 'expand_tool', component: 'picker' }]).state!
-    const why = (actions: TurnAction[]) => applyOn(out, actions).skipped.map((skipped) => skipped.reason)
-    expect(why([{ type: 'expand_tool', component: 'picker' }])[0]).toMatch(/already a window/)
-    expect(why([{ type: 'collapse_tool', component: 'role' }])[0]).toMatch(/already in the toolbar/)
-    expect(why([{ type: 'move_component', component: 'picker', relativeTo: 'role', placement: 'left_of' }])[0]).toMatch(/tool.*window/)
-    expect(why([{ type: 'move_component', component: 'role', relativeTo: 'generate', placement: 'right_of' }])).toEqual([])
-  })
-
-  it('resets the layout, bringing every tool back to the toolbar', () => {
-    const moved = apply([{ type: 'expand_tool', component: 'picker' }, { type: 'resize_component', component: 'canvas', size: 'half' }]).state!
-    const reset = apply([{ type: 'reset_layout' }], moved).state!
-    expect(docOf(reset).layout).toEqual(DEFAULT_LAYOUT)
-    expect(docOf(reset).expanded).toEqual([])
-  })
-})
-
 describe('the whole turn', () => {
   it('is one step in the history, so one undo takes back everything the AI did', () => {
     const base = fresh()
-    const result = apply([{ type: 'set_colour', index: 1, hex: '#B5543A' }, { type: 'set_role', index: 1, role: 'primary' }, { type: 'hide_component', component: 'role' }])
+    const result = apply([{ type: 'set_colour', index: 1, hex: '#B5543A' }, { type: 'set_role', index: 1, role: 'primary' }, { type: 'keep_colour', index: 4, keep: true }])
     expect(result.state!.history.past).toHaveLength(1)
-    const undone = applyTurnActions({ base: result.state, open, env, actions: [{ type: 'undo' }] }).state!
+    const undone = applyTurnActions({ base: result.state, open, actions: [{ type: 'undo' }] }).state!
     expect(docOf(undone)).toEqual(docOf(base))
   })
 
   it('undoes and redoes on its own, and refuses when there is nothing to undo or redo or it is mixed with others', () => {
     const changed = apply([{ type: 'set_colour', index: 1, hex: '#B5543A' }]).state!
-    expect(hexes(applyTurnActions({ base: changed, open, env, actions: [{ type: 'undo' }] }).state)[0]).toBe('#1F8FE0')
+    expect(hexes(applyTurnActions({ base: changed, open, actions: [{ type: 'undo' }] }).state)[0]).toBe('#1F8FE0')
     expect(reasons([{ type: 'undo' }])[0]).toMatch(/nothing to undo/)
     expect(reasons([{ type: 'redo' }])[0]).toMatch(/nothing to redo/)
     expect(reasons([{ type: 'select_colour', index: 2 }, { type: 'undo' }], changed)[0]).toMatch(/on their own/)
@@ -294,7 +172,7 @@ describe('the changes it reports, for the receipt', () => {
       { hex: '#3A2540', name: 'Smoky plum', rationale: 'x' },
       { hex: '#8A4F7D', name: 'Dusk mauve', rationale: 'x' },
     ]
-    const result = applyTurnActions({ base: null, open, actions: [{ type: 'set_palette', colours, reason: 'x' }], env })
+    const result = applyTurnActions({ base: null, open, actions: [{ type: 'set_palette', colours, reason: 'x' }] })
     expect(result.changes.map((change) => change.text)).toEqual(['A new palette of 3 colours: Wax cream, Smoky plum, Dusk mauve'])
     expect(result.changes[0].focus).toHaveLength(3)
   })
@@ -306,13 +184,6 @@ describe('the changes it reports, for the receipt', () => {
     const generated = apply([{ type: 'generate', harmony: 'triad', from: 1 }])
     expect(generated.changes[0].text).toMatch(/^Generated 3 colours from a triad harmony$/)
     expect(generated.changes[0].focus.map((target) => target.id)).toEqual([2, 3, 4])
-  })
-
-  it('says what was done to the layout, in words', () => {
-    expect(texts([{ type: 'hide_component', component: 'preview' }])).toEqual(['Hid the sample invoice'])
-    expect(texts([{ type: 'resize_component', component: 'canvas', size: 'half' }])).toEqual(['Made the palette half width'])
-    expect(texts([{ type: 'expand_tool', component: 'role' }])).toEqual(['Made the role tool a window'])
-    expect(texts([{ type: 'reset_layout' }])).toEqual(['Reset the layout'])
   })
 
   it('reports a line for each action, in the order they were applied, and none for one that was left out', () => {

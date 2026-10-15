@@ -21,7 +21,7 @@ describe('buildUserContent', () => {
     const text = buildUserContent({ intent: 'make it warmer', workspace: openSnapshot() })
     expect(text).toContain('"selectedColour": 1')
     expect(text).toContain('"textOnBackground"')
-    expect(text).toContain('"arrangement"')
+    expect(text).not.toMatch(/"arrangement"|"components"|toolbar|"layout"/)
   })
 
   it('includes the saved palette when there is one', () => {
@@ -59,10 +59,17 @@ describe('SYSTEM_PROMPT', () => {
     expect(SYSTEM_PROMPT).not.toContain('—')
   })
 
-  it('names every action and component the schema allows', () => {
-    for (const word of ['set_palette', 'set_colour', 'add_colour', 'remove_colour', 'set_role', 'keep_colour', 'select_colour', 'generate', 'show_component', 'hide_component', 'move_component', 'resize_component', 'expand_tool', 'collapse_tool', 'reset_layout', 'export_brand_sheet', 'undo', 'redo', 'picker', 'preview', 'canvas']) {
+  it('names every action the schema allows', () => {
+    for (const word of ['set_palette', 'set_colour', 'add_colour', 'remove_colour', 'set_role', 'keep_colour', 'select_colour', 'generate', 'export_brand_sheet', 'undo', 'redo']) {
       expect(SYSTEM_PROMPT).toContain(word)
     }
+  })
+
+  it('names no action that moves, resizes, hides, shows or opens a part of the screen, and says Droplet cannot', () => {
+    for (const word of ['show_component', 'hide_component', 'move_component', 'resize_component', 'expand_tool', 'collapse_tool', 'reset_layout']) {
+      expect(SYSTEM_PROMPT).not.toContain(word)
+    }
+    expect(SYSTEM_PROMPT).toMatch(/cannot move, resize, hide, show or open any part of the screen/)
   })
 })
 

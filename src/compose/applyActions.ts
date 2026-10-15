@@ -1,4 +1,3 @@
-import { COLS, placeRelative, type Heights, type Placement } from '../lib/gridLayout.ts'
 import { replaceableIds } from '../lib/harmony.ts'
 import { createHistory } from '../lib/history.ts'
 import type { PaletteBlock } from '../lib/palette.ts'
@@ -8,11 +7,6 @@ import {
   canRedoState,
   canUndoState,
   docOf,
-  isExpanded,
-  isWindow,
-  mergeLayout,
-  shownWindows,
-  toolbarTools,
   reduce,
   type WorkspaceAction,
   type WorkspaceState,
@@ -26,12 +20,6 @@ import type { PaletteAction } from './spec.ts'
 // The model counts colours from 1 in the order shown, so each number is resolved against the workspace as it is at
 // that step. Anything that cannot be done is left out with a plain reason, and the reasons are what goes back to
 // the model if it has to try again.
-
-export type ApplyEnv = {
-  // Where each visible component is drawn now, and how tall each is, for moves relative to another component.
-  layout: Placement[]
-  heights: Heights
-}
 
 export type Skipped = { position: number; action: PaletteAction; reason: string }
 export type Effect = 'export'
@@ -53,12 +41,9 @@ type Input = {
   // Makes a new workspace from these colours (using the project's saved layout, if it has one).
   open: (blocks: PaletteBlock[]) => WorkspaceState
   actions: PaletteAction[]
-  env: ApplyEnv
 }
 
-const PANEL_SIZES: Record<string, number> = { third: 8, half: 12, two_thirds: 16, full: 24 }
-
-export function applyTurnActions({ base, open, actions, env }: Input): ApplyResult {
+export function applyTurnActions({ base, open, actions }: Input): ApplyResult {
   const skipped: Skipped[] = []
   const effects: Effect[] = []
   const collected: WorkspaceAction[] = []
@@ -80,9 +65,6 @@ export function applyTurnActions({ base, open, actions, env }: Input): ApplyResu
 
   let scratch: WorkspaceState | null = base
   let opened = false
-  let currentLayout: Placement[] = env.layout
-
-  const visibleLayout = (state: WorkspaceState) => docOf(state).layout.filter((p) => shownWindows(docOf(state)).includes(p.id))
 
   actions.forEach((action, position) => {
     const skip = (reason: string) => void skipped.push({ position, action, reason })
@@ -92,17 +74,12 @@ export function applyTurnActions({ base, open, actions, env }: Input): ApplyResu
       const errors = paletteErrors(action.colours)
       if (errors.length > 0) return skip(errors.join(' '))
       scratch = open(action.colours.map(toBlock))
-      currentLayout = visibleLayout(scratch)
       opened = true
     }
 
     const blocks = docOf(scratch).blocks
     const idAt = (number: number) => blocks[number - 1]?.id
     const missing = (number: number) => `There is no colour ${number}. The palette has ${blocks.length} colours, numbered 1 to ${blocks.length}.`
-    // A tool in the toolbar is on screen unless it is hidden. A window is on screen if it is on the grid.
-    const inToolbar = (component: string) => toolbarTools(docOf(scratch!)).includes(component)
-    const isShown = (component: string) => inToolbar(component) || currentLayout.some((p) => p.id === component)
-
     let next: WorkspaceAction[] = []
 
     switch (action.type) {
@@ -154,82 +131,6 @@ export function applyTurnActions({ base, open, actions, env }: Input): ApplyResu
         next = [{ type: 'set_harmony', harmony: action.harmony }, { type: 'generate', fromId: from }]
         break
       }
-      case 'show_component':
-        next = [{ type: 'show', component: action.component, reason: action.reason }]
-        break
-      case 'hide_component':
-        next = [{ type: 'hide', component: action.component }]
-        break
-      case 'move_component': {
-        if (action.component === action.relativeTo) return skip(`A component cannot be placed relative to itself ("${action.component}").`)
-        for (const component of [action.component, action.relativeTo]) {
-          if (!isShown(component)) return skip(`The "${component}" component is not on screen. Show it first.`)
-        }
-        // Tools sit side by side in the toolbar, windows sit on the grid, and the two cannot be placed against each other.
-        const movingTool = inToolbar(action.component)
-        const targetTool = inToolbar(action.relativeTo)
-        if (movingTool !== targetTool) {
-          return skip(
-            `"${movingTool ? action.component : action.relativeTo}" is a tool, which sits in the toolbar, and "${movingTool ? action.relativeTo : action.component}" is a window on the grid, so one cannot be placed relative to the other. Tools go left_of or right_of other tools. Windows go above, below, left_of or right_of other windows.`,
-          )
-        }
-        if (movingTool) {
-          if (action.placement === 'above' || action.placement === 'below') return skip('Tools sit side by side in the toolbar, so use left_of or right_of.')
-          const order = toolbarTools(docOf(scratch))
-          const rest = order.filter((id) => id !== action.component)
-          const at = rest.indexOf(action.relativeTo)
-          const before = action.placement === 'left_of' ? action.relativeTo : (rest[at + 1] ?? null)
-          const result = [...rest.slice(0, before === null ? rest.length : rest.indexOf(before)), action.component, ...rest.slice(before === null ? rest.length : rest.indexOf(before))]
-          if (result.join() === order.join()) return skip(`"${action.component}" is already ${action.placement.replace('_', ' ')} "${action.relativeTo}".`)
-          next = [{ type: 'move_tool', id: action.component, before }]
-          break
-        }
-        // Beside another component needs room beside it. A full-width panel has none, and a drop there would only
-        // push it down, so say so and let the model make it narrower first, as a person would.
-        const target = currentLayout.find((p) => p.id === action.relativeTo)!
-        const moving = currentLayout.find((p) => p.id === action.component)!
-        if (action.placement === 'right_of' || action.placement === 'left_of') {
-          const room = action.placement === 'right_of' ? COLS - (target.col + target.w) : target.col
-          if (room < moving.w) {
-            return skip(
-              `There is no room ${action.placement.replace('_', ' ')} "${action.relativeTo}": it leaves ${room} of 24 columns and "${action.component}" needs ${moving.w}. Make "${action.relativeTo}" narrower first with resize_component (for example half), or make "${action.component}" smaller, then move it.`,
-            )
-          }
-        }
-        const moved = placeRelative(currentLayout, env.heights, action.component, action.relativeTo, action.placement)
-        if (!moved) return skip(`Could not place "${action.component}" ${action.placement.replace('_', ' ')} "${action.relativeTo}".`)
-        currentLayout = moved
-        next = [{ type: 'layout', layout: mergeLayout(docOf(scratch).layout, moved) }]
-        break
-      }
-      case 'resize_component': {
-        if (!isShown(action.component)) return skip(`The "${action.component}" component is not on screen. Show it first.`)
-        if (inToolbar(action.component)) {
-          return skip(`"${action.component}" is a tool in the toolbar, which has one size. Use expand_tool to make it a window, then resize it.`)
-        }
-        const value = PANEL_SIZES[action.size]
-        next = [{ type: 'resize', id: action.component, value }]
-        // A window's new width counts for the moves that follow in this turn.
-        currentLayout = currentLayout.map((p) => (p.id === action.component ? { ...p, w: value } : p))
-        break
-      }
-      case 'expand_tool': {
-        const doc = docOf(scratch)
-        if (isExpanded(doc, action.component)) return skip(`"${action.component}" is already a window.`)
-        if (doc.hidden.includes(action.component)) return skip(`The "${action.component}" component is not on screen. Show it first.`)
-        next = [{ type: 'expand_tool', id: action.component }]
-        break
-      }
-      case 'collapse_tool': {
-        const doc = docOf(scratch)
-        if (!isExpanded(doc, action.component)) return skip(`"${action.component}" is already in the toolbar.`)
-        if (!isWindow(doc, action.component)) return skip(`"${action.component}" is not a window.`)
-        next = [{ type: 'collapse_tool', id: action.component }]
-        break
-      }
-      case 'reset_layout':
-        next = [{ type: 'reset_layout' }]
-        break
       case 'export_brand_sheet':
         effects.push('export')
         return
@@ -242,11 +143,6 @@ export function applyTurnActions({ base, open, actions, env }: Input): ApplyResu
     collected.push(...next)
     const change = describeChange(action, blocks, docOf(scratch).blocks)
     if (change) changes.push(change)
-
-    // Keep the picture of what is on screen up to date for the moves that follow.
-    if (['show_component', 'hide_component', 'reset_layout', 'expand_tool', 'collapse_tool'].includes(action.type)) {
-      currentLayout = visibleLayout(scratch!)
-    }
   })
 
   if (!scratch) return { state: base, skipped, effects, opened: false, changes: [] }
@@ -274,10 +170,6 @@ function toBlock(colour: { hex: string; name: string; rationale: string; role?: 
 }
 
 
-const COMPONENT_LABEL: Record<string, string> = { picker: 'colour picker', role: 'role tool', generate: 'Generate tool', canvas: 'palette', preview: 'sample invoice' }
-const label = (component: string) => COMPONENT_LABEL[component] ?? component
-const PLACEMENT_WORDS: Record<string, string> = { above: 'above', below: 'below', left_of: 'to the left of', right_of: 'to the right of' }
-const SIZE_WORDS: Record<string, string> = { third: 'a third', half: 'half', two_thirds: 'two thirds', full: 'the full' }
 const ROLE_WORDS: Record<string, string> = { primary: 'the primary colour', accent: 'the accent colour', background: 'the background', text: 'the text colour' }
 
 const lightness = (hex: string) => relativeLuminance(hexToRgb(hex))
@@ -323,20 +215,6 @@ function describeChange(action: PaletteAction, before: PaletteBlock[], after: Pa
       const changed = after.filter((block, index) => before[index] && before[index].hex !== block.hex)
       return { kind: 'changed', text: `Generated ${plural(changed.length, 'colour')} from ${action.harmony === 'monochrome' ? 'a monochrome harmony' : `a ${action.harmony} harmony`}`, focus: changed.map((block) => ({ kind: 'block', id: block.id, how: 'changed' })) }
     }
-    case 'show_component':
-      return { kind: 'added', text: `Showed the ${label(action.component)}`, focus: [{ kind: 'window', id: action.component, how: 'added' }] }
-    case 'hide_component':
-      return { kind: 'removed', text: `Hid the ${label(action.component)}`, focus: [{ kind: 'window', id: action.component, how: 'removed' }] }
-    case 'move_component':
-      return { kind: 'changed', text: `Moved the ${label(action.component)} ${PLACEMENT_WORDS[action.placement]} the ${label(action.relativeTo)}`, focus: [{ kind: 'window', id: action.component, how: 'moved' }] }
-    case 'resize_component':
-      return { kind: 'changed', text: `Made the ${label(action.component)} ${SIZE_WORDS[action.size]} width`, focus: [{ kind: 'window', id: action.component, how: 'changed' }] }
-    case 'expand_tool':
-      return { kind: 'changed', text: `Made the ${label(action.component)} a window`, focus: [{ kind: 'window', id: action.component, how: 'added' }] }
-    case 'collapse_tool':
-      return { kind: 'changed', text: `Put the ${label(action.component)} back in the toolbar`, focus: [] }
-    case 'reset_layout':
-      return { kind: 'changed', text: 'Reset the layout', focus: [] }
     default:
       return null
   }

@@ -143,15 +143,15 @@ export const TEST_REQUESTS: TestRequest[] = [
   },
   {
     id: 'act-layout',
-    why: 'Moving a component relative to another',
+    why: 'Droplet cannot move parts of the screen: it says so plainly and changes nothing',
     request: { intent: 'Put the preview under the palette instead of next to it', workspace: open },
-    expect: { task: 'brand', acts: true, firstAction: ['move_component'] },
+    expect: { task: ['brand', 'chat'], acts: false },
   },
   {
     id: 'act-hide',
-    why: 'Removing a component',
-    request: { intent: 'I do not need the sample invoice. Take it off the screen.', workspace: open },
-    expect: { task: 'brand', acts: true, firstAction: ['hide_component'] },
+    why: 'Droplet cannot hide or resize parts of the screen: it says so plainly and changes nothing',
+    request: { intent: 'I do not need the sample invoice. Take it off the screen and make the palette bigger.', workspace: open },
+    expect: { task: ['brand', 'chat'], acts: false },
   },
   {
     id: 'act-undo',

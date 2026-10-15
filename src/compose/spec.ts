@@ -22,11 +22,6 @@ export { TASKS, type Task }
 
 export const COLOUR_ROLES = ['primary', 'accent', 'background', 'text'] as const
 export const HARMONIES = ['analogous', 'complementary', 'triad', 'monochrome'] as const
-// Components the model can name. The canvas is the palette itself, so it can be moved and resized but not hidden.
-export const ALL_COMPONENTS = ['picker', 'role', 'generate', 'canvas', 'preview'] as const
-// The tools: compact in the toolbar, or a bigger window when they have been dragged out.
-export const TOOL_COMPONENTS = ['picker', 'role', 'generate'] as const
-export const HIDEABLE_COMPONENTS = ['picker', 'role', 'generate', 'preview'] as const
 
 const sentence = (max: number) => z.string().trim().min(1).max(max)
 
@@ -73,34 +68,6 @@ export const actionSchema = z.discriminatedUnion('type', [
     harmony: z.enum(HARMONIES),
     from: index.optional().describe('The colour to start from. The selected colour if left out.'),
   }),
-  z.object({
-    type: z.enum(['show_component']),
-    component: z.enum(HIDEABLE_COMPONENTS),
-    reason: sentence(140).optional().describe('One line saying why this component is on screen.'),
-  }),
-  z.object({ type: z.enum(['hide_component']), component: z.enum(HIDEABLE_COMPONENTS) }),
-  z.object({
-    type: z.enum(['move_component']),
-    component: z.enum(ALL_COMPONENTS),
-    relativeTo: z.enum(ALL_COMPONENTS),
-    placement: z.enum(['above', 'below', 'left_of', 'right_of']).describe('Where to put the component, relative to the other one.'),
-  }),
-  z.object({
-    type: z.enum(['resize_component']),
-    component: z.enum(ALL_COMPONENTS),
-    size: z
-      .enum(['third', 'half', 'two_thirds', 'full'])
-      .describe('The width of a window: canvas, preview, or a tool that has been made a window. A tool in the toolbar has one size.'),
-  }),
-  z.object({
-    type: z.enum(['expand_tool']),
-    component: z.enum(TOOL_COMPONENTS).describe('A tool to take out of the toolbar and make a bigger window.'),
-  }),
-  z.object({
-    type: z.enum(['collapse_tool']),
-    component: z.enum(TOOL_COMPONENTS).describe('A tool that is a window, to put back in the toolbar.'),
-  }),
-  z.object({ type: z.enum(['reset_layout']) }),
   z.object({ type: z.enum(['export_brand_sheet']) }),
   z.object({ type: z.enum(['undo']) }),
   z.object({ type: z.enum(['redo']) }),
@@ -160,13 +127,12 @@ export const workspaceSnapshotSchema = z.object({
     .max(8),
   selectedId: z.number().int(),
   harmony: z.enum(HARMONIES),
-  hidden: z.array(z.string().max(20)).max(10),
-  // Tools that are windows on the grid, not in the toolbar.
-  expanded: z.array(z.string().max(20)).max(10),
-  // Where each visible window is drawn now.
-  layout: z.array(placementSchema).max(10),
-  // The tools in the toolbar, left to right, as far as they are visible.
-  tools: z.array(z.string().max(20)).max(10),
+  // Where the parts of the screen sit is not the model's business and is no longer sent. These are still accepted, and ignored, so a request
+  // from a browser that has not been updated yet still parses.
+  hidden: z.array(z.string().max(20)).max(10).optional(),
+  expanded: z.array(z.string().max(20)).max(10).optional(),
+  layout: z.array(placementSchema).max(10).optional(),
+  tools: z.array(z.string().max(20)).max(10).optional(),
   canUndo: z.boolean(),
   canRedo: z.boolean(),
   saved: z.enum(['none', 'saved', 'unsaved']),

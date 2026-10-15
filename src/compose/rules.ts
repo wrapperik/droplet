@@ -29,7 +29,6 @@ export function checkTurn(turn: Turn, workspace?: WorkspaceSnapshot): string[] {
     base: workspace ? stateOfSnapshot(workspace) : null,
     open: (blocks) => openWorkspace(blocks),
     actions: turn.actions.filter((action): action is PaletteAction => !isScreenAction(action)),
-    env: { layout: workspace?.layout ?? [], heights: {} },
   })
   return result.skipped.map((skipped) => `Action ${skipped.position + 1} (${skipped.action.type}): ${skipped.reason}`)
 }

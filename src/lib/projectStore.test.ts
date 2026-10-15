@@ -55,6 +55,11 @@ describe('projectStore', () => {
     expect(await loadPalette('duckstack')).toBeNull()
   })
 
+  it('reads a save that has no layout', async () => {
+    window.localStorage.setItem('droplet-project-duckstack-palette', JSON.stringify({ blocks: [{ id: 1, hex: '#1F8FE0' }], savedAt: 'x' }))
+    expect(await loadPalette('duckstack')).toMatchObject({ blocks: [{ id: 1, hex: '#1F8FE0' }] })
+  })
+
   it('stamps when it was saved', async () => {
     const save = await savePalette('duckstack', data)
     expect(Number.isNaN(Date.parse(save!.savedAt))).toBe(false)

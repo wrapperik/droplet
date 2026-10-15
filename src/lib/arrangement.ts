@@ -1,4 +1,4 @@
-import { COLS, clamp, reconcile, samePlacements, type Placement } from './gridLayout.ts'
+import { COLS, clamp, samePlacements, type Placement } from './gridLayout.ts'
 
 // How a workspace is arranged, which is the same for every task: tools in the toolbar under the header, windows on the
 // grid, tools that have been dragged out into windows, and what has been hidden. A task describes its components in a spec
@@ -39,8 +39,9 @@ export type Arrangement = {
   reasons: Record<string, string>
 }
 
-// What a save keeps of the arrangement. Everything is optional but the layout, so older saves still load.
-export type ArrangementSave = { layout: Placement[]; tools?: string[]; expanded?: string[]; hidden?: string[] }
+// What a save keeps of the arrangement. Everything is optional, so older saves still load. None of it is read back any more:
+// a workspace always opens with the spec's defaults (see `openArrangement`).
+export type ArrangementSave = { layout?: Placement[]; tools?: string[]; expanded?: string[]; hidden?: string[] }
 
 export type ArrangementAction =
   | { type: 'layout'; layout: Placement[] }
@@ -80,15 +81,15 @@ export const normaliseTools = (spec: ArrangementSpec, order: string[] | undefine
 export const normaliseExpanded = (spec: ArrangementSpec, ids: string[] | undefined): string[] =>
   (ids ?? []).filter((id, index, all) => toolIds(spec).includes(id) && all.indexOf(id) === index)
 
-// The arrangement a workspace opens in: the project's saved one if there is one, otherwise where things start.
-export function openArrangement(spec: ArrangementSpec, saved?: ArrangementSave | null): Arrangement {
-  const ids = spec.layout.map((p) => p.id)
-  const layout = saved ? reconcile(saved.layout, spec.layout, ids).map((p) => ({ ...p, w: clampPanelWidth(p.w) })) : spec.layout
+// The arrangement a workspace opens in: always where things start. A save may still hold a layout, a tool order, tools that were
+// pulled out and parts that were hidden, from before the workspace became a fixed frame, and none of that is applied: an old
+// `hidden` must not take a part off the screen for good. The argument is kept so callers need not change.
+export function openArrangement(spec: ArrangementSpec, _saved?: ArrangementSave | null): Arrangement {
   return {
-    layout,
-    tools: normaliseTools(spec, saved?.tools),
-    expanded: normaliseExpanded(spec, saved?.expanded),
-    hidden: saved?.hidden ?? spec.defaultHidden ?? [],
+    layout: spec.layout,
+    tools: toolIds(spec),
+    expanded: [],
+    hidden: spec.defaultHidden ?? [],
     reasons: {},
   }
 }
@@ -109,14 +110,10 @@ export function arrangementIsDefault(spec: ArrangementSpec, a: Arrangement): boo
   return samePlacements(only(a.layout), only(spec.layout)) && a.tools.join() === toolIds(spec).join() && a.expanded.length === 0
 }
 
-// Whether the arrangement differs from what was saved.
-export function arrangementUnsaved(spec: ArrangementSpec, a: Arrangement, saved: ArrangementSave): boolean {
-  return (
-    !samePlacements(a.layout, saved.layout) ||
-    a.tools.join() !== normaliseTools(spec, saved.tools).join() ||
-    a.expanded.join() !== normaliseExpanded(spec, saved.expanded).join() ||
-    JSON.stringify([...a.hidden].sort()) !== JSON.stringify([...(saved.hidden ?? [])].sort())
-  )
+// Whether the arrangement counts as an unsaved change. It does not: a saved arrangement is no longer applied when a workspace opens, so
+// moving, pulling out or hiding something is never work that Save would keep. The function stays until the callers are trimmed.
+export function arrangementUnsaved(_spec: ArrangementSpec, _a: Arrangement, _saved: ArrangementSave): boolean {
+  return false
 }
 
 // The state after an action, or the very same object if the action changes nothing.

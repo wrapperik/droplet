@@ -42,7 +42,7 @@ export const chatTurn: Turn = {
   memoryUsed: [],
 }
 
-// A workspace with the starter palette open and the default layout, as the founder would see it.
+// A workspace with the starter palette open, as the founder would see it.
 export const openSnapshot = (): WorkspaceSnapshot => {
   const state = openWorkspace([
     { id: 1, hex: '#1F8FE0', name: 'Droplet blue' },
@@ -50,10 +50,7 @@ export const openSnapshot = (): WorkspaceSnapshot => {
     { id: 3, hex: '#CFE9FB' },
     { id: 4, hex: '#0E1A2B' },
   ])
-  return snapshotOfState(state, [
-    { id: 'canvas', col: 0, row: 0, w: 24 },
-    { id: 'preview', col: 0, row: 20, w: 12 },
-  ], 'none')
+  return snapshotOfState(state, 'none')
 }
 
 // A new invoice open in the workspace, dated 4 October 2026, in a project that remembers one client.

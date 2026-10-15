@@ -34,15 +34,6 @@ describe('checkTurn', () => {
     expect(checkTurn(brand([{ type: 'set_colour', index: 1, hex: '#123456' }]))[0]).toMatch(/set_palette/)
   })
 
-  it('checks moves against what is drawn', () => {
-    const snapshot = openSnapshot()
-    const without = { ...snapshot, hidden: ['preview'], layout: snapshot.layout.filter((p) => p.id !== 'preview') }
-    expect(checkTurn(brand([{ type: 'move_component', component: 'preview', relativeTo: 'canvas', placement: 'right_of' }]), without)[0]).toMatch(/not on screen/)
-    expect(checkTurn(brand([{ type: 'move_component', component: 'preview', relativeTo: 'canvas', placement: 'above' }]), snapshot)).toEqual([])
-    // the canvas is full width, so there is no room beside it until it is made narrower
-    expect(checkTurn(brand([{ type: 'move_component', component: 'preview', relativeTo: 'canvas', placement: 'right_of' }]), snapshot)[0]).toMatch(/no room/)
-  })
-
   it('refuses undo when there is nothing to undo, and allows it when there is', () => {
     expect(checkTurn(brand([{ type: 'undo' }]), openSnapshot())[0]).toMatch(/nothing to undo/)
     expect(checkTurn(brand([{ type: 'undo' }]), { ...openSnapshot(), canUndo: true })).toEqual([])

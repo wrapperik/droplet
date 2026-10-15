@@ -35,6 +35,11 @@ describe('the saved arrangement', () => {
     expect(await loadInvoice('duckstack')).toBeNull()
   })
 
+  it('reads an arrangement that has no layout', async () => {
+    window.localStorage.setItem('droplet-project-duckstack-invoice', JSON.stringify({ hidden: ['terms'], savedAt: 'x' }))
+    expect(await loadInvoice('duckstack')).toMatchObject({ hidden: ['terms'] })
+  })
+
   it('still reads an invoice saved before a project had a memory', async () => {
     window.localStorage.setItem('droplet-project-duckstack-invoice', JSON.stringify({ content: newContent('2026-10-04', 'INV-0042'), layout: INVOICE_LAYOUT, savedAt: 'x' }))
     expect((await loadInvoice('duckstack'))?.content?.details.number).toBe('INV-0042')
@@ -70,14 +75,14 @@ describe('opening the invoice workspace', () => {
     expect(doc.content).toEqual(content)
   })
 
-  it('starts another invoice, keeps the arrangement given, and does not touch the one that was open', async () => {
+  it('starts another invoice, opens it with the default arrangement, and does not touch the one that was open', async () => {
     await saveMemory('duckstack', withInvoice(emptyMemory(), 'i1', newContent('2026-10-04', 'INV-0007'), '2026-10-04T10:00'))
     const state = await openNewInvoice('duckstack', { ...arrangement, tools: ['vat'], expanded: ['client'] }, '2026-11-01')
     const doc = invoiceDocOf(state)
     expect(doc.invoiceId).not.toBe('i1')
     expect(doc.content.details.number).toBe('INV-0008')
-    expect(doc.tools[0]).toBe('vat')
-    expect(doc.expanded).toEqual(['client'])
+    expect(doc.tools[0]).not.toBe('vat')
+    expect(doc.expanded).toEqual([])
   })
 
   it('opens a saved invoice by id, and none that does not exist', async () => {

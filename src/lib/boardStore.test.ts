@@ -46,12 +46,20 @@ describe('boardStore', () => {
     expect(docOf(await openBoardForProject('duckstack')).items).toEqual(data.items)
   })
 
-  it('keeps how the workspace is arranged with the notes', async () => {
+  it('opens with the default arrangement, whatever arrangement an older save holds', async () => {
     const start = openBoard()
     const moved = reduceBoard(start, { type: 'resize', id: 'board', value: 16 })
     const doc = docOf(moved)
-    await saveBoard('duckstack', { items: doc.items, layout: doc.layout, tools: doc.tools, expanded: doc.expanded, hidden: doc.hidden })
-    expect(docOf(await openBoardForProject('duckstack')).layout.find((placement) => placement.id === 'board')?.w).toBe(16)
+    await saveBoard('duckstack', { items: doc.items, layout: doc.layout, tools: doc.tools, expanded: ['select'], hidden: ['select'] })
+    const opened = docOf(await openBoardForProject('duckstack'))
+    expect(opened.layout).toEqual(docOf(openBoard()).layout)
+    expect(opened.expanded).toEqual([])
+    expect(opened.hidden).toEqual(docOf(openBoard()).hidden)
+  })
+
+  it('reads a save that has no layout', async () => {
+    window.localStorage.setItem('droplet-project-duckstack-board', JSON.stringify({ items: [], savedAt: 'x' }))
+    expect(await loadBoard('duckstack')).toMatchObject({ items: [] })
   })
 })
 
