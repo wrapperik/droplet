@@ -14,6 +14,10 @@ import IntentBar from '../components/IntentBar.tsx'
 import Library from '../components/Library.tsx'
 import InvoiceWorkspace from '../components/invoice/InvoiceWorkspace.tsx'
 import InvoiceResultCard from '../components/InvoiceResultCard.tsx'
+import PaletteResultCard from '../components/PaletteResultCard.tsx'
+import { isPaletteResult } from '../lib/chatResult.ts'
+import { BRAND_PARTS } from '../lib/brandParts.ts'
+import { brandStepIndex, paletteResultMessage, startBrandGuide, type BrandProgress, type PaletteResult } from '../lib/brandGuide.ts'
 import { GUIDE_STEPS, changedSteps, type GuideStepId, jumpTo, progressFor, resultMessage, stepIndex, stepsOfTargets, stepToShow, type GuideProgress, type InvoiceResult } from '../lib/invoiceGuide.ts'
 import { scrollToPartWhenThere } from '../lib/partNav.ts'
 import { useWorkMode } from '../store/workMode.ts'
@@ -129,6 +133,12 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   // Where the founder is in the guided invoice. Kept here, so a visit to another workspace does not lose the place.
   const [guide, setGuide] = useState<GuideProgress | null>(null)
   const guideRef = useRef<GuideProgress | null>(null)
+  // The same for the brand's three parts: where the founder is in the guide, kept so a visit to another workspace does not lose the place.
+  const [brandGuide, setBrandGuide] = useState<BrandProgress>(startBrandGuide)
+  const brandGuideRef = useRef(brandGuide)
+  useEffect(() => {
+    brandGuideRef.current = brandGuide
+  })
   // Brings the parts of the invoice that a change touched on screen, to edit by hand: one function for both modes. Guide mode goes to the first part that changed,
   // unless the founder is already on one of them. Workspace mode scrolls the panel to it once it is drawn. The cursor stays where it is unless asked.
   const showInvoiceParts = useCallback((parts: GuideStepId[], options: { focus?: boolean } = {}) => {
@@ -473,6 +483,10 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         ...(view === 'invoice' && invoiceOpen ? { invoice: snapshotOfInvoice(invoiceOpen, memory, todayIso()) } : {}),
         // In Guide mode the composer is told which step is on screen, so it helps with that one. It cannot move the founder on.
         ...(view === 'invoice' && invoiceOpen && useWorkMode.getState().mode === 'guide' ? { guide: guideOf(invoiceDocOf(invoiceOpen).invoiceId) } : {}),
+        // The same for the brand's three steps.
+        ...(view === 'brand' && open && useWorkMode.getState().mode === 'guide'
+          ? { guide: { step: brandGuideRef.current.step, position: brandStepIndex(brandGuideRef.current.step) + 1, of: BRAND_PARTS.length } }
+          : {}),
         ...(view === 'brand' && open
           ? { workspace: snapshotOfState(open, saved ? (isUnsaved(docOf(open), saved) ? 'unsaved' : 'saved') : 'none') }
           : {}),
@@ -1068,6 +1082,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
     viewRef.current = 'brand'
     spaceRef.current = null
     setWorkspace(null)
+    setBrandGuide(startBrandGuide())
     setInvoice(null)
     setBoard(null)
     libraryOpenRef.current = false
@@ -1101,6 +1116,33 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
       void refreshProject()
     },
     [closeInvoice, message, refreshProject],
+  )
+
+  // Only the brand goes: a guided palette that is finished. Another workspace that is open comes to the front, or the conversation has the whole screen.
+  const closeBrand = useCallback(() => {
+    workspaceRef.current = null
+    setWorkspace(null)
+    setBrandGuide(startBrandGuide())
+    const other: WorkspaceView | null = invoiceRef.current ? 'invoice' : boardRef.current ? 'board' : null
+    if (other) {
+      viewRef.current = other
+      spaceRef.current = other === 'board' ? 'ideation' : other
+      setView(other)
+    } else {
+      spaceRef.current = null
+      if (!libraryOpenRef.current) setCollapsed(false)
+    }
+  }, [])
+
+  // The guided palette is finished: saved. It closes, and the chat shows what was made, with a way to export the brand sheet and open it again.
+  const finishBrand = useCallback(
+    (result: PaletteResult) => {
+      closeBrand()
+      setThread((current) => [...current, { ...message('droplet', paletteResultMessage(result)), result }])
+      setLibraryVersion((count) => count + 1)
+      void refreshProject()
+    },
+    [closeBrand, message, refreshProject],
   )
 
   // Settles the question about unsaved work: its buttons go, and it says how it ended.
@@ -1267,6 +1309,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         const opened = openWorkspace(palette?.blocks ?? starterBlocks())
         workspaceRef.current = opened
         setWorkspace(opened)
+        setBrandGuide(startBrandGuide())
       }
     },
     [beginChat, currentProjectId],
@@ -1323,6 +1366,8 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   const openFromLibrary = useCallback(
     async (target: OpenTarget, options?: { confirmed?: boolean }): Promise<'done' | 'unsaved'> => {
       if (target.kind === 'brand') {
+        // A saved palette is whole, so a brand opened from it in Guide mode opens on its last part, where every part before it can be gone back to.
+        if (!workspaceRef.current && (await loadPalette(currentProjectId))) setBrandGuide({ step: BRAND_PARTS[BRAND_PARTS.length - 1], reached: BRAND_PARTS.length - 1 })
         await openWorkspaceFor('brand')
         return 'done'
       }
@@ -1370,26 +1415,46 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
     [currentProjectId, openWorkspaceFor],
   )
 
-  // The card of an invoice finished in Guide mode: export it from what is saved, or open it again.
+  // The card of a task finished in Guide mode: export it from what is saved, or open it again.
   const renderResult = useCallback(
-    (item: ThreadMessage) =>
-      item.result ? (
+    (item: ThreadMessage) => {
+      const result = item.result
+      if (!result) return null
+      if (isPaletteResult(result)) {
+        return (
+          <PaletteResultCard
+            result={result}
+            busy={composing}
+            onExport={async () => {
+              const outcome = await exportLibraryItem(currentProjectId, projectName(currentProjectId), { kind: 'brand' })
+              setLibraryVersion((count) => count + 1)
+              return outcome.ok ? { ok: true, text: outcome.text } : { ok: false, text: `I could not export it. ${outcome.reason}` }
+            }}
+            onOpen={async () => {
+              if (busyRef.current) return
+              await openFromLibrary({ kind: 'brand' })
+            }}
+          />
+        )
+      }
+      return (
         <InvoiceResultCard
           projectId={currentProjectId}
-          result={item.result}
+          result={result}
           busy={composing}
           onExport={async () => {
-            const outcome = await exportLibraryItem(currentProjectId, projectName(currentProjectId), { kind: 'invoice', id: item.result!.invoiceId })
+            const outcome = await exportLibraryItem(currentProjectId, projectName(currentProjectId), { kind: 'invoice', id: result.invoiceId })
             setLibraryVersion((count) => count + 1)
             return outcome.ok ? { ok: true, text: outcome.text } : { ok: false, text: `I could not export it. ${outcome.reason}` }
           }}
           onOpen={async () => {
             if (busyRef.current) return
-            const outcome = await openFromLibrary({ kind: 'invoice', id: item.result!.invoiceId })
+            const outcome = await openFromLibrary({ kind: 'invoice', id: result.invoiceId })
             if (outcome === 'unsaved') setToast({ id: ++toastId.current, text: 'The invoice you have open has changes that are not saved. Save it or leave it first.' })
           }}
         />
-      ) : null,
+      )
+    },
     [composing, currentProjectId, openFromLibrary, projectName],
   )
 
@@ -1535,6 +1600,10 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
               >
                 <PaletteWorkspace
                   key={currentProjectId}
+                  mode={workMode}
+                  progress={brandGuide}
+                  onProgress={setBrandGuide}
+                  onFinished={finishBrand}
                   projectId={currentProjectId}
                   projectName={projectName(currentProjectId)}
                   state={workspace}

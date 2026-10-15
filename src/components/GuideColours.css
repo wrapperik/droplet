@@ -1,0 +1,193 @@
+/* The Colours step of Guide mode: the colours the founder likes as chips, a way to add one, and the palettes built from them. */
+.gcolours {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.gcolours__block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.625rem;
+}
+
+.gcolours__block > * {
+  max-width: 100%;
+}
+
+.gcolours__heading {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.gcolours__saved,
+.gcolours__empty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+.gcolours__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gcolours__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.25rem 0.25rem 0.5rem;
+  border: 1px solid var(--overlay-10);
+  border-radius: var(--radius-pill);
+  background: var(--overlay-06);
+  font-size: 0.8125rem;
+}
+
+.gcolours__dot {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px var(--overlay-10);
+}
+
+.gcolours__hex {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.gcolours__remove {
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.gcolours__remove:hover {
+  background: var(--overlay-10);
+  color: var(--text);
+}
+
+.gcolours__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  align-self: flex-start;
+  padding: 0.5rem 1.125rem;
+  border: 1px solid var(--overlay-10);
+  border-radius: var(--radius-pill);
+  background: var(--raised);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.gcolours__button:not(:disabled):hover {
+  background: var(--accent-tint-soft);
+}
+
+.gcolours__button--primary {
+  border-color: transparent;
+  background: var(--button);
+  color: var(--on-button);
+}
+
+.gcolours__button--primary:not(:disabled):hover {
+  background: var(--button);
+  box-shadow: var(--shadow-md);
+}
+
+.gcolours__button:disabled {
+  background: var(--overlay-06);
+  color: var(--text-muted);
+  cursor: default;
+}
+
+/* The three palettes: cards, one under the other in a narrow panel and side by side in a wide one. */
+.gcolours__options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.gcolours__card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--overlay-10);
+  border-radius: var(--radius-md);
+  background: var(--overlay-06);
+  color: var(--text);
+  text-align: left;
+}
+
+.gcolours__card:hover {
+  background: var(--accent-tint-soft);
+}
+
+.gcolours__card[aria-checked='true'] {
+  border-color: var(--accent);
+  background: var(--accent-tint-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.gcolours__name {
+  font-weight: 600;
+}
+
+.gcolours__note {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+.gcolours__swatches {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.gcolours__swatch {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.gcolours__fill {
+  height: 2.5rem;
+  border-radius: var(--radius-sm);
+  box-shadow: inset 0 0 0 1px var(--overlay-10);
+}
+
+.gcolours__role {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gcolours__readable {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem 0.75rem;
+  font-size: 0.8125rem;
+}
+
+.gcolours__readable > span:first-child {
+  color: var(--text-muted);
+}

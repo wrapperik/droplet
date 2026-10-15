@@ -1657,6 +1657,60 @@ describe('Guide mode', () => {
   })
 })
 
+describe('Guide mode on the brand', () => {
+  beforeEach(() => useWorkMode.setState({ mode: 'guide' }))
+
+  const choosePalette = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(await screen.findByRole('button', { name: /^Add #/ }))
+    await user.click(screen.getByRole('button', { name: 'Show palettes' }))
+    await user.click(screen.getAllByRole('radio', { name: /^Palette \d/ })[0])
+  }
+
+  it('opens on Colours, keeps its place across a visit to another workspace, and tells the composer the step', async () => {
+    const user = userEvent.setup()
+    answers = [reply('chat', 'Colours it is.')]
+    renderHome()
+    await pickTask(user, /Build the brand/)
+    expect(await screen.findByText('Step 1 of 3')).toBeInTheDocument()
+    await choosePalette(user)
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(await screen.findByText('Step 2 of 3')).toBeInTheDocument()
+    await pickTask(user, /Make an invoice/)
+    await pickTask(user, /Build the brand/)
+    expect(await screen.findByText('Step 2 of 3')).toBeInTheDocument()
+    await say(user, 'Which colour is the accent?')
+    await screen.findByText('Colours it is.')
+    expect(asked[0]).toMatchObject({ view: 'brand', guide: { step: 'roles', position: 2, of: 3 } })
+  })
+
+  it('finishes by saving the palette, then closes and shows the palette in the chat with a way to export it and open it again', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await pickTask(user, /Build the brand/)
+    await choosePalette(user)
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await screen.findByText('Step 2 of 3')
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(await screen.findByText('Step 3 of 3')).toBeInTheDocument()
+    expect(await loadPalette('duckstack')).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Finish' }))
+    expect(await screen.findByText(/The brand palette of \d colours is finished and saved\./)).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByText('Step 3 of 3')).not.toBeInTheDocument())
+    const card = screen.getByRole('region', { name: 'Brand palette' })
+    expect(within(card).getByRole('button', { name: 'Export brand sheet' })).toBeInTheDocument()
+    expect(card).toHaveTextContent('Primary')
+    expect(card).toHaveTextContent(/Passes/)
+    const saved = await loadPalette('duckstack')
+    expect(saved?.blocks.length).toBeGreaterThanOrEqual(4)
+    // the card is kept with the chat
+    await waitFor(async () => expect((await loadChatsFor())[0]?.messages.find((item) => item.result)?.result).toMatchObject({ kind: 'palette', title: 'Brand palette' }))
+
+    // Open brings the brand workspace back, on its last part
+    await user.click(within(card).getByRole('button', { name: 'Open' }))
+    expect(await screen.findByText('Step 3 of 3')).toBeInTheDocument()
+  })
+})
+
 describe('Quick only', () => {
   // The Advanced switch is out of the menu: searching needs a Gemini key with billing, which a free key does not have.
   it('has no Advanced switch, asks the server nothing about an allowance, and sends every message as Quick', async () => {

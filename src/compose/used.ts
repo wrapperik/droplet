@@ -41,7 +41,10 @@ export function usedOf(request: ComposeRequest, options: { searched?: string[] }
   if (files.length > 0) add(files.length === 1 ? 'A file you attached' : `${files.length} files you attached`, `${files.map((file) => file.name).join(', ')}: sent whole for Droplet to read, so anything inside ${files.length === 1 ? 'it' : 'them'}, private details included, was read. Not kept.`)
   if (request.history && request.history.length > 0) add('This chat', `The ${plural(request.history.length, 'message')} before this one, so a follow-up makes sense.`)
 
-  if (request.view === 'brand' && request.workspace) add('The palette on screen', `${plural(request.workspace.blocks.length, 'colour')} with their roles, which one is selected, and the contrast figures worked out by the app.`)
+  if (request.view === 'brand' && request.workspace) {
+    const step = request.guide ? ` and the guide step you are on (${request.guide.position} of ${request.guide.of})` : ''
+    add('The palette on screen', `${plural(request.workspace.blocks.length, 'colour')} with their roles, which one is selected, and the contrast figures worked out by the app${step}.`)
+  }
   if (request.view === 'invoice' && request.invoice) {
     const step = request.guide ? ` and the guide step you are on (${request.guide.position} of ${request.guide.of})` : ''
     add('The invoice on screen', `Its number, dates, terms, the client’s name, the lines and totals, and what is still missing${step}. No addresses, contact details or bank details.`)

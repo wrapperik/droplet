@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { computeTotals, dueDateOf, lineIsBlank, type InvoiceContent } from './invoice.ts'
+import { flowAdvance, flowBack, flowGoTo, flowJumpTo } from './guideFlow.ts'
 import type { Issue, Readiness } from './invoiceReadiness.ts'
 
 // The six parts of the invoice, in a fixed order, the same in both modes: Guide mode shows one at a time until it is finished, and Workspace mode shows them all
@@ -62,26 +63,16 @@ export function stepBlockers(step: GuideStepId, readiness: Readiness): Issue[] {
 // Continue: the next step, if nothing holds this one back. The last step has nowhere to go; finishing it is the founder's confirm.
 export function advance(progress: GuideProgress, readiness: Readiness): { progress: GuideProgress; blocked: Issue[] } {
   const blocked = stepBlockers(progress.step, readiness)
-  const index = stepIndex(progress.step)
-  if (blocked.length > 0 || index === GUIDE_STEPS.length - 1) return { progress, blocked }
-  const next = index + 1
-  return { progress: { ...progress, step: GUIDE_STEPS[next], reached: Math.max(progress.reached, next) }, blocked }
+  return { progress: flowAdvance(GUIDE_STEPS, progress, blocked), blocked }
 }
 
-export function back(progress: GuideProgress): GuideProgress {
-  const index = stepIndex(progress.step)
-  return index === 0 ? progress : { ...progress, step: GUIDE_STEPS[index - 1] }
-}
+export const back = (progress: GuideProgress): GuideProgress => flowBack(GUIDE_STEPS, progress)
 
 // A step the founder has reached can be gone back to, and forward again as far as they got. One further on cannot be skipped to.
-export function goTo(progress: GuideProgress, step: GuideStepId): GuideProgress {
-  return stepIndex(step) <= progress.reached ? { ...progress, step } : progress
-}
+export const goTo = (progress: GuideProgress, step: GuideStepId): GuideProgress => flowGoTo(GUIDE_STEPS, progress, step)
 
 // Something outside the guide sends the founder to a step (a Fix button on the checklist, or Edit in the library). It counts as reached.
-export function jumpTo(progress: GuideProgress, step: GuideStepId): GuideProgress {
-  return { ...progress, step, reached: Math.max(progress.reached, stepIndex(step)) }
-}
+export const jumpTo = (progress: GuideProgress, step: GuideStepId): GuideProgress => flowJumpTo(GUIDE_STEPS, progress, step)
 
 // The parts of the invoice that differ between two versions of it, in the guide's order, so a change Droplet made can be shown where it was made.
 // Worked out from the invoice itself, so an undo or a redo is covered as well as each action. The VAT number belongs to the VAT step.

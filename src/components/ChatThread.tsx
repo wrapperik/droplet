@@ -8,7 +8,7 @@ import type { AttachmentNote } from '../compose/attachments.ts'
 import { MAX_INTENT_CHARS } from '../compose/spec.ts'
 import type { Used } from '../compose/used.ts'
 import UsedLine from './UsedLine.tsx'
-import type { InvoiceResult } from '../lib/invoiceGuide.ts'
+import type { ChatResult } from '../lib/chatResult.ts'
 import type { SpecColour } from '../lib/logoHandoff.ts'
 import ChangeReceipt from './ChangeReceipt.tsx'
 import FactChips, { type ProposalView } from './FactChips.tsx'
@@ -64,8 +64,8 @@ export type ThreadMessage = {
   actions?: ThreadAction[]
   // A note from the app, not an answer from the model, so it is not sent to the model as part of the conversation.
   local?: boolean
-  // A task finished in Guide mode, shown as a card under the words: for now, an invoice.
-  result?: InvoiceResult
+  // A task finished in Guide mode, shown as a card under the words: an invoice or a palette.
+  result?: ChatResult
   // When it was sent or arrived (ISO), shown under it on hover or focus.
   at?: string
   // The reply has only just arrived, so it comes in paragraph by paragraph, then its blocks, its question and its suggested replies. Home clears this

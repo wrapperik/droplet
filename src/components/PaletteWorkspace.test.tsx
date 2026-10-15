@@ -4,15 +4,17 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { starterBlocks } from '../compose/fallback.ts'
 import { BRAND_LEADS, BRAND_PARTS, BRAND_TITLES } from '../lib/brandParts.ts'
+import { startBrandGuide, type BrandProgress, type PaletteResult } from '../lib/brandGuide.ts'
 import { docOf, openWorkspace, reduce, type WorkspaceAction } from '../lib/workspaceState.ts'
 import PaletteWorkspace from './PaletteWorkspace.tsx'
 
-function Harness() {
+function Harness({ mode = 'workspace', onFinished = () => {} }: { mode?: 'guide' | 'workspace'; onFinished?: (result: PaletteResult) => void }) {
   const [state, setState] = useState(() => openWorkspace(starterBlocks()))
+  const [progress, setProgress] = useState<BrandProgress>(startBrandGuide())
   const dispatch = useCallback((action: WorkspaceAction) => setState((current) => reduce(current, action)), [])
   return (
     <>
-      <PaletteWorkspace projectId="duckstack" projectName="DuckStack" state={state} dispatch={dispatch} />
+      <PaletteWorkspace mode={mode} projectId="duckstack" projectName="DuckStack" state={state} dispatch={dispatch} progress={progress} onProgress={setProgress} onFinished={onFinished} />
       <output data-testid="hexes">{docOf(state).blocks.map((block) => block.hex).join(' ')}</output>
     </>
   )
