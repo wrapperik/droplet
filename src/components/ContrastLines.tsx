@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { MagicWand3Icon } from '@solar-icons/react/linear'
-import { BRAND_LEADS, keyPairs } from '../lib/brandParts.ts'
+import { CONTRAST_LEAD, keyPairs } from '../lib/brandParts.ts'
 import type { ResolvedRoles } from '../lib/palette.ts'
 import ContrastBadge from './ContrastBadge.tsx'
 import { ReasonTip } from './Toolbar.tsx'
@@ -26,7 +26,7 @@ export default function ContrastLines({ roles, onMakeReadable, bare = false }: P
       {!bare && (
         <header className="clines__header">
           <h3 className="clines__title">Contrast</h3>
-          <ReasonTip reason={BRAND_LEADS.contrast} />
+          <ReasonTip reason={CONTRAST_LEAD} />
         </header>
       )}
       <ul className="clines__list">

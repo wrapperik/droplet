@@ -1,0 +1,273 @@
+/* The brand guide's steps after Colours: Typography, Voice and the Brand plan. Nothing is boxed except the samples, which are pages in the palette's own colours. */
+.bstep {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 56rem;
+  min-width: 0;
+  margin-inline: auto;
+}
+
+.bstep:focus {
+  outline: none;
+}
+
+.bstep__title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.bstep__lead {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.bstep__input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.bstep__said {
+  min-height: 1.5rem;
+  margin: 0;
+  font-weight: 600;
+}
+
+/* Typography: the pairs, two across. */
+.bstep__fonts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.bfont {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1.25rem;
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 0 0 1px var(--overlay-10);
+  cursor: pointer;
+  transition: transform var(--duration-base) var(--ease-out);
+}
+
+.bfont:hover {
+  transform: translateY(-2px);
+}
+
+.bfont[data-selected='true'] {
+  box-shadow:
+    0 0 0 3px var(--screen),
+    0 0 0 5px var(--text);
+}
+
+.bfont:has(.bstep__input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 5px;
+}
+
+.bfont__name {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+.bfont__tick {
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+}
+
+.bfont__heading {
+  font-size: 1.75rem;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.bfont__body {
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.bfont__names {
+  margin-top: 0.25rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.bfont__note {
+  font-size: 0.8125rem;
+  opacity: 0.8;
+}
+
+/* Voice: the words as pills. */
+.bstep__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+  margin-top: 0.5rem;
+}
+
+.bchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  height: 2.5rem;
+  padding: 0 1.25rem;
+  border: 1px solid var(--overlay-10);
+  border-radius: var(--radius-pill);
+  background: var(--overlay-06);
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.bchip:not(:disabled):hover {
+  background: var(--accent-tint-soft);
+}
+
+.bchip[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+.bchip:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* The brand plan: one page in the founder's colours. */
+.bplan__page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 2rem;
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 0 0 1px var(--overlay-10);
+}
+
+.bplan__name {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.bplan__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid currentcolor;
+}
+
+.bplan__label {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.bplan__swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bplan__swatch {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 5rem;
+}
+
+.bplan__chip {
+  width: 100%;
+  height: 3.5rem;
+  margin-bottom: 0.375rem;
+  border-radius: var(--radius-md);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.15);
+}
+
+.bplan__hex {
+  font-size: 0.875rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.bplan__role {
+  font-size: 0.8125rem;
+}
+
+.bplan__line,
+.bplan__body {
+  margin: 0;
+  font-size: 0.9375rem;
+}
+
+.bplan__heading {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.bplan__dot {
+  display: inline-grid;
+  place-items: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin-left: 0.5rem;
+  border-radius: 50%;
+  vertical-align: middle;
+  color: var(--on-status);
+}
+
+.bplan__dot[data-pass='true'] {
+  background: var(--status-resolved);
+}
+
+.bplan__dot[data-pass='false'] {
+  background: var(--status-outstanding);
+}
+
+.bplan__todo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bplan__todo-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.bplan__todo-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-weight: 600;
+}
+
+.bplan__todo-row span:first-child {
+  margin-right: auto;
+}

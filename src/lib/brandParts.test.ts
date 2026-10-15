@@ -4,39 +4,31 @@ import { brandPartsDone, keyPairs, paletteIsStarter } from './brandParts.ts'
 import { resolveRoles, type PaletteBlock } from './palette.ts'
 
 const withHex = (blocks: PaletteBlock[], id: number, hex: string) => blocks.map((block) => (block.id === id ? { ...block, hex } : block))
-const withoutRoles = (blocks: PaletteBlock[]) => blocks.map(({ role: _role, ...rest }) => rest)
+
+const none = { fonts: null, voice: [] }
 
 describe('the ticks of the brand parts', () => {
-  it('has Colours and Roles open on the untouched starter palette, though it arrives with roles set', () => {
-    const done = brandPartsDone(starterBlocks())
-    expect(done.colours).toBe(false)
-    expect(done.roles).toBe(false)
+  it('has every part open on the untouched starter palette with nothing chosen', () => {
+    const done = brandPartsDone(starterBlocks(), none)
+    expect(done).toEqual({ colours: false, typography: false, voice: false, plan: false })
     expect(paletteIsStarter(starterBlocks())).toBe(true)
-  })
-
-  it('ticks Contrast on the starter palette, whose text reads on its background', () => {
-    expect(brandPartsDone(starterBlocks()).contrast).toBe(true)
   })
 
   it('ticks Colours once a colour is changed', () => {
     const blocks = withHex(starterBlocks(), 1, '#AA3355')
     expect(paletteIsStarter(blocks)).toBe(false)
-    expect(brandPartsDone(blocks).colours).toBe(true)
+    expect(brandPartsDone(blocks, none).colours).toBe(true)
   })
 
-  it('ticks Roles only when every role has been chosen, not only suggested', () => {
-    const changed = withHex(starterBlocks(), 1, '#AA3355')
-    expect(brandPartsDone(changed).roles).toBe(true)
-    const suggested = withoutRoles(changed)
-    expect(brandPartsDone(suggested).roles).toBe(false)
-    // three of the four chosen is not enough
-    const three = suggested.map((block, index) => (index < 3 ? { ...block, role: starterBlocks()[index].role } : block))
-    expect(brandPartsDone(three).roles).toBe(false)
+  it('ticks Typography when a pair is chosen and Voice when a word is', () => {
+    expect(brandPartsDone(starterBlocks(), { fonts: 'clean', voice: [] })).toMatchObject({ typography: true, voice: false })
+    expect(brandPartsDone(starterBlocks(), { fonts: null, voice: ['Warm'] })).toMatchObject({ typography: false, voice: true })
   })
 
-  it('takes the tick from Contrast when the text cannot be read on the background', () => {
-    const blocks = starterBlocks().map((block) => (block.role === 'text' ? { ...block, hex: '#D5ECFB' } : block))
-    expect(brandPartsDone(blocks).contrast).toBe(false)
+  it('ticks the Brand plan only when the three before it are done', () => {
+    const blocks = withHex(starterBlocks(), 1, '#AA3355')
+    expect(brandPartsDone(blocks, { fonts: 'clean', voice: [] }).plan).toBe(false)
+    expect(brandPartsDone(blocks, { fonts: 'clean', voice: ['Warm', 'Bold'] }).plan).toBe(true)
   })
 })
 

@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { starterBlocks } from '../compose/fallback.ts'
@@ -8,8 +8,7 @@ import { loadPalette, savePalette } from '../lib/projectStore.ts'
 import { canUndoState, docOf, openWorkspace, reduce, type WorkspaceAction } from '../lib/workspaceState.ts'
 import PaletteWorkspace from './PaletteWorkspace.tsx'
 
-const reader = vi.hoisted(() => ({ read: vi.fn(), sheet: vi.fn(async (..._args: unknown[]) => true) }))
-vi.mock('../lib/imageColours.ts', () => ({ readImageColours: reader.read }))
+const reader = vi.hoisted(() => ({ sheet: vi.fn(async (..._args: unknown[]) => true) }))
 vi.mock('../lib/exportSheet.ts', () => ({ exportBrandSheet: reader.sheet }))
 
 type Slots = { start: HTMLElement; end: HTMLElement; shelf: HTMLElement }
@@ -30,26 +29,26 @@ function Harness({ mode = 'workspace', onFinished = () => {}, slots }: { mode?: 
 }
 
 const hexes = () => screen.getByTestId('hexes').textContent!.split(' ')
-const tools = () => screen.getByRole('region', { name: 'The colour tools' })
 const palette = () => screen.getByRole('region', { name: 'The palette' })
 const toolbar = () => screen.getByRole('toolbar', { name: 'Palette toolbar' })
-const hexField = () => within(tools()).getByLabelText('Hex')
+const brightness = () => screen.getByRole('slider', { name: 'Brightness' })
 
 beforeEach(() => {
   window.localStorage.clear()
-  reader.read.mockReset()
   reader.sheet.mockClear().mockResolvedValue(true)
 })
 afterEach(() => vi.restoreAllMocks())
 
 describe('the brand workspace in Workspace mode', () => {
-  it('has the tools on the left and the palette on the right, in that order in the page as well', () => {
+  it('has the wheel and the roles on the left and the palette and the contrast circles on the right, in one frame', () => {
     render(<Harness />)
-    expect(tools().compareDocumentPosition(palette()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(within(tools()).getByRole('tablist', { name: 'Where the colours come from' })).toBeInTheDocument()
-    expect(within(palette()).getByRole('region', { name: 'Document preview' })).toBeInTheDocument()
-    expect(within(palette()).getByRole('region', { name: 'Contrast of the key pairs' })).toBeInTheDocument()
+    const grid = document.querySelector('.brandgrid')!
+    const parts = [...grid.children].map((part) => part.className)
+    expect(parts).toEqual(['brandgrid__tools', 'brandgrid__palette', 'brandgrid__roles', 'brandgrid__contrast'])
+    expect(within(palette()).getByRole('application', { name: /^Colour wheel for the palette/ })).toBeInTheDocument()
     expect(within(palette()).getByRole('group', { name: 'Palette colours' })).toBeInTheDocument()
+    expect(within(palette()).getByRole('heading', { name: 'Roles' })).toBeInTheDocument()
+    expect(within(palette()).getByRole('region', { name: 'Contrast' })).toBeInTheDocument()
   })
 
   it('has no cards, boxes or task bar: nothing sits in a container', () => {
@@ -79,118 +78,64 @@ describe('the brand workspace in Workspace mode', () => {
     for (const id of ['colours', 'roles', 'contrast']) expect(document.querySelector(`[data-part="${id}"]`), id).not.toBeNull()
   })
 
-  it('shows the colour wheel with the harmonies by default, and the other two sources on their tabs', async () => {
-    const user = userEvent.setup()
+  it('has only the wheel and its brightness to choose colours with: no tabs, harmonies, hex fields, picture or sample document', () => {
     render(<Harness />)
-    expect(screen.getByRole('tab', { name: 'Colour wheel' })).toHaveAttribute('aria-selected', 'true')
-    expect(within(tools()).getByRole('application', { name: /^Colour wheel for the palette/ })).toBeInTheDocument()
-    expect(within(tools()).getByRole('heading', { name: 'Colour harmonies: Custom' })).toBeInTheDocument()
-    await user.click(screen.getByRole('tab', { name: 'Image' }))
-    expect(within(tools()).getByRole('button', { name: 'Upload your image' })).toBeInTheDocument()
-    expect(within(tools()).queryByRole('application', { name: /^Colour wheel/ })).not.toBeInTheDocument()
-    await user.click(screen.getByRole('tab', { name: 'Base colour' }))
-    expect(within(tools()).getByRole('application', { name: /^Spectrum for colour 1/ })).toBeInTheDocument()
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /Colour harmonies/ })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Hex')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Upload your image' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Document preview' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Saved palettes/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Palette name' })).not.toBeInTheDocument()
   })
 
-  it('changes the selected colour from its hex field and from its red, green and blue fields', async () => {
-    const user = userEvent.setup()
-    render(<Harness />)
-    await user.clear(hexField())
-    await user.type(hexField(), '#AA3355')
-    expect(hexes()[0]).toBe('#AA3355')
-    const red = within(tools()).getByLabelText('Red')
-    await user.clear(red)
-    await user.type(red, '17')
-    expect(hexes()[0]).toBe('#113355')
-    // half a number is not applied, and more than 255 is not a colour
-    await user.clear(red)
-    await user.type(red, '300')
-    expect(hexes()[0]).not.toBe('#FF3355')
-  })
-
-  it('works on the colour that is selected on the right, and names it', async () => {
+  it('changes the selected colour from the brightness slider, and works on the colour that is selected on the right', async () => {
     const user = userEvent.setup()
     render(<Harness />)
     await user.click(within(palette()).getByRole('radio', { name: /^Colour 3,/ }))
-    expect(within(tools()).getByRole('heading', { name: 'Colour 3' })).toBeInTheDocument()
-    expect(hexField()).toHaveValue(hexes()[2])
+    expect(screen.getByRole('application', { name: /The selected colour is #CFE9FB/ })).toBeInTheDocument()
+    const before = hexes()
+    fireEvent.change(brightness(), { target: { value: '50' } })
+    expect(hexes()[2]).not.toBe(before[2])
+    expect(hexes().filter((_, index) => index !== 2)).toEqual(before.filter((_, index) => index !== 2))
   })
 
-  it('moves a colour alone in Custom, which is where it starts, so a saved palette is not scrambled by one change', async () => {
-    const user = userEvent.setup()
+  it('moves a colour alone in Custom, which is where it starts, so a saved palette is not scrambled by one change', () => {
     render(<Harness />)
     expect(screen.getByTestId('harmony')).toHaveTextContent('custom')
     const before = hexes()
-    await user.clear(hexField())
-    await user.type(hexField(), '#AA3355')
+    fireEvent.change(brightness(), { target: { value: '50' } })
     expect(hexes().slice(1)).toEqual(before.slice(1))
   })
 
-  it('works the other colours out from the selected one when a harmony is chosen, in one undo step, and takes the rest back on Undo', async () => {
+  it('gives a colour a role from its Role choice', async () => {
     const user = userEvent.setup()
     render(<Harness />)
-    const before = hexes()
-    await user.click(within(tools()).getByRole('button', { name: 'Triad' }))
-    expect(screen.getByTestId('harmony')).toHaveTextContent('triad')
-    expect(within(tools()).getByRole('heading', { name: 'Colour harmonies: Triad' })).toBeInTheDocument()
-    expect(hexes()[0]).toBe(before[0])
-    expect(hexes().slice(1)).not.toEqual(before.slice(1))
-    await user.click(within(toolbar()).getByRole('button', { name: 'Undo' }))
-    expect(hexes()).toEqual(before)
-  })
-
-  it('moves the others with the base by the rule, and leaves a kept colour where it is', async () => {
-    const user = userEvent.setup()
-    render(<Harness />)
-    await user.click(within(palette()).getByRole('button', { name: /^Keep colour 4, .*when generating/ }))
-    await user.click(within(tools()).getByRole('button', { name: 'Analogous' }))
-    const ruled = hexes()
-    await user.clear(hexField())
-    await user.type(hexField(), '#CC2200')
-    expect(hexes()[0]).toBe('#CC2200')
-    expect(hexes()[3]).toBe(ruled[3])
-    expect(hexes()[1]).not.toBe(ruled[1])
-    // and in Custom each moves alone again
-    await user.click(within(tools()).getByRole('button', { name: 'Custom' }))
-    const custom = hexes()
-    await user.clear(hexField())
-    await user.type(hexField(), '#00AA55')
-    expect(hexes().slice(1)).toEqual(custom.slice(1))
-  })
-
-  it('gives the selected colour a role from the Role choice, and says what is suggested', async () => {
-    const user = userEvent.setup()
-    render(<Harness />)
-    const role = within(tools()).getByRole('combobox', { name: 'Role of colour 1' })
+    const role = within(palette()).getByRole('combobox', { name: 'Role of colour 1, #1F8FE0' })
     await user.selectOptions(role, 'accent')
     expect(JSON.parse(screen.getByTestId('roles').textContent!)[0]).toBe('accent')
-    expect(within(tools()).getByText(/You chose Accent/)).toBeInTheDocument()
     await user.selectOptions(role, '')
     expect(JSON.parse(screen.getByTestId('roles').textContent!)[0]).toBeNull()
   })
 
-  it('shows each key pair of Contrast with its ratio and a word and an icon, never colour alone', () => {
+  it('shows a circle for each colour with a word and an icon for whether text reads on it, never colour alone', () => {
     render(<Harness />)
-    const rows = within(within(palette()).getByRole('region', { name: 'Contrast of the key pairs' })).getAllByRole('listitem')
-    expect(rows.map((row) => row.querySelector('.clines__label')?.textContent)).toEqual(['Text on background', 'Primary on background', 'Accent on background'])
-    for (const row of rows) {
-      expect(row.textContent).toMatch(/\d+\.\d:1/)
-      expect(row.textContent).toMatch(/Passes (AA|AAA)|Fails AA/)
-      expect(row.querySelector('.badge__dot svg')).not.toBeNull()
+    const circles = within(within(palette()).getByRole('region', { name: 'Contrast' })).getAllByRole('listitem')
+    expect(circles).toHaveLength(4)
+    for (const circle of circles) {
+      expect(circle.textContent).toMatch(/Passes (AA|AAA)|Fails AA/)
+      expect(circle.querySelector('.ccircles__dot svg')).not.toBeNull()
+      expect(within(circle).getByRole('img', { name: /text on it is \d+\.\d to 1/ })).toBeInTheDocument()
     }
-    expect(rows[0]).toHaveTextContent(/Passes/)
   })
 
-  it('fails the text on the background in words when it cannot be read, and names the pair', async () => {
+  it('fails a colour in words when text cannot be read on it', async () => {
     const user = userEvent.setup()
     render(<Harness />)
-    const text = starterBlocks().findIndex((block) => block.role === 'text')
-    await user.click(within(palette()).getByRole('radio', { name: new RegExp(`^Colour ${text + 1},`) }))
-    await user.clear(hexField())
-    await user.type(hexField(), '#D5ECFB')
-    const first = within(within(palette()).getByRole('region', { name: 'Contrast of the key pairs' })).getAllByRole('listitem')[0]
-    expect(first).toHaveTextContent('Text on background')
-    expect(first).toHaveTextContent('Fails AA')
+    // Droplet blue as the text colour does not read on the pale background.
+    await user.selectOptions(within(palette()).getByRole('combobox', { name: 'Role of colour 1, #1F8FE0' }), 'text')
+    const circles = within(within(palette()).getByRole('region', { name: 'Contrast' })).getAllByRole('listitem')
+    expect(circles[0]).toHaveTextContent('Fails AA')
   })
 })
 
@@ -236,46 +181,47 @@ describe('undo and redo', () => {
     expect(undo).toBeDisabled()
     expect(redo).toBeDisabled()
     const before = hexes()
-    await user.click(within(palette()).getByRole('button', { name: /^Add colour$/ }))
-    expect(hexes()).toHaveLength(5)
+    fireEvent.change(brightness(), { target: { value: '50' } })
+    expect(hexes()).not.toEqual(before)
     expect(undo).toBeEnabled()
     await user.keyboard('{Control>}z{/Control}')
     expect(hexes()).toEqual(before)
     expect(redo).toBeEnabled()
     await user.click(redo)
-    expect(hexes()).toHaveLength(5)
+    expect(hexes()).not.toEqual(before)
   })
 })
 
 describe('full screen', () => {
-  it('hides the tools and gives the palette the whole width, keeps the toolbar, and says so', async () => {
+  it('hides the wheel and the roles and gives the palette the whole width, keeps the toolbar, and says so', async () => {
     const user = userEvent.setup()
     render(<Harness />)
     const button = within(toolbar()).getByRole('button', { name: 'Full screen' })
     expect(button).toHaveAttribute('aria-pressed', 'false')
-    const preview = within(palette()).getByRole('region', { name: 'Document preview' })
+    const swatches = within(palette()).getByRole('group', { name: 'Palette colours' })
     await user.click(button)
-    expect(screen.queryByRole('region', { name: 'The colour tools' })).not.toBeInTheDocument()
+    expect(document.querySelector('.brandgrid__tools')).toHaveAttribute('hidden')
+    expect(document.querySelector('.brandgrid__roles')).toHaveAttribute('hidden')
+    expect(document.querySelector('.brandgrid')).toHaveAttribute('data-full')
     expect(within(toolbar()).getByRole('button', { name: 'Exit full screen' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('toolbar', { name: 'Palette toolbar' })).toBeInTheDocument()
-    expect(document.querySelector('.wsframe')).toHaveAttribute('data-full')
     expect(screen.getAllByRole('status').some((status) => /Full screen on/.test(status.textContent ?? ''))).toBe(true)
-    // the preview is the same page, not drawn again
-    expect(within(palette()).getByRole('region', { name: 'Document preview' })).toBe(preview)
+    // the palette is the same one, not drawn again
+    expect(within(palette()).getByRole('group', { name: 'Palette colours' })).toBe(swatches)
   })
 
-  it('goes back on the button and on Escape, and keeps the work and what was in the tools', async () => {
+  it('goes back on the button and on Escape, and keeps the work', async () => {
     const user = userEvent.setup()
     render(<Harness />)
-    await user.click(screen.getByRole('tab', { name: 'Base colour' }))
+    fireEvent.change(brightness(), { target: { value: '50' } })
+    const changed = hexes()
     await user.click(within(toolbar()).getByRole('button', { name: 'Full screen' }))
     await user.click(within(toolbar()).getByRole('button', { name: 'Exit full screen' }))
-    expect(tools()).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Base colour' })).toHaveAttribute('aria-selected', 'true')
+    expect(document.querySelector('.brandgrid__tools')).not.toHaveAttribute('hidden')
     await user.click(within(toolbar()).getByRole('button', { name: 'Full screen' }))
     await user.keyboard('{Escape}')
     expect(within(toolbar()).getByRole('button', { name: 'Full screen' })).toHaveAttribute('aria-pressed', 'false')
     expect(screen.getAllByRole('status').some((status) => /Full screen off/.test(status.textContent ?? ''))).toBe(true)
+    expect(hexes()).toEqual(changed)
   })
 
   it('is not saved: a new workspace opens as normal', async () => {
@@ -284,38 +230,8 @@ describe('full screen', () => {
     await user.click(within(toolbar()).getByRole('button', { name: 'Full screen' }))
     unmount()
     render(<Harness />)
-    expect(screen.getByRole('region', { name: 'The colour tools' })).toBeInTheDocument()
+    expect(document.querySelector('.brandgrid__tools')).not.toHaveAttribute('hidden')
     expect(window.localStorage.getItem('droplet-project-duckstack-palette')).toBeNull()
-  })
-
-  it('lets Escape close a popover first, and leaves full screen on the next one', async () => {
-    const user = userEvent.setup()
-    render(<Harness />)
-    await user.click(within(toolbar()).getByRole('button', { name: 'Full screen' }))
-    await user.click(within(toolbar()).getByRole('button', { name: /^Saved palettes/ }))
-    expect(screen.getByRole('dialog')).toBeInTheDocument()
-    await user.keyboard('{Escape}')
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(within(toolbar()).getByRole('button', { name: 'Exit full screen' })).toBeInTheDocument()
-    await user.keyboard('{Escape}')
-    expect(within(toolbar()).getByRole('button', { name: 'Full screen' })).toBeInTheDocument()
-  })
-})
-
-describe('taking colours from a picture', () => {
-  it('sets the palette from them in one undo step, and nothing before the button is pressed', async () => {
-    const user = userEvent.setup()
-    reader.read.mockResolvedValue({ ok: true, colours: ['#112233', '#AA5522', '#EEDDCC'] })
-    render(<Harness />)
-    const before = hexes()
-    await user.click(screen.getByRole('tab', { name: 'Image' }))
-    await user.upload(screen.getByLabelText('Choose a picture to take colours from'), new File(['x'], 'shop.png', { type: 'image/png' }))
-    await screen.findByText('Colours taken from shop.png')
-    expect(hexes()).toEqual(before)
-    await user.click(screen.getByRole('button', { name: 'Use this palette' }))
-    expect(hexes()).toEqual(['#112233', '#AA5522', '#EEDDCC'])
-    await user.click(within(toolbar()).getByRole('button', { name: 'Undo' }))
-    expect(hexes()).toEqual(before)
   })
 })
 
@@ -324,130 +240,58 @@ describe('Download', () => {
     const user = userEvent.setup()
     render(<Harness />)
     await user.click(within(toolbar()).getByRole('button', { name: 'Download brand sheet' }))
-    expect(reader.sheet).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ hex: hexes()[0] })]), 'DuckStack')
+    expect(reader.sheet).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ hex: hexes()[0] })]), 'DuckStack', expect.anything())
     expect(await screen.findByText('Brand sheet downloaded.')).toBeInTheDocument()
   })
 })
 
-describe('saving and the palettes that are kept', () => {
-  const nameField = () => within(toolbar()).getByRole('textbox', { name: 'Palette name' })
+describe('saving', () => {
   const save = () => within(toolbar()).getByRole('button', { name: /^Saved?$/ })
 
-  it('starts with the name My colour theme, and says nothing is saved until Save is pressed', async () => {
+  it('says nothing is saved until Save is pressed', async () => {
     render(<Harness />)
-    expect(nameField()).toHaveValue('My colour theme')
     expect(await screen.findByText('Not saved yet')).toBeInTheDocument()
     expect(window.localStorage.getItem('droplet-project-duckstack-palette')).toBeNull()
   })
 
-  it('saves the colours as the working palette and again under the name, and says so', async () => {
+  it('saves the colours as the working palette and again under the name they have', async () => {
     const user = userEvent.setup()
     render(<Harness />)
     await screen.findByText('Not saved yet')
-    await user.clear(nameField())
-    await user.type(nameField(), 'Spring')
     await user.click(save())
     const saved = (await loadPalette('duckstack'))!
     expect(saved.blocks.map((block) => block.hex)).toEqual(hexes())
     expect(saved.palettes).toHaveLength(1)
-    expect(saved.palettes![0]).toMatchObject({ name: 'Spring' })
-    expect(saved.palettes![0].blocks.map((block) => block.hex)).toEqual(hexes())
-    expect(await screen.findByText('Saved as “Spring”.')).toBeInTheDocument()
+    expect(saved.palettes![0]).toMatchObject({ name: 'My colour theme' })
+    expect(await screen.findByText('Saved as “My colour theme”.')).toBeInTheDocument()
   })
 
-  it('holds Save back, and says why, when the name is empty or too long', async () => {
+  it('replaces the palette it was kept as when saved again, and says it did', async () => {
     const user = userEvent.setup()
     render(<Harness />)
     await screen.findByText('Not saved yet')
-    await user.clear(nameField())
-    expect(save()).toBeDisabled()
-    expect(screen.getByRole('alert')).toHaveTextContent('Give the palette a name.')
-    await user.type(nameField(), 'x'.repeat(61))
-    expect(save()).toBeDisabled()
-    expect(screen.getByRole('alert')).toHaveTextContent('60 characters')
-  })
-
-  it('replaces a palette that has the same name, in any capitals, and says it did', async () => {
-    const user = userEvent.setup()
-    render(<Harness />)
-    await screen.findByText('Not saved yet')
-    await user.clear(nameField())
-    await user.type(nameField(), 'Spring')
     await user.click(save())
-    await screen.findByText('Saved as “Spring”.')
-    await user.click(within(palette()).getByRole('button', { name: /^Add colour$/ }))
-    await user.clear(nameField())
-    await user.type(nameField(), 'SPRING')
+    await screen.findByText('Saved as “My colour theme”.')
+    fireEvent.change(brightness(), { target: { value: '50' } })
     await user.click(save())
-    expect(await screen.findByText('Saved. This replaced the palette you had kept as “SPRING”.')).toBeInTheDocument()
-    const saved = (await loadPalette('duckstack'))!
-    expect(saved.palettes).toHaveLength(1)
-    expect(saved.palettes![0].blocks).toHaveLength(5)
+    expect(await screen.findByText('Saved. This replaced the palette you had kept as “My colour theme”.')).toBeInTheDocument()
+    expect((await loadPalette('duckstack'))!.palettes).toHaveLength(1)
   })
 
-  it('lists the kept palettes, opens one as one undo step, and the name follows it', async () => {
+  it('saves under the name the working palette was kept under', async () => {
     const user = userEvent.setup()
-    await savePalette('duckstack', {
-      blocks: starterBlocks(),
-      palettes: [{ id: 'a', name: 'Summer', savedAt: '2026-10-05T10:00:00.000Z', blocks: [{ id: 1, hex: '#B5543A' }, { id: 2, hex: '#F7EFE6' }, { id: 3, hex: '#3B2A22' }] }],
-    })
+    await savePalette('duckstack', { blocks: starterBlocks(), palettes: [{ id: 'a', name: 'Summer', savedAt: '2026-10-05T10:00:00.000Z', blocks: starterBlocks() }] })
     render(<Harness />)
     await screen.findByText('All changes saved')
-    await user.click(within(toolbar()).getByRole('button', { name: /^Saved palettes/ }))
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Open Summer' }))
-    expect(hexes()).toEqual(['#B5543A', '#F7EFE6', '#3B2A22'])
-    expect(nameField()).toHaveValue('Summer')
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    await user.click(within(toolbar()).getByRole('button', { name: 'Undo' }))
-    expect(hexes()).toEqual(starterBlocks().map((block) => block.hex))
-  })
-
-  it('asks before opening a palette over colours that are not saved', async () => {
-    const user = userEvent.setup()
-    await savePalette('duckstack', {
-      blocks: starterBlocks(),
-      palettes: [{ id: 'a', name: 'Summer', savedAt: '2026-10-05T10:00:00.000Z', blocks: [{ id: 1, hex: '#B5543A' }, { id: 2, hex: '#F7EFE6' }] }],
-    })
-    render(<Harness />)
-    await screen.findByText('All changes saved')
-    await user.click(within(palette()).getByRole('button', { name: /^Add colour$/ }))
-    await user.click(within(toolbar()).getByRole('button', { name: /^Saved palettes/ }))
-    await user.click(screen.getByRole('button', { name: 'Open Summer' }))
-    expect(hexes()).toHaveLength(5)
-    await user.click(screen.getByRole('button', { name: 'Open anyway' }))
-    expect(hexes()).toEqual(['#B5543A', '#F7EFE6'])
-  })
-
-  it('forgets a kept palette after asking twice, and the list shows it gone', async () => {
-    const user = userEvent.setup()
-    await savePalette('duckstack', {
-      blocks: starterBlocks(),
-      palettes: [{ id: 'a', name: 'Summer', savedAt: '2026-10-05T10:00:00.000Z', blocks: [{ id: 1, hex: '#B5543A' }, { id: 2, hex: '#F7EFE6' }] }],
-    })
-    render(<Harness />)
-    await screen.findByText('All changes saved')
-    await user.click(within(toolbar()).getByRole('button', { name: /^Saved palettes/ }))
-    await user.click(screen.getByRole('button', { name: 'Forget Summer' }))
-    expect((await loadPalette('duckstack'))?.palettes).toHaveLength(1)
-    await user.click(screen.getByRole('button', { name: 'Forget it' }))
-    await waitFor(async () => expect((await loadPalette('duckstack'))?.palettes).toBeUndefined())
-    expect(await screen.findByText(/No palettes are saved yet/)).toBeInTheDocument()
+    fireEvent.change(brightness(), { target: { value: '50' } })
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument()
+    await user.click(save())
+    expect(await screen.findByText('Saved. This replaced the palette you had kept as “Summer”.')).toBeInTheDocument()
   })
 
   it('reads a palette saved before names existed without calling it changed', async () => {
     await savePalette('duckstack', { blocks: starterBlocks() })
     render(<Harness />)
     expect(await screen.findByText('All changes saved')).toBeInTheDocument()
-    expect(nameField()).toHaveValue('My colour theme')
-  })
-
-  it('shows the name the working palette was kept under, and counts a changed name as an unsaved change', async () => {
-    const user = userEvent.setup()
-    await savePalette('duckstack', { blocks: starterBlocks(), palettes: [{ id: 'a', name: 'Summer', savedAt: '2026-10-05T10:00:00.000Z', blocks: starterBlocks() }] })
-    render(<Harness />)
-    await screen.findByText('All changes saved')
-    expect(nameField()).toHaveValue('Summer')
-    await user.type(nameField(), ' 2')
-    expect(screen.getByText('Unsaved changes')).toBeInTheDocument()
   })
 })

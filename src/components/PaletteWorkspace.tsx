@@ -1,34 +1,28 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
-import { EyeIcon, GalleryIcon, PaletteIcon, Palette2Icon, TagIcon } from '@solar-icons/react/linear'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ClipboardListIcon, MicrophoneIcon, PaletteIcon, TextFormatIcon } from '@solar-icons/react/linear'
 import type { Icon } from '@solar-icons/react/lib/types'
-import { BRAND_PARTS, BRAND_TITLES, brandPartsDone, type BrandPartId } from '../lib/brandParts.ts'
-import { NO_PICKS, advanceBrand, backBrand, brandBlockers, brandLead, brandStepIndex, goToBrand, paletteResultOf, type BrandProgress, type GuidePicks, type PaletteResult } from '../lib/brandGuide.ts'
+import { BRAND_PARTS, ROLES_LEAD, BRAND_TITLES, brandPartsDone, type BrandPartId } from '../lib/brandParts.ts'
+import { advanceBrand, backBrand, brandBlockers, brandLead, brandStepIndex, goToBrand, paletteResultOf, type BrandProgress, type PaletteResult } from '../lib/brandGuide.ts'
 import { useGuideCard } from '../hooks/useGuideCard.ts'
-import { fixActions, makeMoreReadable } from '../lib/readability.ts'
-import type { PaletteOption } from '../lib/paletteOptions.ts'
-import { harmonyLabel, isRule, type Harmony } from '../lib/harmony.ts'
-import { COLOUR_ROLES, resolveRoles, type ColourRole, type PaletteBlock } from '../lib/palette.ts'
+import { cleanVoice } from '../lib/brandType.ts'
+import { isRule } from '../lib/harmony.ts'
+import { resolveRoles, type PaletteBlock } from '../lib/palette.ts'
 import { DEFAULT_PALETTE_NAME, checkPaletteName, nameOfBlocks, sameName, upsertNamed, type NamedPalette } from '../lib/namedPalettes.ts'
 import { readableRandomPalette, baseTarget } from '../lib/randomPalette.ts'
 import { exportBrandSheet } from '../lib/exportSheet.ts'
 import { useLoaded } from '../hooks/useLoaded.ts'
-import { forgetNamedPalette, loadPalette, markPaletteExported, savePalette, type PaletteSave } from '../lib/projectStore.ts'
+import { useProjectLogo } from '../hooks/useProjectLogo.ts'
+import { loadPalette, markPaletteExported, savePalette, type PaletteSave } from '../lib/projectStore.ts'
 import { MAX_BLOCKS, MIN_BLOCKS, canRedoState, canUndoState, docOf, isUnsaved, selectedBlock, type WorkspaceAction, type WorkspaceState } from '../lib/workspaceState.ts'
 import BrandToolbar from './BrandToolbar.tsx'
-import { ColourFields, RoleChoice } from './ColourFields.tsx'
+import BrandPlan from './BrandPlan.tsx'
+import BrandTypography from './BrandTypography.tsx'
+import BrandVoice from './BrandVoice.tsx'
 import ColourWheel from './ColourWheel.tsx'
-import ContrastLines from './ContrastLines.tsx'
-import DocumentPreview from './DocumentPreview.tsx'
+import ContrastCircles from './ContrastCircles.tsx'
 import ExportButton from './ExportButton.tsx'
-import GuideCard from './GuideCard.tsx'
-import GuideColours from './GuideColours.tsx'
 import GuideFooter from './GuideFooter.tsx'
-import HarmonyRow from './HarmonyRow.tsx'
-import ImageSource from './ImageSource.tsx'
-import PartSection from './PartSection.tsx'
 import RoleList from './RoleList.tsx'
-import SourceTabs, { type SourceTab } from './SourceTabs.tsx'
-import SpectrumPicker from './SpectrumPicker.tsx'
 import SwatchStrip from './SwatchStrip.tsx'
 import TaskBar, { type BarItem } from './TaskBar.tsx'
 import WorkspaceShell, { type HeaderSlots } from './WorkspaceShell.tsx'
@@ -52,20 +46,12 @@ type Props = {
   headerSlots?: HeaderSlots
 }
 
-const PART_ICONS: Record<BrandPartId, Icon> = { colours: PaletteIcon, roles: TagIcon, contrast: EyeIcon }
+const PART_ICONS: Record<BrandPartId, Icon> = { colours: PaletteIcon, typography: TextFormatIcon, voice: MicrophoneIcon, plan: ClipboardListIcon }
 
-type Source = 'base' | 'image' | 'wheel'
-const SOURCES: SourceTab<Source>[] = [
-  { id: 'base', label: 'Base colour', icon: Palette2Icon },
-  { id: 'image', label: 'Image', icon: GalleryIcon },
-  { id: 'wheel', label: 'Colour wheel', icon: PaletteIcon },
-]
-
-// The brand workspace. A toolbar of pills across the top (Download, Save, the palette's name, Saved palettes; Undo, Redo, Generate random, Full screen). Below it the
-// tools on the left and the palette on the right: the tools are three ways to choose colours (a base colour, a picture, the colour wheel with its harmonies) and,
-// under them, the selected colour's exact value and role; the palette is tall pills with their hex codes, the contrast of the key pairs and a sample document in
-// the colours. Nothing is boxed. In Guide mode the left is one part at a time (Colours, Roles, Contrast) with Back and Continue under it, and the task bar under the
-// header is the stepper. Save keeps the palette as the working palette and under its name, so it can be opened later from Saved palettes or the library.
+// The brand workspace. A toolbar of pills across the top (Undo, Redo, Generate random, Full screen; Download, Save), then two columns in two rows. Left: the colour wheel
+// with its brightness slider, and under it the roles. Right: the palette as tall pills with their hex codes and roles, and under it a circle for each colour showing
+// whether text reads on it. Nothing is boxed. In Guide mode the left is one part at a time (Colours, Roles, Contrast) with Back and Continue under it, and the task
+// bar under the header is the stepper. Save keeps the palette as the working palette, under the name it already has.
 export default function PaletteWorkspace({ mode, projectId, projectName, state, dispatch, progress, onProgress, onFinished, headerSlots }: Props) {
   // What was saved is read from storage, which takes a moment. Until it has arrived the toolbar says nothing and Save waits.
   const { value: saved, loaded, set: setSaved } = useLoaded<PaletteSave | null>(projectId, () => loadPalette(projectId), null)
@@ -74,31 +60,30 @@ export default function PaletteWorkspace({ mode, projectId, projectName, state, 
   // Why a save could not be done (twenty palettes are kept already), shown as a problem and not as a status.
   const [saveProblem, setSaveProblem] = useState<string | null>(null)
   const [name, setName] = useState(DEFAULT_PALETTE_NAME)
-  const [source, setSource] = useState<Source>('wheel')
+  // The guide's other choices: the typeface pair and the voice words. Read from what was saved once it has arrived; kept with Save and Finish.
+  const [fonts, setFonts] = useState<string | null>(null)
+  const [voice, setVoice] = useState<string[]>([])
+  const logo = useProjectLogo(projectId)
   const [fullscreen, setFullscreen] = useState(false)
   const [announcement, setAnnouncement] = useState('')
   const guided = mode === 'guide'
   const { step } = progress
   const index = brandStepIndex(step)
   const last = index === BRAND_PARTS.length - 1
-  const tabsId = useId()
-  // What the founder has picked in the Colours step. Held here, so it outlasts a visit to another step.
-  const [picks, setPicks] = useState<GuidePicks>(NO_PICKS)
   // What was missing when Continue was pressed. Each goes as soon as it is fixed.
   const [blocked, setBlocked] = useState<string[]>([])
   const [finishNote, setFinishNote] = useState('')
   const [finishing, setFinishing] = useState(false)
-  const { cardRef, markMoved, focusProblem } = useGuideCard()
+  const { markMoved, focusProblem } = useGuideCard()
 
   const doc = docOf(state)
   const { blocks } = doc
   const selected = selectedBlock(state)
   const activeId = selected.id
-  const activeNumber = blocks.findIndex((block) => block.id === activeId) + 1
   const harmony = state.harmony
 
   const roles = useMemo(() => resolveRoles(blocks), [blocks])
-  const done = useMemo(() => brandPartsDone(blocks), [blocks])
+  const done = useMemo(() => brandPartsDone(blocks, { fonts, voice }), [blocks, fonts, voice])
   const palettes: NamedPalette[] = useMemo(() => saved?.palettes ?? [], [saved])
 
   // The name follows the colours: when the palette on screen is exactly a palette that was kept (read from storage, opened from the list or the library, or got back
@@ -115,11 +100,23 @@ export default function PaletteWorkspace({ mode, projectId, projectName, state, 
   }, [loaded, blocks, palettes])
 
   const checkedName = checkPaletteName(name)
-  const nameProblem = checkedName.ok ? null : checkedName.reason
   // The name the saved working palette was kept under, if it was.
   const savedName = saved ? nameOfBlocks(saved.palettes ?? [], saved.blocks) : null
   const nameChanged = loaded && saved !== null && savedName !== null && !sameName(name, savedName)
-  const unsaved = loaded && (isUnsaved(doc, saved) || nameChanged)
+  const choicesChanged = loaded && ((saved?.fonts ?? null) !== fonts || cleanVoice(saved?.voice).join('|') !== voice.join('|'))
+  const unsaved = loaded && (isUnsaved(doc, saved) || nameChanged || choicesChanged)
+
+  const choices = { ...(fonts ? { fonts } : {}), ...(voice.length > 0 ? { voice } : {}) }
+
+  // What was saved arrives once. The guide's choices start from it, and are the founder's own from then on.
+  const choicesFrom = useRef<string | null>(null)
+  useEffect(() => {
+    if (!loaded || choicesFrom.current === projectId) return
+    choicesFrom.current = projectId
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setFonts(saved?.fonts ?? null)
+    setVoice(cleanVoice(saved?.voice))
+  }, [loaded, projectId, saved])
 
   const save = async () => {
     if (!loaded || !checkedName.ok) return
@@ -130,7 +127,7 @@ export default function PaletteWorkspace({ mode, projectId, projectName, state, 
       return
     }
     setSaveProblem(null)
-    const result = await savePalette(projectId, { blocks, palettes: kept.list })
+    const result = await savePalette(projectId, { blocks, palettes: kept.list, ...choices })
     setSaveFailed(result === null)
     if (!result) return
     setSaved(result)
@@ -141,7 +138,7 @@ export default function PaletteWorkspace({ mode, projectId, projectName, state, 
   // A palette that was saved and has not changed is marked as exported, so the library says so. One with unsaved changes is not: what was exported is
   // not what is saved.
   const exportSheet = useCallback(async () => {
-    const exported = await exportBrandSheet(blocks, projectName)
+    const exported = await exportBrandSheet(blocks, projectName, { fonts, voice })
     if (exported && saved && !isUnsaved(doc, saved)) {
       const marked = await markPaletteExported(projectId)
       if (marked) setSaved(marked)
@@ -149,23 +146,10 @@ export default function PaletteWorkspace({ mode, projectId, projectName, state, 
     return exported
     // doc is read for what is saved only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [blocks, projectName, projectId, saved, state])
+  }, [blocks, projectName, projectId, saved, state, fonts, voice])
 
   // A short line under the toolbar. Nothing is saved until the founder saves.
-  const status = !loaded ? '' : saveFailed ? 'Could not save' : unsaved ? (!saved ? 'Not saved yet' : 'Unsaved changes') : saveNote || (saved ? 'All changes saved' : 'Not saved yet')
-
-  const openPalette = (palette: NamedPalette) => {
-    dispatch({ type: 'set_palette', blocks: palette.blocks })
-    setName(palette.name)
-    setSaveNote('')
-    setAnnouncement(`Opened ${palette.name}. Undo takes you back.`)
-  }
-
-  const forgetPalette = async (palette: NamedPalette) => {
-    const forgot = await forgetNamedPalette(projectId, palette.id)
-    if (forgot) setSaved(await loadPalette(projectId))
-    setAnnouncement(forgot ? `Forgot ${palette.name}.` : `Could not forget ${palette.name}.`)
-  }
+  const status = saveProblem ? saveProblem : !loaded ? '' : saveFailed ? 'Could not save' : unsaved ? (!saved ? 'Not saved yet' : 'Unsaved changes') : saveNote || (saved ? 'All changes saved' : 'Not saved yet')
 
   const generateRandom = () => {
     const action = readableRandomPalette(state)
@@ -192,7 +176,7 @@ export default function PaletteWorkspace({ mode, projectId, projectName, state, 
   }, [fullscreen])
 
   const hasSaved = loaded && saved !== null
-  const facts = { blocks, hasSaved }
+  const facts = { blocks, hasSaved, fonts, voice }
   const stillBlocked = blocked.filter((text) => brandBlockers(step, facts).includes(text))
 
   const move = (next: BrandProgress) => {
@@ -219,7 +203,7 @@ export default function PaletteWorkspace({ mode, projectId, projectName, state, 
     setFinishNote('')
     if (isUnsaved(doc, saved)) {
       setFinishing(true)
-      const result = await savePalette(projectId, { blocks })
+      const result = await savePalette(projectId, { blocks, ...choices })
       setFinishing(false)
       setSaveFailed(result === null)
       if (!result) return setFinishNote('I could not save the palette, because it could not be stored. Try again.')
@@ -231,27 +215,8 @@ export default function PaletteWorkspace({ mode, projectId, projectName, state, 
   // In Guide mode a part already reached can be gone back to.
   const goTo = (id: BrandPartId) => move(goToBrand(progress, id))
 
-  // Choosing a palette sets the colours in one undo step.
-  const choose = (option: PaletteOption) => dispatch({ type: 'set_palette', blocks: option.blocks })
-
-  // Moves the text (or the background) until the text reads at AA, as one undo step, and says what it did.
-  const makeReadable = () => {
-    const fix = makeMoreReadable(blocks)
-    if (!fix) return null
-    dispatch({ type: 'batch', actions: fixActions(blocks, fix) })
-    return `Moved the ${fix.moved} colour from ${fix.from} to ${fix.to}, so the text now reads at ${fix.ratio.toFixed(1)} to 1.`
-  }
-
   // Any change to the colour being worked on. With a harmony chosen the others follow it by the rule (a colour that is kept stays); in Custom it moves alone.
   const moveColour = (id: number, hex: string) => dispatch({ type: 'set_base', id, hex })
-  const chooseHarmony = (rule: Harmony) => {
-    dispatch({ type: 'use_harmony', harmony: rule })
-    setAnnouncement(isRule(rule) ? `${harmonyLabel(rule)} chosen. The colours that are not kept now follow the selected colour. Undo takes you back.` : 'Custom: each colour moves on its own.')
-  }
-  const takeColours = (colours: string[]) => {
-    dispatch({ type: 'set_palette', blocks: colours.slice(0, MAX_BLOCKS).map((hex, position) => ({ id: position + 1, hex })) })
-    setAnnouncement(`The palette is now the ${colours.length} colours from your picture. Undo takes you back.`)
-  }
 
   const bar: BarItem[] = BRAND_PARTS.map((id) => ({
     id,
@@ -266,76 +231,67 @@ export default function PaletteWorkspace({ mode, projectId, projectName, state, 
     onSelect: () => goTo(id),
   }))
 
-  // ---- The tools on the left ----
+  // ---- The parts ----
 
-  const holds = COLOUR_ROLES.find((role) => roles[role.id].blockId === activeId && !roles[role.id].chosen)?.id ?? null
-
-  const workspaceTools = (
-    <div className="brandtools" data-part="colours" tabIndex={-1}>
-      <SourceTabs tabs={SOURCES} value={source} onChange={setSource} label="Where the colours come from" idBase={tabsId} />
-      <div role="tabpanel" id={`${tabsId}-panel-${source}`} aria-labelledby={`${tabsId}-tab-${source}`} className="brandtools__panel">
-        {source === 'base' && <SpectrumPicker hex={selected.hex} label={`colour ${activeNumber}`} onChange={(hex) => moveColour(activeId, hex)} />}
-        {source === 'image' && <ImageSource onUse={takeColours} />}
-        {source === 'wheel' && (
-          <>
-            <ColourWheel blocks={blocks} selectedId={activeId} onSelect={(id) => dispatch({ type: 'select', id })} onChange={moveColour} showRule={isRule(harmony)} />
-            <HarmonyRow harmony={harmony} onChoose={chooseHarmony} />
-          </>
-        )}
-      </div>
-      <section className="brandtools__selected" aria-label={`Colour ${activeNumber}`}>
-        <h3 className="brandtools__heading">{`Colour ${activeNumber}`}</h3>
-        <ColourFields key={activeId} hex={selected.hex} number={activeNumber} onChange={(hex) => moveColour(activeId, hex)} />
-        <RoleChoice number={activeNumber} role={selected.role} suggested={holds} onChange={(role: ColourRole | null) => dispatch({ type: 'set_role', id: activeId, role })} />
-      </section>
-    </div>
+  const wheel = (
+    <ColourWheel large blocks={blocks} selectedId={activeId} onSelect={(id) => dispatch({ type: 'select', id })} onChange={moveColour} showRule={isRule(harmony)} />
   )
 
-  const section = (id: BrandPartId, children: ReactNode) => (
-    <PartSection key={id} id={id} title={BRAND_TITLES[id]} lead={brandLead(id, guided)} plain>
-      {children}
-    </PartSection>
-  )
-
-  const guideStep =
-    step === 'colours'
-      ? section('colours', <GuideColours picks={picks} onPicks={setPicks} blocks={blocks} showsSaved={hasSaved && !isUnsaved(doc, saved)} onChoose={choose} />)
-      : step === 'roles'
-        ? section('roles', <RoleList blocks={blocks} roles={roles} onChange={(id, role) => dispatch({ type: 'set_role', id, role })} />)
-        : section('contrast', <ContrastLines bare roles={roles} onMakeReadable={makeReadable} />)
-
-  const panel = guided ? (
-    <GuideCard stepKey={step} cardRef={cardRef} position={index + 1} of={BRAND_PARTS.length}>
-      {guideStep}
-    </GuideCard>
-  ) : (
-    workspaceTools
+  const swatches = (
+    <SwatchStrip
+      blocks={blocks}
+      roles={roles}
+      selectedId={activeId}
+      max={MAX_BLOCKS}
+      min={MIN_BLOCKS}
+      onSelect={(id) => dispatch({ type: 'select', id })}
+      onRemove={(id) => dispatch({ type: 'remove_block', id })}
+      onToggleLock={(id) => dispatch({ type: 'toggle_keep', id })}
+      onToggleStar={(id) => dispatch({ type: 'toggle_star', id })}
+    />
   )
 
   const footer = guided && (
     <GuideFooter canBack={index > 0} onBack={() => move(backBrand(progress))} last={last} onNext={next} onFinish={() => void finish()} missing={stillBlocked} note={finishNote} disabled={finishing} />
   )
 
-  // ---- The palette on the right ----
+  // ---- The frame: the same screen in both modes. Guide mode adds its Back and Continue under it. ----
+
+  const colours = (
+    <div className="brandgrid" data-full={fullscreen || undefined}>
+      <div className="brandgrid__tools" data-part="colours" tabIndex={-1} hidden={fullscreen || undefined}>
+        {wheel}
+      </div>
+      <div className="brandgrid__palette">{swatches}</div>
+      <section className="brandgrid__roles" data-part="roles" tabIndex={-1} aria-label="Roles" hidden={fullscreen || undefined}>
+        <h3 className="brandgrid__title">Roles</h3>
+        <p className="brandgrid__lead">{ROLES_LEAD}</p>
+        <RoleList held={false} blocks={blocks} roles={roles} onChange={(id, role) => dispatch({ type: 'set_role', id, role })} />
+      </section>
+      <div className="brandgrid__contrast">
+        <ContrastCircles blocks={blocks} roles={roles} />
+      </div>
+    </div>
+  )
+
+  // Workspace mode is the colour screen alone. Guide mode walks through Colours, Typography, Voice and the Brand plan, with Back and Continue under each.
+  const businessName = doc.businessName ?? projectName
+  const screen =
+    !guided || step === 'colours' ? (
+      colours
+    ) : step === 'typography' ? (
+      <BrandTypography value={fonts} onChange={setFonts} roles={roles} businessName={businessName} />
+    ) : step === 'voice' ? (
+      <BrandVoice value={voice} onChange={setVoice} />
+    ) : (
+      <BrandPlan blocks={blocks} roles={roles} fonts={fonts} voice={voice} businessName={businessName} hasLogo={logo != null} />
+    )
 
   const thing = (
-    <div className="brandview">
-      <SwatchStrip
-        blocks={blocks}
-        roles={roles}
-        selectedId={activeId}
-        max={MAX_BLOCKS}
-        min={MIN_BLOCKS}
-        onSelect={(id) => dispatch({ type: 'select', id })}
-        onAdd={() => dispatch({ type: 'add_block' })}
-        onRemove={(id) => dispatch({ type: 'remove_block', id })}
-        onToggleLock={(id) => dispatch({ type: 'toggle_keep', id })}
-        onToggleStar={(id) => dispatch({ type: 'toggle_star', id })}
-      />
-      {/* In the Contrast step the pairs are on the left with the fix, so they are not drawn twice. */}
-      {!(guided && step === 'contrast') && <ContrastLines roles={roles} />}
-      <DocumentPreview roles={roles} businessName={doc.businessName} reason={doc.reasons.canvas ?? 'Shows the palette on a real document, because swatches alone do not show how it will work.'} />
-    </div>
+    <>
+      {screen}
+      {footer}
+    </>
   )
 
   return (
@@ -346,20 +302,10 @@ export default function PaletteWorkspace({ mode, projectId, projectName, state, 
           <BrandToolbar
             history={history}
             download={<ExportButton iconOnly ariaLabel="Download brand sheet" onExport={exportSheet} />}
-            name={name}
-            onName={(value) => {
-              setName(value)
-              setSaveNote('')
-              setSaveProblem(null)
-            }}
-            nameProblem={nameProblem ?? saveProblem}
             canSave={loaded}
             unsaved={unsaved}
             onSave={() => void save()}
             status={status}
-            palettes={palettes}
-            onOpenPalette={openPalette}
-            onForgetPalette={(palette) => void forgetPalette(palette)}
             canRandom={baseTarget(blocks, activeId) !== null}
             onRandom={generateRandom}
             fullscreen={fullscreen}
@@ -367,12 +313,10 @@ export default function PaletteWorkspace({ mode, projectId, projectName, state, 
           />
         )}
         swap
-        hidePanel={fullscreen}
+        hidePanel
         thing={thing}
         thingLabel="The palette"
-        panel={panel}
-        panelLabel={guided ? `Step ${index + 1} of ${BRAND_PARTS.length}: ${BRAND_TITLES[step]}` : 'The colour tools'}
-        footer={footer}
+        panelLabel="The colour tools"
         canUndo={canUndoState(state)}
         canRedo={canRedoState(state)}
         onUndo={() => dispatch({ type: 'undo' })}

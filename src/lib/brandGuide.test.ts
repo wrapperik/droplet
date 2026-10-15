@@ -23,13 +23,13 @@ const own: PaletteBlock[] = [
 ]
 
 describe('the brand guide', () => {
-  it('has the same three parts, in the same order, as Workspace mode', () => {
+  it('has the four parts, in order', () => {
     expect(BRAND_STEPS).toEqual(BRAND_PARTS)
-    expect([...BRAND_STEPS]).toEqual(['colours', 'roles', 'contrast'])
+    expect([...BRAND_STEPS]).toEqual(['colours', 'typography', 'voice', 'plan'])
   })
 
   it('holds Continue back on Colours while the palette is still the starter and none is saved', () => {
-    const facts = { blocks: starterBlocks(), hasSaved: false }
+    const facts = { blocks: starterBlocks(), hasSaved: false, fonts: null, voice: [] }
     expect(hasOwnPalette(facts)).toBe(false)
     expect(brandBlockers('colours', facts)).toHaveLength(1)
     const result = advanceBrand(startBrandGuide(), facts)
@@ -38,27 +38,29 @@ describe('the brand guide', () => {
   })
 
   it('lets the founder on once the palette is their own, or the project already has one saved', () => {
-    expect(brandBlockers('colours', { blocks: own, hasSaved: false })).toEqual([])
-    expect(brandBlockers('colours', { blocks: starterBlocks(), hasSaved: true })).toEqual([])
-    const result = advanceBrand(startBrandGuide(), { blocks: own, hasSaved: false })
-    expect(result.progress).toEqual({ step: 'roles', reached: 1 })
+    expect(brandBlockers('colours', { blocks: own, hasSaved: false, fonts: null, voice: [] })).toEqual([])
+    expect(brandBlockers('colours', { blocks: starterBlocks(), hasSaved: true, fonts: null, voice: [] })).toEqual([])
+    const result = advanceBrand(startBrandGuide(), { blocks: own, hasSaved: false, fonts: null, voice: [] })
+    expect(result.progress).toEqual({ step: 'typography', reached: 1 })
   })
 
-  it('never holds Roles or Contrast back, and has nowhere to go from the last part', () => {
-    const facts = { blocks: starterBlocks(), hasSaved: false }
-    expect(brandBlockers('roles', facts)).toEqual([])
-    expect(brandBlockers('contrast', facts)).toEqual([])
-    const last = { step: 'contrast' as const, reached: 2 }
+  it('holds Typography and Voice back until something is chosen, and has nowhere to go from the last part', () => {
+    const facts = { blocks: starterBlocks(), hasSaved: false, fonts: null, voice: [] }
+    expect(brandBlockers('typography', facts)).toHaveLength(1)
+    expect(brandBlockers('voice', facts)).toHaveLength(1)
+    expect(brandBlockers('typography', { ...facts, fonts: 'clean' })).toEqual([])
+    expect(brandBlockers('voice', { ...facts, voice: ['Warm'] })).toEqual([])
+    const last = { step: 'plan' as const, reached: 3 }
     expect(advanceBrand(last, facts).progress).toBe(last)
   })
 
   it('goes back, and to a part already reached but not further on', () => {
-    const at = { step: 'roles' as const, reached: 1 }
+    const at = { step: 'typography' as const, reached: 1 }
     expect(backBrand(at)).toEqual({ step: 'colours', reached: 1 })
     expect(backBrand(startBrandGuide())).toEqual(startBrandGuide())
-    expect(goToBrand(at, 'contrast')).toBe(at)
-    expect(goToBrand({ step: 'colours', reached: 1 }, 'roles')).toEqual({ step: 'roles', reached: 1 })
-    expect(jumpToBrand(startBrandGuide(), 'contrast')).toEqual({ step: 'contrast', reached: 2 })
+    expect(goToBrand(at, 'plan')).toBe(at)
+    expect(goToBrand({ step: 'colours', reached: 1 }, 'typography')).toEqual({ step: 'typography', reached: 1 })
+    expect(jumpToBrand(startBrandGuide(), 'plan')).toEqual({ step: 'plan', reached: 3 })
   })
 })
 

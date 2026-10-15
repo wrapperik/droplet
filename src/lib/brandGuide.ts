@@ -21,23 +21,27 @@ export type GuidePicks = { favourites: string[]; shown: boolean; round: number }
 export const NO_PICKS: GuidePicks = { favourites: [], shown: false, round: 0 }
 
 // The one line under a part's title. Colours asks for something different in Guide mode (colours the founder likes, not a wheel), so it says so; the rest are the same.
-export const brandLead = (id: BrandPartId, guided: boolean): string =>
-  guided && id === 'colours' ? 'Pick up to three colours you like. Droplet then shows three palettes built around them, and you choose one.' : BRAND_LEADS[id]
+export const brandLead = (id: BrandPartId, _guided: boolean): string => BRAND_LEADS[id]
 
 export const brandStepIndex = (step: BrandStepId) => BRAND_STEPS.indexOf(step)
 
-// What holds a part back, in words. Only Colours does: the palette must be one the founder chose (or one they already saved, or changed themselves).
+// What holds a part back, in words. Colours: the palette must be the founder's own (changed, or already saved). Typography: a pair chosen. Voice: a word chosen.
 export type BrandGuideFacts = {
   blocks: PaletteBlock[]
   // The project already has a saved palette.
   hasSaved: boolean
+  // The typeface pair chosen, and the voice words chosen.
+  fonts: string | null
+  voice: string[]
 }
 
 // Whether the founder can leave Colours: they chose a palette here, or changed it some other way, or the project already has one saved.
 export const hasOwnPalette = ({ blocks, hasSaved }: BrandGuideFacts) => hasSaved || !paletteIsStarter(blocks)
 
 export function brandBlockers(step: BrandStepId, facts: BrandGuideFacts): string[] {
-  if (step === 'colours' && !hasOwnPalette(facts)) return ['Choose one of the palettes first, so the page has your colours.']
+  if (step === 'colours' && !hasOwnPalette(facts)) return ['Change a colour first, so the palette is yours.']
+  if (step === 'typography' && facts.fonts === null) return ['Choose a pair of typefaces first.']
+  if (step === 'voice' && facts.voice.length === 0) return ['Pick at least one word for how your brand sounds.']
   return []
 }
 
