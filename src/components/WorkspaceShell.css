@@ -4,9 +4,12 @@
   container-type: inline-size;
   display: flex;
   flex-direction: column;
+  /* Fills the space the canvas gives it by stretching (a percentage height here would undo the stretch and let the frame grow past the screen). */
+  flex: 1 1 auto;
+  align-self: stretch;
   width: 100%;
   max-width: 90rem;
-  height: 100%;
+  min-width: 0;
   min-height: 0;
   margin-inline: auto;
 }

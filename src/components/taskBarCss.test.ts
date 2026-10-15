@@ -67,7 +67,11 @@ describe('the frame every task shares', () => {
   })
 
   it('does not scroll as a whole, and fills the screen', () => {
-    expect(rule('.frame', shell)[0].body).toMatch(/height:\s*100%/)
+    // It stretches to the canvas: a percentage height would undo the stretch and let it grow past the screen.
+    const frame = rule('.frame', shell)[0].body
+    expect(frame).toMatch(/align-self:\s*stretch/)
+    expect(frame).toMatch(/min-height:\s*0/)
+    expect(frame).not.toMatch(/height:\s*100%/)
   })
 
   it('becomes one column under 42rem, the panel (and its footer) first', () => {

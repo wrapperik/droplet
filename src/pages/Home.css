@@ -3,6 +3,8 @@
   gap: 0.25rem;
   height: 100dvh;
   padding: 0.375rem;
+  /* The page itself never scrolls: only the panes, the board and the chat do. clip, not hidden, so focusing a field cannot scroll it either. */
+  overflow: clip;
   /* White on a light screen, dark charcoal on a dark one (--shell). The sidebar and the docked chat sit on it with .on-shell, which
      sets the page colour to the shell's; their text and fills follow the theme. */
   background-color: var(--shell);
@@ -21,6 +23,9 @@
   flex: 1;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  /* Nothing drawn in the working screen spills over the chat beside it, and focusing a field cannot scroll the header away. */
+  overflow: clip;
   border-radius: var(--radius-screen);
   box-shadow: var(--shadow-md);
 }
@@ -150,13 +155,14 @@
 .home__canvas--panes {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: clip;
   padding-bottom: 1rem;
 }
 
 .home__canvas--panes > .home__component {
   display: flex;
   flex: 1;
+  min-width: 0;
   min-height: 0;
 }
 

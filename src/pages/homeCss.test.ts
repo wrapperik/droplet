@@ -48,7 +48,10 @@ describe('the shell round the working screen', () => {
 
 describe('the screen when a task has a panel', () => {
   it('does not scroll the canvas: the frame fills it and each pane scrolls inside itself', () => {
-    expect(rule('.home__canvas--panes')?.body).toMatch(/overflow:\s*hidden/)
+    expect(rule('.home__canvas--panes')?.body).toMatch(/overflow:\s*clip/)
+    // The page and the working screen never scroll, so a focused field cannot push the header away or the panel over the chat.
+    expect(rule('.home')?.body).toMatch(/overflow:\s*clip/)
+    expect(rule('.home__screen')?.body).toMatch(/overflow:\s*clip/)
     expect(rule('.home__canvas--panes > .home__component')?.body).toMatch(/min-height:\s*0/)
   })
 
