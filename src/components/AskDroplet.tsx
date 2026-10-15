@@ -13,13 +13,15 @@ type Props = {
   label: string
   // How the button looks: with its words (in the board's selection bar), or the icon alone (on a colour or a line).
   compact?: boolean
+  // An extra class for the button, for a place that styles it like its neighbours (the palette's colour actions).
+  className?: string
   style?: CSSProperties
 }
 
 // Droplet offered where the work is: a button beside the thing selected that opens a few suggestions for it and a small field to ask about it. Whatever
 // is chosen or typed is sent as the founder's own message through the chat, so it comes back with a change receipt and Undo this. It does nothing by
 // itself, and draws nothing where there is no chat to send to.
-export default function AskDroplet({ suggestions, label, compact = false, style }: Props) {
+export default function AskDroplet({ suggestions, label, compact = false, className, style }: Props) {
   const asking = useAsk()
   const [open, setOpen] = useState(false)
   const [text, setText] = useState('')
@@ -85,7 +87,7 @@ export default function AskDroplet({ suggestions, label, compact = false, style 
       <button
         ref={buttonRef}
         type="button"
-        className={compact ? 'ask ask--compact' : 'ask'}
+        className={[compact ? 'ask ask--compact' : 'ask', className].filter(Boolean).join(' ')}
         style={style}
         aria-label={label}
         aria-haspopup="dialog"

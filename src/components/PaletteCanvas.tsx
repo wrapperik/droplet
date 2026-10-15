@@ -160,7 +160,17 @@ export default function PaletteCanvas({ blocks, selectedId, max, min, onSelect, 
                       <StarIcon size={15} aria-hidden="true" />
                     </button>
                   )}
-                  {block.id === selectedId && <AskDroplet compact suggestions={colourSuggestions(index + 1)} label={`Ask Droplet about colour ${index + 1}`} style={{ color: ink }} />}
+                  {block.id === selectedId && <AskDroplet compact className="palette__action" suggestions={colourSuggestions(index + 1)} label={`Ask Droplet about colour ${index + 1}`} style={{ color: ink }} />}
+                  <button
+                    type="button"
+                    className="palette__action"
+                    style={{ color: ink }}
+                    onClick={() => copy(block)}
+                    aria-label={`Copy ${block.hex}`}
+                    title={copied ? 'Copied' : 'Copy the hex code'}
+                  >
+                    {copied ? <CheckIcon size={14} strokeWidth={2.5} aria-hidden="true" /> : <CopyIcon size={14} aria-hidden="true" />}
+                  </button>
                   {canRemove && (
                     <button
                       type="button"
@@ -173,16 +183,6 @@ export default function PaletteCanvas({ blocks, selectedId, max, min, onSelect, 
                     </button>
                   )}
                 </div>
-                <button
-                  type="button"
-                  className="palette__copy"
-                  style={{ color: ink }}
-                  onClick={() => copy(block)}
-                  aria-label={`Copy ${block.hex}`}
-                >
-                  {copied ? <CheckIcon size={14} strokeWidth={2.5} aria-hidden="true" /> : <CopyIcon size={14} aria-hidden="true" />}
-                  {copied ? 'Copied' : 'Copy'}
-                </button>
               </motion.div>
             )
           })}

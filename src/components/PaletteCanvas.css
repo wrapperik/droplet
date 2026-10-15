@@ -149,15 +149,23 @@
   position: absolute;
   top: 0.5rem;
   right: 0.5rem;
+  left: 0.5rem;
   display: flex;
+  flex-wrap: wrap;
   gap: 0.25rem;
+  /* The row is only there to be reached: it takes no presses where it is empty, so the block under it can still be picked. */
+  pointer-events: none;
+}
+
+.palette__actions > * {
+  pointer-events: auto;
 }
 
 .palette__action {
   display: grid;
   place-items: center;
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 1.625rem;
+  height: 1.625rem;
   padding: 0;
   border: 1px solid currentcolor;
   border-radius: 50%;
@@ -176,39 +184,65 @@
   color: var(--block);
 }
 
-.palette__copy {
-  position: absolute;
-  right: 0.5rem;
-  bottom: 0.5rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.1875rem 0.5rem;
-  border: 1px solid currentcolor;
-  border-radius: var(--radius-pill);
-  background: transparent;
-  font-size: 0.75rem;
-  font-weight: 600;
-  opacity: 0;
-  transition: opacity var(--duration-fast) var(--ease-out);
-}
-
-.palette__cell:hover .palette__copy,
 .palette__cell:hover .palette__action,
-.palette__copy:focus-visible,
 .palette__action:focus-visible {
   opacity: 0.9;
 }
 
+/* The titles and the check give way to the actions while the pointer is on a block (or a keyboard is on one of its actions), so nothing is ever drawn over
+   anything. The hex stays, along the foot. */
+.palette__top {
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.palette__cell:hover .palette__top,
+.palette__cell:has(.palette__action:focus-visible) .palette__top,
+.palette__cell:has(.ask[aria-expanded='true']) .palette__top {
+  opacity: 0;
+}
+
+/* The ask button is made by AskDroplet and styled like its neighbours here. */
+.palette__actions .ask.palette__action {
+  width: 1.625rem;
+  height: 1.625rem;
+  min-height: 0;
+  padding: 0;
+  border: 1px solid currentcolor;
+  background: transparent;
+  color: inherit;
+}
+
+.palette__actions .ask.palette__action[aria-expanded='true'] {
+  opacity: 0.9;
+}
+
+/* No hover on a touch screen: the actions are always there, so they get a row of their own along the top and the block makes room for it, with a taller row of
+   blocks, instead of lying over the titles. */
 @media (hover: none) {
-  .palette__copy,
-  .palette__action {
+  .palette__action,
+  .palette__actions .ask.palette__action {
     opacity: 0.8;
+  }
+
+  .palette__grid {
+    grid-auto-rows: 9.75rem;
+  }
+
+  .palette__block {
+    padding-top: 2.75rem;
   }
 }
 
 /* A narrow canvas gets two blocks across instead of four. */
-@container (max-width: 26rem) {
+/* The blocks carry a row of five small actions, which needs a block about 10.5rem wide. So four across only when the canvas is wide enough for that, three
+   across below it, and two across when it is narrower still. */
+@container (max-width: 46rem) {
+  .palette__grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@container (max-width: 33rem) {
   .palette__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
