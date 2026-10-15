@@ -166,6 +166,13 @@
   color: var(--text);
 }
 
+/* The bar's first row is 3rem high (the attach button). The two 2.5rem buttons are bottom-aligned with it, so they are lifted a quarter of a rem to sit on
+   the same centre line, and stay on it when the field grows tall. */
+.intent__mode,
+.intent__send {
+  margin-bottom: 0.25rem;
+}
+
 .intent__send:not(:disabled):hover {
   background: var(--accent-tint);
 }
@@ -325,7 +332,10 @@
 /* How much of the limit a long message has used. */
 .intent__count {
   flex: none;
-  align-self: center;
+  /* On the centre line of the first row, at the foot of a tall bar. */
+  align-self: flex-end;
+  margin-bottom: 1.125rem;
+  line-height: 1;
   color: var(--text-muted);
   font-size: 0.75rem;
   font-variant-numeric: tabular-nums;

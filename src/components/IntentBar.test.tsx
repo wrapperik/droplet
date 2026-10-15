@@ -5,6 +5,10 @@ import { WORK_MODE_STORAGE_KEY } from '../lib/workMode.ts'
 import { useWorkMode } from '../store/workMode.ts'
 import IntentBar from './IntentBar.tsx'
 
+// The stylesheets are read as text, since the tests render without them.
+// @ts-expect-error node:fs has no types in the app's config
+const { readFileSync } = (await import('node:fs')) as { readFileSync: (path: string, encoding: string) => string }
+
 const openModeMenu = async (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole('button', { name: /Choose how Droplet works/ }))
 const write = async (user: ReturnType<typeof userEvent.setup>, text: string) => user.type(screen.getByLabelText('Describe what you need'), text)
 
@@ -317,5 +321,20 @@ describe('a long message in the bar', () => {
     await user.paste('word '.repeat(500).trim())
     await user.click(screen.getByRole('button', { name: 'Send' }))
     expect(onSubmitIntent.mock.calls[0][0].length).toBeGreaterThan(2000)
+  })
+})
+
+describe('the look of the bar', () => {
+  const css = readFileSync('src/components/IntentBar.css', 'utf8')
+  const global = readFileSync('src/styles/global.css', 'utf8')
+
+  it('uses the page font in the message field: a textarea does not inherit it unless it is told to', () => {
+    expect(/(?:^|\n)button,\ninput,\ntextarea\s*\{[^}]*font:\s*inherit/.test(global)).toBe(true)
+  })
+
+  it('keeps the two small buttons on the centre line of the first row, which is 3rem high', () => {
+    expect(css).toMatch(/\.intent__plus\s*\{[^}]*height:\s*3rem/)
+    expect(css).toMatch(/\.intent__mode\s*\{[^}]*height:\s*2\.5rem/)
+    expect(css).toMatch(/\.intent__mode,\n\.intent__send\s*\{\s*margin-bottom:\s*0\.25rem/)
   })
 })
