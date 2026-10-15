@@ -338,3 +338,40 @@ describe('the look of the bar', () => {
     expect(css).toMatch(/\.intent__mode,\n\.intent__send\s*\{\s*margin-bottom:\s*0\.25rem/)
   })
 })
+
+describe('where the menus open', () => {
+  const css = readFileSync('src/components/IntentBar.css', 'utf8')
+  const anchor = (container: HTMLElement) => container.querySelector('.intent__anchor') as HTMLElement
+
+  it('opens below the bar on the start screen, where the bar is near the middle and a menu going up would cover the logo', () => {
+    const { container } = render(<IntentBar showTip />)
+    expect(anchor(container)).toHaveAttribute('data-menus', 'below')
+    expect(css).toMatch(/\.intent__anchor\[data-menus='below'\] > \[role='menu'\]\s*\{[^}]*top:\s*calc\(100% \+ 0\.75rem\)[^}]*bottom:\s*auto/)
+  })
+
+  it('opens above it in the side panel, and in a chat that has begun, where the bar is at the foot of the screen', () => {
+    expect(anchor(render(<IntentBar docked showTip />).container)).toHaveAttribute('data-menus', 'above')
+    expect(anchor(render(<IntentBar showTip={false} />).container)).toHaveAttribute('data-menus', 'above')
+  })
+
+  it('puts all three menus beside the bar itself, so they follow it', async () => {
+    const user = userEvent.setup()
+    const { container } = render(<IntentBar showTip />)
+    await user.click(screen.getByRole('button', { name: 'Choose a task' }))
+    expect(anchor(container).contains(screen.getByRole('menu', { name: 'Workspaces' }))).toBe(true)
+    await user.click(screen.getByRole('button', { name: 'Attach a file' }))
+    expect(anchor(container).contains(await screen.findByRole('menu', { name: 'Attach a file' }))).toBe(true)
+    await user.click(screen.getByRole('button', { name: /Choose how Droplet works/ }))
+    expect(anchor(container).contains(await screen.findByRole('menu', { name: 'How Droplet works' }))).toBe(true)
+  })
+
+  it('has the workspaces and attach menus at the same compact scale as the mode menu', () => {
+    for (const file of ['TaskMenu', 'AttachMenu']) {
+      const menu = readFileSync(`src/components/${file}.css`, 'utf8')
+      expect(menu).toMatch(/border-radius:\s*var\(--radius-md\)/)
+      expect(menu).toMatch(/width:\s*min\(17\.5rem/)
+      expect(menu).toMatch(/font-size:\s*0\.875rem/)
+      expect(menu).not.toMatch(/radius-xl/)
+    }
+  })
+})

@@ -163,18 +163,6 @@ export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false
 
   return (
     <div className={docked ? 'intent intent--docked' : 'intent'} ref={wrapRef}>
-      <AnimatePresence>{menuOpen && <TaskMenu onSelect={choose} align={menuSide} />}</AnimatePresence>
-      <AnimatePresence>{attachOpen && <AttachMenu onChoose={pick} />}</AnimatePresence>
-      <AnimatePresence>{modeOpen && (
-          <ModeMenu
-            workMode={workMode}
-            onWorkMode={(next) => {
-              setWorkMode(next)
-              closeModes()
-            }}
-          />
-        )}</AnimatePresence>
-
       {(hints?.selection || (hints?.chips && hints.chips.length > 0)) && (
         <div className="intent__hints" role="group" aria-label="Suggestions">
           {hints.selection && (
@@ -221,73 +209,89 @@ export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false
         </div>
       )}
 
+      {/* The menus are positioned from here, beside the bar itself: above it wherever the bar is at the foot of the screen (the side panel, and a chat that has begun), and below it on the start screen,
+          where the bar is near the middle and a menu going up would cover the logo and the greeting. */}
+      <div className="intent__anchor" data-menus={!docked && showTip ? 'below' : 'above'}>
+        <AnimatePresence>{menuOpen && <TaskMenu onSelect={choose} align={menuSide} />}</AnimatePresence>
+        <AnimatePresence>{attachOpen && <AttachMenu onChoose={pick} />}</AnimatePresence>
+        <AnimatePresence>{modeOpen && (
+          <ModeMenu
+            workMode={workMode}
+            onWorkMode={(next) => {
+              setWorkMode(next)
+              closeModes()
+            }}
+          />
+        )}</AnimatePresence>
+
       <form ref={formRef} className="intent__bar glass" onSubmit={submit}>
-        <button
-          type="button"
-          className="intent__plus"
-          aria-label="Attach a file"
-          aria-haspopup="menu"
-          aria-expanded={attachOpen}
-          onClick={() => {
-            setModeOpen(false)
-            setMenuOpen(false)
-            setAttachOpen((value) => !value)
-          }}
-        >
-          <PaperclipIcon size={22} aria-hidden="true" />
-        </button>
-        <input ref={pickerRef} type="file" multiple className="visually-hidden" tabIndex={-1} aria-label="Choose files to attach" onChange={(event) => void took(event)} />
-        <textarea
-          ref={inputRef}
-          className="intent__input"
-          rows={1}
-          value={text}
-          maxLength={MAX_INTENT_CHARS}
-          onChange={(event) => setText(event.target.value)}
-          onKeyDown={onKeyDown}
-          placeholder={hints?.placeholder ?? 'Write your message...'}
-          aria-label="Describe what you need"
-          autoComplete="off"
-        />
-        {text.length >= COUNT_SHOWN_FROM && (
-          <span className="intent__count" role="status" data-full={text.length >= MAX_INTENT_CHARS || undefined}>
-            {text.length.toLocaleString('en-GB')} / {MAX_INTENT_CHARS.toLocaleString('en-GB')}
-          </span>
-        )}
-        <button
-          type="button"
-          className="intent__mode"
-          aria-label="Choose a task"
-          title="Workspaces"
-          aria-haspopup="menu"
-          aria-expanded={menuOpen}
-          onClick={() => {
-            setModeOpen(false)
-            setAttachOpen(false)
-            setMenuSide('right')
-            setMenuOpen((value) => !value)
-          }}
-        >
-          <LayersMinimalisticIcon size={20} aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          className="intent__mode"
-          aria-label={`Choose how Droplet works. ${workMode === 'guide' ? 'Guide' : 'Workspace'} mode is on.`}
-          aria-haspopup="menu"
-          aria-expanded={modeOpen}
-          onClick={() => {
-            setMenuOpen(false)
-            setAttachOpen(false)
-            setModeOpen((value) => !value)
-          }}
-        >
-          <TuningIcon size={20} aria-hidden="true" />
-        </button>
-        <button type="submit" className="intent__send" aria-label="Send" disabled={!canSend}>
-          <ReplyIcon size={22} aria-hidden="true" />
-        </button>
-      </form>
+          <button
+            type="button"
+            className="intent__plus"
+            aria-label="Attach a file"
+            aria-haspopup="menu"
+            aria-expanded={attachOpen}
+            onClick={() => {
+              setModeOpen(false)
+              setMenuOpen(false)
+              setAttachOpen((value) => !value)
+            }}
+          >
+            <PaperclipIcon size={22} aria-hidden="true" />
+          </button>
+          <input ref={pickerRef} type="file" multiple className="visually-hidden" tabIndex={-1} aria-label="Choose files to attach" onChange={(event) => void took(event)} />
+          <textarea
+            ref={inputRef}
+            className="intent__input"
+            rows={1}
+            value={text}
+            maxLength={MAX_INTENT_CHARS}
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder={hints?.placeholder ?? 'Write your message...'}
+            aria-label="Describe what you need"
+            autoComplete="off"
+          />
+          {text.length >= COUNT_SHOWN_FROM && (
+            <span className="intent__count" role="status" data-full={text.length >= MAX_INTENT_CHARS || undefined}>
+              {text.length.toLocaleString('en-GB')} / {MAX_INTENT_CHARS.toLocaleString('en-GB')}
+            </span>
+          )}
+          <button
+            type="button"
+            className="intent__mode"
+            aria-label="Choose a task"
+            title="Workspaces"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            onClick={() => {
+              setModeOpen(false)
+              setAttachOpen(false)
+              setMenuSide('right')
+              setMenuOpen((value) => !value)
+            }}
+          >
+            <LayersMinimalisticIcon size={20} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="intent__mode"
+            aria-label={`Choose how Droplet works. ${workMode === 'guide' ? 'Guide' : 'Workspace'} mode is on.`}
+            aria-haspopup="menu"
+            aria-expanded={modeOpen}
+            onClick={() => {
+              setMenuOpen(false)
+              setAttachOpen(false)
+              setModeOpen((value) => !value)
+            }}
+          >
+            <TuningIcon size={20} aria-hidden="true" />
+          </button>
+          <button type="submit" className="intent__send" aria-label="Send" disabled={!canSend}>
+            <ReplyIcon size={22} aria-hidden="true" />
+          </button>
+        </form>
+      </div>
 
       {showTip && (
         <button

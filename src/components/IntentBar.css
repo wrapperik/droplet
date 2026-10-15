@@ -345,3 +345,15 @@
   color: var(--danger);
   font-weight: 600;
 }
+
+/* The bar and its menus. The menus are absolute to this, so they sit by the bar whatever is above or below it. */
+.intent__anchor {
+  position: relative;
+  width: 100%;
+}
+
+/* On the start screen the bar is near the middle, so the menus open below it and stay clear of the logo and the greeting. In the side panel they open above. */
+.intent__anchor[data-menus='below'] > [role='menu'] {
+  top: calc(100% + 0.75rem);
+  bottom: auto;
+}

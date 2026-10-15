@@ -40,7 +40,7 @@ export default function TaskMenu({ onSelect, align = 'left' }: Props) {
     >
       {tasks.map(({ id, label, hint, icon: TaskIcon }) => (
         <button key={id} type="button" role="menuitem" className="task-menu__item" onClick={() => onSelect(id)}>
-          <TaskIcon size={22} aria-hidden="true" />
+          <TaskIcon size={18} aria-hidden="true" />
           <span className="task-menu__text">
             <span className="task-menu__label">{label}</span>
             <span className="task-menu__hint">{hint}</span>

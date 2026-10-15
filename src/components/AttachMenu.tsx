@@ -47,7 +47,7 @@ export default function AttachMenu({ onChoose }: Props) {
       <div className="attach-menu__items">
         {ITEMS.map(({ kind, label, hint, Icon }) => (
           <button key={kind} type="button" role="menuitem" className="attach-menu__item" onClick={() => onChoose(kind)}>
-            <Icon size={20} aria-hidden="true" />
+            <Icon size={18} aria-hidden="true" />
             <span className="attach-menu__text">
               <span className="attach-menu__label">{label}</span>
               <span className="attach-menu__hint">{hint}</span>
