@@ -2,73 +2,72 @@ import { describe, expect, it } from 'vitest'
 import { MAX_CENTS, VAT_RATE_BP, centsToField, formatRand, parseMoney, percentLabel, vatOf } from './money.ts'
 
 describe('parseMoney', () => {
-  it('reads whole and decimal amounts, with a point or a comma', () => {
-    expect(parseMoney('450')).toBe(45000)
-    expect(parseMoney('450.5')).toBe(45050)
-    expect(parseMoney('450,50')).toBe(45050)
-    expect(parseMoney('0.99')).toBe(99)
-    expect(parseMoney('12.3')).toBe(1230)
-  })
-
-  it('ignores the currency sign and spaces, including the no-break space the locale uses', () => {
-    expect(parseMoney('R450')).toBe(45000)
-    expect(parseMoney('R 1 234,50')).toBe(123450)
-    expect(parseMoney('R 1 234,50')).toBe(123450)
-  })
-
-  it('reads thousands separators', () => {
-    expect(parseMoney('1,234.50')).toBe(123450)
-    expect(parseMoney('1.234,50')).toBe(123450)
-    expect(parseMoney('1,234')).toBe(123400)
-    expect(parseMoney('1.234')).toBe(123400)
-    expect(parseMoney('1,234,567')).toBe(123456700)
-  })
-
-  it('says nothing for what is not an amount', () => {
-    for (const text of ['', ' ', 'R', 'abc', '-5', '12abc', '1.2.3,4', '1,23,45', '.5', '1.234,567']) expect(parseMoney(text)).toBeNull()
-  })
-
-  it('refuses an amount too large to be real', () => {
-    expect(parseMoney('1000000000')).toBe(MAX_CENTS)
-    expect(parseMoney('1000000000.01')).toBeNull()
+  it.each([
+    ['450', 45000],
+    ['450.5', 45050],
+    ['450,50', 45050],
+    ['0.99', 99],
+    ['12.3', 1230],
+    ['R450', 45000],
+    ['R 1 234,50', 123450],
+    ['R 1 234,50', 123450],
+    ['1,234.50', 123450],
+    ['1.234,50', 123450],
+    ['1,234', 123400],
+    ['1.234', 123400],
+    ['1,234,567', 123456700],
+    ['1000000000', MAX_CENTS],
+    ['', null],
+    [' ', null],
+    ['R', null],
+    ['abc', null],
+    ['-5', null],
+    ['12abc', null],
+    ['1.2.3,4', null],
+    ['1,23,45', null],
+    ['.5', null],
+    ['1.234,567', null],
+    ['1000000000.01', null],
+  ])('parses %j into %s', (input, expected) => {
+    expect(parseMoney(input)).toBe(expected)
   })
 })
 
 describe('formatting', () => {
-  it('shows rand with the locale grouping and a comma for cents', () => {
-    expect(formatRand(123456).replace(/\s/g, ' ')).toBe('R 1 234,56')
-    expect(formatRand(0).replace(/\s/g, ' ')).toBe('R 0,00')
+  it.each([
+    [123456, 'R 1 234,56'],
+    [0, 'R 0,00'],
+  ])('formats %i as %s', (cents, expected) => {
+    expect(formatRand(cents).replace(/\s/g, ' ')).toBe(expected)
   })
 
-  it('puts an amount in a field with two decimals', () => {
-    expect(centsToField(45000)).toBe('450.00')
-    expect(centsToField(5)).toBe('0.05')
+  it.each([
+    [45000, '450.00'],
+    [5, '0.05'],
+  ])('converts %i cents to field value %s', (cents, expected) => {
+    expect(centsToField(cents)).toBe(expected)
   })
 
-  it('round-trips an amount through a field', () => {
-    for (const cents of [0, 5, 99, 45000, 123456, 99999999]) expect(parseMoney(centsToField(cents))).toBe(cents)
+  it.each([0, 5, 99, 45000, 123456, 99999999])('round-trips %i cents through field', (cents) => {
+    expect(parseMoney(centsToField(cents))).toBe(cents)
   })
 })
 
 describe('vatOf', () => {
-  it('is fifteen percent of the amount, to the cent', () => {
+  it.each([
+    [100000, undefined, 15000],
+    [0, undefined, 0],
+    [3, undefined, 0],
+    [4, undefined, 1],
+    [10, undefined, 2],
+    [70, undefined, 11],
+    [10000, 1000, 1000],
+  ])('calculates vat for %i cents (rate: %s) -> %i', (amount, rate, expected) => {
+    expect(vatOf(amount, rate)).toBe(expected)
+  })
+
+  it('exposes VAT rate and label', () => {
     expect(VAT_RATE_BP).toBe(1500)
-    expect(vatOf(100000)).toBe(15000)
-    expect(vatOf(0)).toBe(0)
-  })
-
-  it('rounds a half cent up, and keeps small amounts exact', () => {
-    expect(vatOf(3)).toBe(0)
-    expect(vatOf(4)).toBe(1)
-    expect(vatOf(10)).toBe(2)
-    expect(vatOf(70)).toBe(11)
-  })
-
-  it('takes another rate', () => {
-    expect(vatOf(10000, 1000)).toBe(1000)
-  })
-
-  it('labels a rate', () => {
     expect(percentLabel(1500)).toBe('15%')
   })
 })

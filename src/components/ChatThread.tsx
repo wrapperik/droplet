@@ -16,14 +16,8 @@ import type { FactKey } from '../lib/facts.ts'
 import ChatBlocks from './ChatBlocks.tsx'
 import { exchangesOf, RAIL_REACH, SHOW_SUGGESTED_REPLIES } from './threadPages.ts'
 import WebSources from './WebSources.tsx'
-// Older thinking indicators are kept: the jelly blobs in JellyLoader.tsx, the rippling mark in DropletLoader.tsx and the four pulsing circles in
-// ThinkingDots.tsx. To bring one back, import it here and swap it for DiamondLoader below.
-// import DropletLoader from './DropletLoader.tsx'
-// import ThinkingDots from './ThinkingDots.tsx'
 import DiamondLoader from './DiamondLoader.tsx'
-// A sent message used to be carried from the bar by a copy drawn over the screen (FlyingMessage); it now rises into place on its own (`data-rising`).
-// To bring the copy back, import FlyingMessage here and draw it at the end of the list, as the commit that replaced it shows.
-import type { FlightOrigin } from './FlyingMessage.tsx'
+import type { FlightOrigin } from '../lib/flight.ts'
 import RichText from './RichText.tsx'
 import { parseRichText } from '../lib/richText.ts'
 import { whenLabel } from '../lib/chatStore.ts'
@@ -167,8 +161,6 @@ export default function ChatThread({ messages, onAction, onReply, done = NO_STEP
               <span className="visually-hidden">{message.from === 'you' ? 'You: ' : 'Droplet: '}</span>
               {message.pending ? (
                 <span className="thread__pending">
-                  {/* <DropletLoader /> */}
-                  {/* <ThinkingDots /> */}
                   <span className="thread__pending-text">{progress?.words ?? 'Thinking'}</span>
                   {/* The seconds are drawn but not read out: the log is a live region, and it would announce the time every second. */}
                   {progress?.elapsed && <span className="thread__elapsed" aria-hidden="true"> · {progress.elapsed}</span>}

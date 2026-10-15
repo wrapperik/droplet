@@ -1,7 +1,6 @@
 import './DiamondLoader.css'
 
-// The thinking indicator: eight small squares in a diamond that light up one after another, going round. It replaced JellyLoader in the chat thread;
-// JellyLoader.tsx, DropletLoader.tsx and ThinkingDots.tsx are kept. The animation is in DiamondLoader.css (not an inline style element, so the
+// The thinking indicator: eight small squares in a diamond that light up one after another, going round. The animation is in DiamondLoader.css (not an inline style element, so the
 // reduced-motion rule can reach it). Decorative: the stage in words beside it says what is happening, so it is hidden from screen readers.
 const SQUARES = [
   { x: 8, y: 0 }, // top

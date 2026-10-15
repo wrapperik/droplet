@@ -3,83 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { vi } from 'vitest'
 import ChatThread, { type ThreadMessage } from './ChatThread.tsx'
 import { SHOW_SUGGESTED_REPLIES, exchangesOf } from './threadPages.ts'
-import DropletLoader from './DropletLoader.tsx'
-import ThinkingDots from './ThinkingDots.tsx'
 import DiamondLoader from './DiamondLoader.tsx'
-import JellyLoader from './JellyLoader.tsx'
-
-describe('DropletLoader', () => {
-  it('is decoration: hidden from screen readers and not focusable', () => {
-    const { container } = render(<DropletLoader />)
-    const svg = container.querySelector('svg')!
-    expect(svg).toHaveAttribute('aria-hidden', 'true')
-    expect(svg).toHaveAttribute('focusable', 'false')
-  })
-
-  it('draws only the mark and its hole: nothing else is added to the logo', () => {
-    const { container } = render(<DropletLoader />)
-    expect(container.querySelectorAll('.loader__body')).toHaveLength(1)
-    // one outline for the blob and one for the hole: the bands only repeat the mark, they draw nothing of their own
-    expect(container.querySelectorAll('path')).toHaveLength(2)
-    expect(container.querySelectorAll('circle')).toHaveLength(0)
-    expect(container.querySelectorAll('.loader__ripple, .loader__drop')).toHaveLength(0)
-  })
-
-  it('ripples the whole mark: every band shows the same mark, behind a window of its own', () => {
-    const { container } = render(<DropletLoader />)
-    const bands = [...container.querySelectorAll('.loader__band')]
-    expect(bands).toHaveLength(32)
-    const mark = container.querySelector('.loader__body')!.id
-    for (const band of bands) expect(band.querySelector('use')!.getAttribute('href')).toBe(`#${mark}`)
-    // the window is on the outside, so it stays put while the mark slides behind it
-    for (const band of bands) expect(band.parentElement).toHaveAttribute('clip-path')
-    expect(container.querySelectorAll('clipPath')).toHaveLength(32)
-    // the bands are numbered down the mark, which is what makes the wave travel
-    expect(bands.map((band) => (band as HTMLElement).style.getPropertyValue('--band'))).toEqual(bands.map((_, index) => String(index)))
-  })
-
-  it('gives each loader its own mask, so two on screen do not share a hole', () => {
-    const { container } = render(
-      <>
-        <DropletLoader />
-        <DropletLoader />
-      </>,
-    )
-    const ids = [...container.querySelectorAll('mask')].map((mask) => mask.id)
-    expect(new Set(ids).size).toBe(2)
-    // and its own bands and mark, so one loader never clips or copies another
-    const all = [...container.querySelectorAll('[id]')].map((element) => element.id)
-    expect(new Set(all).size).toBe(all.length)
-    for (const id of ids) expect(id).not.toContain(':')
-    for (const body of container.querySelectorAll('.loader__body')) {
-      expect(ids).toContain(body.getAttribute('mask')!.replace(/^url\(#|\)$/g, ''))
-    }
-  })
-
-  it('takes a size', () => {
-    const { container } = render(<DropletLoader size="5rem" />)
-    expect(container.querySelector('svg')).toHaveStyle({ width: '5rem' })
-  })
-})
-
-describe('ThinkingDots', () => {
-  it('is decoration: hidden from screen readers', () => {
-    const { container } = render(<ThinkingDots />)
-    expect(container.firstElementChild).toHaveAttribute('aria-hidden', 'true')
-  })
-
-  it('draws four circles, each with a dot and a ring', () => {
-    const { container } = render(<ThinkingDots />)
-    expect(container.querySelectorAll('.thinking__circle')).toHaveLength(4)
-    expect(container.querySelectorAll('.thinking__dot')).toHaveLength(4)
-    expect(container.querySelectorAll('.thinking__outline')).toHaveLength(4)
-  })
-
-  it('takes a size', () => {
-    const { container } = render(<ThinkingDots size="2rem" />)
-    expect(container.firstElementChild).toHaveStyle({ '--thinking-size': '2rem' })
-  })
-})
 
 describe('DiamondLoader', () => {
   it('is decoration: hidden from screen readers and not focusable, since the words beside it say what is happening', () => {
@@ -101,28 +25,6 @@ describe('DiamondLoader', () => {
   it('is what shows beside the stage while Droplet works', () => {
     const { container } = render(<ChatThread messages={[{ id: 1, from: 'droplet', text: '', pending: true }]} />)
     expect(container.querySelector('.diamond')).not.toBeNull()
-    expect(container.querySelector('.jelly')).toBeNull()
-  })
-})
-
-describe('JellyLoader', () => {
-  it('is decoration: hidden from screen readers', () => {
-    const { container } = render(<JellyLoader />)
-    expect(container.firstElementChild).toHaveAttribute('aria-hidden', 'true')
-  })
-
-  it('points its blob at its own filter, so two on screen do not share one', () => {
-    const { container } = render(
-      <>
-        <JellyLoader />
-        <JellyLoader />
-      </>,
-    )
-    const ids = [...container.querySelectorAll('filter')].map((filter) => filter.id)
-    expect(new Set(ids).size).toBe(2)
-    for (const id of ids) expect(id).not.toContain(':')
-    const used = [...container.querySelectorAll<HTMLElement>('.jelly')].map((jelly) => jelly.style.getPropertyValue('--jelly-filter'))
-    expect(used).toEqual(ids.map((id) => `url(#${id})`))
   })
 })
 

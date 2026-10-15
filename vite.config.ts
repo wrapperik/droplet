@@ -15,6 +15,15 @@ export default defineConfig(({ mode }) => ({
   },
   test: {
     environment: 'jsdom',
+    environmentMatchGlobs: [
+      ['server/**', 'node'],
+      ['src/compose/**', 'node'],
+      ['src/lib/money.test.ts', 'node'],
+      ['src/lib/colour.test.ts', 'node'],
+      ['src/lib/readability.test.ts', 'node'],
+      ['src/lib/boardGeometry.test.ts', 'node'],
+      ['src/lib/facts.test.ts', 'node'],
+    ],
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     // Claude Code worktrees under .claude/ hold other copies of the tests; only this checkout's are run.

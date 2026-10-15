@@ -3,6 +3,7 @@
 // be tested: where the shape is, how big, how round, how much of it is still behind the bar, and how much of the words show.
 
 export type Rect = { left: number; top: number; width: number; height: number }
+export type FlightOrigin = Rect
 
 export const FLIGHT_MS = 680
 
