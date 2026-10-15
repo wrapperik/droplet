@@ -4,7 +4,7 @@
  * rhythm. Nothing is blurred or filtered. Each orb falls off over nine small steps along an eased curve, so a soft gradient (above all on a dark
  * ground) shows no rings.
  *
- * Strong while nothing has been said (`data-start` on .home), a quiet wash once something has, gone when a workspace or the library is open (it is
+ * Centred and strong while nothing has been said (`data-start` on .home); once something has, the stage sinks to the foot of the screen as a horizon glow; gone when a workspace or the library is open (it is
  * hidden then and its motion is paused, so it costs nothing). The colours are tokens (--glow-*), light and dark.
  */
 .chat-glow {
@@ -22,13 +22,32 @@
 }
 
 .home:not(.home--docked) .chat-glow {
-  opacity: 0.4;
+  /* Sunk to the foot of the screen (below), where it is a horizon and the text above it is clear of it, so it can be fuller than the old quiet wash. */
+  opacity: 0.9;
   visibility: visible;
   transition: opacity 0.9s ease;
 }
 
 .home[data-start] .chat-glow {
   opacity: 1;
+}
+
+/* The stage holds the orbs. Its size is measured in the screen's own height (container units), so "the lower quarter" means the same on a short laptop and a tall
+   monitor. Centred while nothing has been said; once something has, it sinks to the foot of the screen and spreads wide, so what shows is a glow rising from the
+   bottom edge and fading out into the screen's colour a little above it, never reaching the text. */
+.chat-glow {
+  container-type: size;
+}
+
+.chat-glow__stage {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 100%;
+  transition: transform 1.8s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.home:not([data-start]) .chat-glow__stage {
+  transform: translateY(54cqh) scaleX(1.35);
 }
 
 .home--docked .chat-glow__orb {
@@ -126,7 +145,8 @@
 
 /* Reduced motion: the glow stays, still. */
 @media (prefers-reduced-motion: reduce) {
-  .chat-glow {
+  .chat-glow,
+  .chat-glow__stage {
     transition: none;
   }
 

@@ -34,9 +34,9 @@ describe('the glow behind an empty chat', () => {
     expect(new Set(seconds).size).toBe(3)
   })
 
-  it('is strong before anything is said, quiet after, and gone and paused with a workspace or the library', () => {
+  it('is strong before anything is said, sunk to the foot after, and gone and paused with a workspace or the library', () => {
     expect(css).toMatch(/\.home\[data-start\] \.chat-glow\s*\{[^}]*opacity:\s*1/)
-    expect(css).toMatch(/\.home:not\(\.home--docked\) \.chat-glow\s*\{[^}]*opacity:\s*0\.4/)
+    expect(css).toMatch(/\.home:not\(\.home--docked\) \.chat-glow\s*\{[^}]*opacity:\s*0\.9/)
     expect(css).toMatch(/\.chat-glow\s*\{[^}]*opacity:\s*0;[^}]*visibility:\s*hidden/)
     expect(css).toMatch(/\.home--docked \.chat-glow__orb\s*\{[^}]*animation-play-state:\s*paused/)
   })
@@ -48,5 +48,24 @@ describe('the glow behind an empty chat', () => {
   it('takes its colours from tokens for both themes, and none from the component', () => {
     expect(css).not.toMatch(/#[0-9a-fA-F]{3,6}\b|rgb\(/)
     for (const name of ['--glow-core', '--glow-halo', '--glow-accent']) expect(tokens.split(name + ':').length - 1).toBe(2)
+  })
+
+  it('sinks to the foot of the screen when the first message is sent, as a wide horizon, measured in the screen\'s own height', () => {
+    expect(css).toMatch(/\.chat-glow\s*\{\s*container-type:\s*size/)
+    expect(css).toMatch(/\.home:not\(\[data-start\]\) \.chat-glow__stage\s*\{[^}]*transform:\s*translateY\(54cqh\) scaleX\(1\.35\)/)
+    // it animates down, slowly and with an ease-out, and by transform only
+    expect(css).toMatch(/\.chat-glow__stage\s*\{[^}]*transition:\s*transform 1\.8s cubic-bezier/)
+    // anchored at the bottom edge, so spreading wide does not move it up
+    expect(css).toMatch(/\.chat-glow__stage\s*\{[^}]*transform-origin:\s*50% 100%/)
+  })
+
+  it('carries the orbs on a stage of its own, so the orbs\' drift and the sinking are separate transforms', () => {
+    const { container } = render(<ChatGlow />)
+    const stage = container.querySelector('.chat-glow > .chat-glow__stage')
+    expect(stage?.querySelectorAll('.chat-glow__orb')).toHaveLength(3)
+  })
+
+  it('does not move the stage with reduced motion: the glow stays, still', () => {
+    expect(css).toMatch(/prefers-reduced-motion: reduce\)\s*\{[\s\S]*\.chat-glow__stage\s*\{\s*transition:\s*none/)
   })
 })
