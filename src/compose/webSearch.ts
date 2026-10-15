@@ -1,19 +1,23 @@
+import { z } from 'zod'
 import { containsPrivateDetail } from '../lib/facts.ts'
+import type { ModelCaller } from './compose.ts'
 import type { Grounding } from './grounding.ts'
+import type { ComposeRequest } from './spec.ts'
 
 // Web search for research: when a founder asks Droplet to research something or to do a competitive analysis, the server searches the web (Tavily) and gives the
 // model what it found to read. It works with any model, since the search is done here and not by the model, and it is how DeepSeek can look things up at all.
 //
 // Rules the code keeps:
 // - A search only happens when the founder's own words ask for research. The model does not decide to search, and nothing in the app searches in the background.
-// - The query is built from the founder's message and, to give a short one a business to be about, what they confirmed it does and where. A message with a private
-//   detail in it (an email, a phone number, an address, a bank detail) is not searched at all, and the reply says so.
+// - The searches are written for the research, not copied from the message: a small model call turns the request, what the business does and where, and the
+//   conversation into two or three specific queries (planQueries). If that fails, the message itself is the query (queryFor). A message with a private detail in
+//   it (an email, a phone number, an address, a bank detail) is not searched at all, and a planned query with one in it is dropped.
 // - What comes back is information, never instructions, and the sources listed under the reply are the ones the search returned, never ones the model named.
 //
 // Kept free of anything from the interface, so the server and the tests can use it.
 
 export type WebResult = { title: string; url: string; snippet: string }
-export type WebResults = { query: string; results: WebResult[] }
+export type WebResults = { queries: string[]; results: WebResult[] }
 // What the model is told about a search: what was found, or that none was done and why.
 export type WebSearched = WebResults | { refused: string }
 
@@ -26,7 +30,7 @@ const RESEARCH = /\b(research|researching|competitors?|competitive|competition|c
 export const wantsResearch = (text: string) => RESEARCH.test(text)
 
 export const MAX_QUERY_CHARS = 200
-const MAX_RESULTS = 5
+const MAX_RESULTS = 4
 const MAX_SNIPPET_CHARS = 500
 
 // The query to search for, or null when there should be no search: no message, or a private detail in it. A short message borrows what the founder confirmed
@@ -81,4 +85,81 @@ export function createTavilySearch(options: { apiKey: string; fetchImpl?: typeof
 }
 
 // What a reply that used a search carries beside its words: the query, and the pages, from the search itself.
-export const groundingOfSearch = (found: WebResults): Grounding => ({ queries: [found.query], sources: found.results.map((result) => ({ title: result.title, url: result.url })), via: 'web' })
+export const groundingOfSearch = (found: WebResults): Grounding => ({ queries: found.queries, sources: found.results.map((result) => ({ title: result.title, url: result.url })), via: 'web' })
+
+// ---- Planning the searches ----
+
+export const MAX_QUERIES_PLANNED = 3
+const MAX_PLANNED_CHARS = 120
+
+const planSchema = z.object({
+  queries: z.array(z.string().trim().min(3).max(MAX_PLANNED_CHARS)).min(1).max(MAX_QUERIES_PLANNED),
+})
+export const planJsonSchema = z.toJSONSchema(planSchema) as Record<string, unknown>
+
+export const PLANNER_SYSTEM = `You write web searches for a small business owner who has asked Droplet to research something. Reply with only a JSON object: { "queries": [...] }.
+- Write two or three different searches that together would find what they need. Do not copy their message: turn it into what a person searching would type, using what the business does, who it is for and where it works.
+- Be specific. For competitors, search for the kind of business and the place ("small web development studios Pretoria", "custom software packages for small businesses South Africa pricing"). For prices, search for what is charged ("freelance web developer rates South Africa 2026"). For trends, name the industry and the place.
+- Default to South Africa when no place is given, and use South African words and rand where it helps.
+- Each search is at most ${MAX_PLANNED_CHARS} characters, plain words, no quotation marks and no operators.
+- Never include a person's name, a client's name, an email address, a phone number, an address or a bank detail. Do not include the business's own name unless they asked you to look up that specific business.
+- Make the searches different from each other (for example one about competitors, one about prices, one about the market), not three versions of the same one.`
+
+// What the planner is given: the request, what the business does, and the last few messages. Only what the searches need, with angle brackets taken out so none of it
+// can close a tag, and no fact that holds a private detail.
+export function buildPlannerContent(request: Pick<ComposeRequest, 'intent' | 'history' | 'project'>): string {
+  const clean = (text: string) => text.replace(/[<>]/g, ' ').replace(/\s+/g, ' ').trim()
+  const facts = request.project?.facts ?? {}
+  const business = (['profile.what', 'profile.who_for', 'profile.where', 'business.offer', 'business.pricing', 'brand.values'] as const)
+    .flatMap((key) => (facts[key] && !containsPrivateDetail(facts[key]!) ? [`${key.split('.')[1]}: ${clean(facts[key]!)}`] : []))
+  const offer = request.project?.offer && !containsPrivateDetail(request.project.offer) ? [`offer: ${clean(request.project.offer)}`] : []
+  const talk = (request.history ?? []).slice(-4).map((message) => `${message.role === 'founder' ? 'Founder' : 'Droplet'}: ${clean(message.text).slice(0, 300)}`)
+  return [
+    `<business>\n${[...business, ...offer].join('\n') || 'nothing is known yet'}\n</business>`,
+    ...(talk.length > 0 ? [`<conversation>\n${talk.join('\n')}\n</conversation>`] : []),
+    `<request>\n${clean(request.intent)}\n</request>`,
+  ].join('\n\n')
+}
+
+// The searches to run, written for the research. Null when the model could not be asked or gave nothing usable, in which case the caller falls back to the
+// founder's own words. A query with a private detail in it is dropped, and the rest are tidied and made different from each other.
+export async function planQueries(call: ModelCaller, request: Pick<ComposeRequest, 'intent' | 'history' | 'project'>): Promise<string[] | null> {
+  let text: string
+  try {
+    const reply = await call({ system: PLANNER_SYSTEM, user: buildPlannerContent(request), schema: planJsonSchema, mode: 'base', search: false })
+    text = typeof reply === 'string' ? reply : reply.text
+  } catch {
+    return null
+  }
+  let data: unknown
+  try {
+    data = JSON.parse(text.trim().replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/i, '$1'))
+  } catch {
+    return null
+  }
+  const parsed = planSchema.safeParse(data)
+  if (!parsed.success) return null
+  const seen = new Set<string>()
+  const queries = parsed.data.queries
+    .map((query) => query.replace(/["“”]/g, '').replace(/\s+/g, ' ').trim())
+    .filter((query) => query !== '' && !containsPrivateDetail(query))
+    .filter((query) => (seen.has(query.toLowerCase()) ? false : (seen.add(query.toLowerCase()), true)))
+  return queries.length > 0 ? queries.slice(0, MAX_QUERIES_PLANNED) : null
+}
+
+// Results from several searches as one list: taken in turn from each search so every query is heard, the same page once, and at most `limit` in all.
+export function mergeResults(lists: WebResult[][], limit = 8): WebResult[] {
+  const merged: WebResult[] = []
+  const seen = new Set<string>()
+  for (let round = 0; merged.length < limit && lists.some((list) => round < list.length); round += 1) {
+    for (const list of lists) {
+      const item = list[round]
+      if (!item || merged.length >= limit) continue
+      const key = item.url.replace(/[#?].*$/, '').replace(/\/$/, '').toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      merged.push(item)
+    }
+  }
+  return merged
+}

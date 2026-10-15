@@ -18,4 +18,9 @@ describe('the sources under a reply', () => {
     expect(link.getAttribute('rel')).toMatch(/noopener/)
     expect(screen.queryByTitle('Google Search suggestions')).not.toBeInTheDocument()
   })
+
+  it('names every search that was made', () => {
+    render(<WebSources grounding={{ queries: ['gift box makers Pretoria', 'gift box prices South Africa'], sources, via: 'web' }} />)
+    expect(screen.getByText('Sources from the web, searched for “gift box makers Pretoria”, “gift box prices South Africa”')).toBeInTheDocument()
+  })
 })

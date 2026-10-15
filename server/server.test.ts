@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ComposeError, type ModelCaller } from '../src/compose/compose.ts'
 import { validOpenReply } from '../src/compose/fixtures.ts'
+import { PLANNER_SYSTEM } from '../src/compose/webSearch.ts'
 import { allowanceOf, BUSY_NOTE, handleAllowance, handleCompose, type ComposeServiceDeps } from './composeService.ts'
 import type { CompositionLogEntry } from './compositionLog.ts'
 import { createAdvancedAllowance, createRateLimiter } from './rateLimit.ts'
@@ -437,11 +438,17 @@ describe('background work: a digest of a workspace', () => {
 describe('research', () => {
   const research = { intent: 'Research the competition for my gift box business' }
   const found = [{ title: 'Gift boxes', url: 'https://example.co.za/boxes', snippet: 'Boxes from R450.' }]
-  const setupWith = (search: ((query: string) => Promise<typeof found>) | null) => {
+  const setupWith = (search: ((query: string) => Promise<typeof found>) | null, planning = 'not a plan') => {
     const prompts: string[] = []
+    const planned: string[] = []
     const stages: unknown[] = []
     const deps = {
-      call: async (request: { user: string }) => {
+      call: async (request: { user: string; system: string }) => {
+        // The searches are written by a small model call first (see planQueries), which the test answers with what it is given to plan from.
+        if (request.system === PLANNER_SYSTEM) {
+          planned.push(request.user)
+          return planning
+        }
         prompts.push(request.user)
         return JSON.stringify({ task: 'chat', message: 'Here is what I found.', actions: [], memoryUsed: [] })
       },
@@ -451,7 +458,7 @@ describe('research', () => {
       log: () => undefined,
       onStage: (stage: unknown) => void stages.push(stage),
     }
-    return { deps, prompts, stages }
+    return { deps, prompts, stages, planned }
   }
 
   it('searches the web when the founder asks for research, gives the model the results, and returns the pages as sources', async () => {
@@ -462,8 +469,10 @@ describe('research', () => {
     })
     const reply = await handleCompose(research, deps as never)
     expect(reply.status).toBe(200)
+    // the planner could not be used (it answered with nothing usable), so the founder's own words are searched
     expect(queries).toEqual(['Research the competition for my gift box business'])
-    expect(prompts[0]).toContain('<web_results query="Research the competition for my gift box business">')
+    expect(prompts[0]).toContain('<web_results searched="Research the competition for my gift box business">')
+    expect(stages).toContainEqual({ stage: 'planning' })
     expect(stages).toContainEqual({ stage: 'searching', query: 'Research the competition for my gift box business' })
     expect(reply.body.grounding).toEqual({ queries: queries, sources: [{ title: 'Gift boxes', url: 'https://example.co.za/boxes' }], via: 'web' })
   })
@@ -517,5 +526,43 @@ describe('research', () => {
     })
     await handleCompose({ intent: 'Do a competitive analysis', project: { projectName: 'K', businessName: '', offer: '', hasPalette: false, hasBusinessDetails: false, clients: 0, invoices: 0, boardItems: 0, facts: { 'profile.what': 'corporate gift boxes', 'profile.where': 'Pretoria' } } }, deps as never)
     expect(queries).toEqual(['Do a competitive analysis corporate gift boxes Pretoria'])
+  })
+
+  it('searches what the model planned, not the message, and runs each search and merges what comes back', async () => {
+    const queries: string[] = []
+    const { deps, prompts, stages, planned } = setupWith(
+      async (query) => {
+        queries.push(query)
+        return [{ title: `Page for ${query}`, url: `https://example.co.za/${encodeURIComponent(query)}`, snippet: 'Extract.' }]
+      },
+      JSON.stringify({ queries: ['small gift box makers Pretoria', 'corporate gift box prices South Africa'] }),
+    )
+    const reply = await handleCompose({ intent: 'Look up new trendy ideas for my business', project: { projectName: 'D', businessName: 'DuckStack', offer: '', hasPalette: false, hasBusinessDetails: false, clients: 0, invoices: 0, boardItems: 0, facts: { 'profile.what': 'corporate gift boxes' } } }, deps as never)
+    expect(planned[0]).toContain('what: corporate gift boxes')
+    expect(queries.sort()).toEqual(['corporate gift box prices South Africa', 'small gift box makers Pretoria'])
+    expect(prompts[0]).toContain('<web_results searched="small gift box makers Pretoria | corporate gift box prices South Africa">')
+    expect(prompts[0]).toContain('Page for small gift box makers Pretoria')
+    expect(stages).toEqual(expect.arrayContaining([{ stage: 'planning' }, { stage: 'searching', query: 'small gift box makers Pretoria' }]))
+    expect((reply.body.grounding as { queries: string[]; sources: unknown[] }).queries).toEqual(['small gift box makers Pretoria', 'corporate gift box prices South Africa'])
+    expect((reply.body.grounding as { sources: unknown[] }).sources).toHaveLength(2)
+  })
+
+  it('carries on with the searches that worked when one fails, and says so only when all fail', async () => {
+    const some = setupWith(
+      async (query) => {
+        if (query.includes('prices')) throw new Error('down')
+        return found
+      },
+      JSON.stringify({ queries: ['gift box makers Pretoria', 'gift box prices South Africa'] }),
+    )
+    const reply = await handleCompose(research, some.deps as never)
+    expect(some.prompts[0]).toContain('<web_results searched="gift box makers Pretoria | gift box prices South Africa">')
+    expect(reply.body.note).toBeUndefined()
+  })
+
+  it('does not ask the model to plan a search for a message with a private detail in it', async () => {
+    const { deps, planned } = setupWith(async () => found)
+    await handleCompose({ intent: 'Research competitors, my email is megan@kindred.example' }, deps as never)
+    expect(planned).toEqual([])
   })
 })

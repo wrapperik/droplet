@@ -2,7 +2,7 @@ import { ComposeError, composeWorkspace, type ModelCaller } from '../src/compose
 import { backgroundRequestSchema, isBackgroundRequest } from '../src/compose/background.ts'
 import { runDigest, runSummarise } from '../src/compose/runBackground.ts'
 import type { ComposeStage } from '../src/compose/progress.ts'
-import { groundingOfSearch, queryFor, wantsResearch, type WebSearched, type WebSearcher } from '../src/compose/webSearch.ts'
+import { groundingOfSearch, mergeResults, planQueries, queryFor, wantsResearch, type WebResult, type WebSearched, type WebSearcher } from '../src/compose/webSearch.ts'
 import { composeRequestSchema, modeOf, type Allowance } from '../src/compose/spec.ts'
 import type { CompositionLogEntry } from './compositionLog.ts'
 import { DAY_MS, type AdvancedAllowance, type AdvancedUse, type RateLimiter } from './rateLimit.ts'
@@ -170,20 +170,28 @@ export async function handleCompose(body: unknown, deps: ComposeServiceDeps): Pr
       console.warn('compose: research was asked for but TAVILY_API_KEY is not set, so nothing was searched')
     } else if (deps.search && wantsResearch(request.intent)) {
       const facts = request.project?.facts
-      const asked = queryFor(request.intent, { what: facts?.['profile.what'], where: facts?.['profile.where'] })
-      if ('refused' in asked) {
-        web = { refused: asked.refused }
-        searchNote = asked.refused
+      // The message itself is checked first: with a private detail in it nothing is searched, however the searches would have been worded.
+      const fallback = queryFor(request.intent, { what: facts?.['profile.what'], where: facts?.['profile.where'] })
+      if ('refused' in fallback) {
+        web = { refused: fallback.refused }
+        searchNote = fallback.refused
       } else {
-        deps.onStage?.({ stage: 'searching', query: asked.query.slice(0, 200) })
-        try {
-          const results = await deps.search(asked.query)
-          web = { query: asked.query, results }
-          if (results.length === 0) searchNote = 'The web search found nothing for that.'
-        } catch {
-          // A search that fails is not a failed request: the model answers without, and says so.
+        // The searches are written for the research from the request and what the business does, not copied from the message. If that cannot be done, the
+        // founder's own words are searched.
+        deps.onStage?.({ stage: 'planning' })
+        const planned = await planQueries(deps.call, request)
+        const queries = planned ?? [fallback.query]
+        deps.onStage?.({ stage: 'searching', query: queries[0].slice(0, 200) })
+        const settled = await Promise.allSettled(queries.map((query) => deps.search!(query)))
+        const lists = settled.flatMap((outcome): WebResult[][] => (outcome.status === 'fulfilled' ? [outcome.value] : []))
+        if (lists.length === 0) {
+          // Every search failed, which is not a failed request: the model answers without and says so.
           web = { refused: 'the search service could not be reached' }
           searchNote = 'The web search could not be reached, so this answer is from what I know and may be out of date.'
+        } else {
+          const results = mergeResults(lists)
+          web = { queries, results }
+          if (results.length === 0) searchNote = 'The web search found nothing for that.'
         }
       }
     }
