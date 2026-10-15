@@ -9,6 +9,11 @@
   box-shadow: var(--shadow-lg);
 }
 
+.task-menu--right {
+  right: 0;
+  left: auto;
+}
+
 .task-menu__item {
   display: flex;
   align-items: center;

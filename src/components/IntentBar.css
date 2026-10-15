@@ -239,3 +239,78 @@
 .intent__hint-send:disabled {
   opacity: 0.5;
 }
+
+/* Files waiting to go with the next message: small chips above the bar, each with its name, size and a way to take it away. */
+.intent__files {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  max-width: 100%;
+}
+
+.intent__file {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  max-width: 100%;
+  padding: 0.25rem 0.25rem 0.25rem 0.625rem;
+  border-radius: var(--radius-pill);
+  background: var(--overlay-10);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.intent__file svg {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.intent__file-name {
+  min-width: 0;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.intent__file-size {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.intent__file-remove {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.intent__file-remove:hover,
+.intent__file-remove:focus-visible {
+  background: var(--overlay-06);
+  color: var(--text);
+}
+
+.intent__file-status {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+.intent__file-notice {
+  flex-basis: 100%;
+  margin: 0;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}

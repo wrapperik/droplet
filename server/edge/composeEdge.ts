@@ -21,8 +21,9 @@ import { bearerToken, corsHeaders, jsonReply, userOfToken, type Fetch } from './
 // The Gemini key is a secret of the function and is read here and nowhere else.
 
 const HOUR_MS = 60 * 60 * 1000
-// A board is sent with the request, up to 120 things with their words, so this is room for one.
-export const MAX_BODY_BYTES = 90_000
+// A board is sent with the request, and so can up to three attached files (8 MB, a third larger as base64): room for both. Everything else in a request is
+// bounded by its own schema, so a large body is only ever files.
+export const MAX_BODY_BYTES = 12_000_000
 
 export type ComposeHandlerDeps = {
   // Null when no API key is set.

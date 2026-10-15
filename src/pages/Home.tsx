@@ -42,6 +42,7 @@ import type { InvoiceTurnAction } from '../compose/invoiceSpec.ts'
 import { founderTextOf } from '../compose/rules.ts'
 import { paletteSnapshotOf, snapshotOfState } from '../compose/snapshot.ts'
 import { MAX_HISTORY_MESSAGES, isBoardAction, isInvoiceAction, isScreenAction, routedTo, type ComposeRequest, type Mode, type PaletteAction, type View } from '../compose/spec.ts'
+import { KIND_WORDS, noteOf, type Attachment } from '../compose/attachments.ts'
 import { usedOf, workingFrom, type Used } from '../compose/used.ts'
 import { actingDelay, pause } from '../lib/acting.ts'
 import { requestComposition, requestSummary } from '../lib/composeClient.ts'
@@ -425,7 +426,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   // One question to the composer and what comes of it. If the composer says the request belongs to the other workspace, that one
   // is opened and the question is asked again, once, with it in front of the composer.
   const converse = useCallback(
-    async (text: string, history: { role: 'founder' | 'droplet'; text: string }[], pendingId: number, routed: boolean, mode: Mode = 'base') => {
+    async (text: string, history: { role: 'founder' | 'droplet'; text: string }[], pendingId: number, routed: boolean, mode: Mode = 'base', attachments?: Attachment[]) => {
       const view = onScreen()
       // The first thing it does is read what the project holds.
       setStage({ stage: 'gathering' })
@@ -449,6 +450,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
       if (stoppedRef.current) controller.abort()
       const request: ComposeRequest = {
         intent: text,
+        ...(attachments && attachments.length > 0 ? { attachments } : {}),
         // Advanced is the founder's choice for this message. Quick is sent as no mode at all.
         ...(mode === 'advanced' ? { mode } : {}),
         ...(history.length > 0 ? { history } : {}),
@@ -525,7 +527,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
           await openWorkspaceFor(target)
           const next = message('droplet', '', true)
           setThread((current) => [...current, next])
-          return converse(text, history, next.id, true, mode)
+          return converse(text, history, next.id, true, mode, attachments)
         }
         await openWorkspaceFor(target)
         // Stopped while the workspace opened: the question is not asked again.
@@ -533,7 +535,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
           setThread((current) => current.map((item) => (item.id === pendingId ? { ...item, text: 'Stopped. Nothing was changed.', pending: false, local: true, at: new Date().toISOString() } : item)))
           return
         }
-        return converse(text, history, pendingId, true, mode)
+        return converse(text, history, pendingId, true, mode, attachments)
       }
 
       // What the app adds to the model's own words, each as a paragraph of its own.
@@ -733,7 +735,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   )
 
   const submitIntent = useCallback(
-    async (text: string, mode: Mode = 'base', from?: FlightOrigin) => {
+    async (text: string, mode: Mode = 'base', from?: FlightOrigin, attachments?: Attachment[]) => {
       if (busyRef.current) return
       busyRef.current = true
       // What Show me marked is for the reply it belonged to: a new message clears it.
@@ -746,7 +748,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         .map((item) => ({
           role: item.from === 'you' ? ('founder' as const) : ('droplet' as const),
           // What Droplet showed in a table or a plan goes with its words, so it can build on it. The question stays last, whatever is cut.
-          text: paragraphs(item.text.slice(0, 700), describeBlocks(item.blocks, item.checks, doneSet).slice(0, 500), item.question).slice(0, 1500),
+          text: paragraphs(item.text.slice(0, 700), item.attachments && item.attachments.length > 0 ? `[Attached ${item.attachments.map((file) => `${KIND_WORDS[file.kind]} “${file.name}”`).join(', ')}. The files are not available any more: go by what was said about them.]` : undefined, describeBlocks(item.blocks, item.checks, doneSet).slice(0, 500), item.question).slice(0, 1500),
         }))
       // A move to another workspace is marked once, here, when something is said in it.
       const space = spaceRef.current
@@ -756,7 +758,8 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
       setStage({ stage: 'gathering' })
       setStageContext({})
       setElapsed(0)
-      const you = message('you', text)
+      // The files go with this message and with nothing after it. The thread keeps only their names and kinds, never what was in them.
+      const you: ThreadMessage = { ...message('you', text), ...(attachments && attachments.length > 0 ? { attachments: attachments.map(noteOf) } : {}) }
       // The message rises from the bottom into its place in the thread, whether it was typed or tapped (ChatThread, `data-rising`); with reduced
       // motion the CSS only fades it in.
       setFlight(from ? { id: you.id, from } : { id: you.id })
@@ -767,7 +770,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         // on screen, and does not have to answer first with a request to open it.
         const phrase = workspaceForPhrase(text)
         if (phrase) await openWorkspaceFor(phrase)
-        await converse(text, history, pending.id, false, mode)
+        await converse(text, history, pending.id, false, mode, attachments)
         // If the composer took the founder to another workspace, that is where they are now, and no divider is owed for it.
         sentInRef.current = spaceRef.current
       } finally {

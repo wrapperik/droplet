@@ -27,6 +27,8 @@ const messageSchema = z.object({
   grounding: groundingSchema.optional(),
   // What the reply changed on screen and what it left out, kept so the card shows again. The ability to undo it is not kept.
   receipt: receiptSchema.optional(),
+  // Files the founder attached to this message: names and kinds only, never what was in them.
+  attachments: z.array(z.object({ name: z.string().max(120), kind: z.enum(['image', 'pdf', 'text']) })).max(3).optional(),
   // What Droplet was given to make the reply, in the app's words, built from the request that was sent. Shown as a quiet line under the reply.
   used: usedSchema.optional(),
   // A note from the app, not an answer from the model, so it is never sent to the model as part of the conversation.
@@ -57,7 +59,7 @@ export type StoredMessage = z.infer<typeof messageSchema>
 export type StoredChat = z.infer<typeof chatSchema>
 
 // What of a thread is worth keeping: the words, not the replies still being worked on, nor the buttons.
-export function storableMessages(thread: { id: number; from: StoredMessage['from']; text: string; question?: string; blocks?: ChatBlock[]; checks?: Record<string, boolean>; grounding?: Grounding; receipt?: Receipt; result?: InvoiceResult; used?: Used; pending?: boolean; local?: boolean; at?: string }[]): StoredMessage[] {
+export function storableMessages(thread: { id: number; from: StoredMessage['from']; text: string; question?: string; blocks?: ChatBlock[]; checks?: Record<string, boolean>; grounding?: Grounding; receipt?: Receipt; result?: InvoiceResult; used?: Used; attachments?: { name: string; kind: 'image' | 'pdf' | 'text' }[]; pending?: boolean; local?: boolean; at?: string }[]): StoredMessage[] {
   return thread
     .filter((item) => !item.pending && item.text.trim() !== '')
     .map((item) => ({
@@ -70,6 +72,7 @@ export function storableMessages(thread: { id: number; from: StoredMessage['from
       ...(item.grounding ? { grounding: item.grounding } : {}),
       ...(item.receipt ? { receipt: item.receipt } : {}),
       ...(item.used ? { used: item.used } : {}),
+      ...(item.attachments && item.attachments.length > 0 ? { attachments: item.attachments } : {}),
       ...(item.result ? { result: item.result } : {}),
       ...(item.local ? { local: true } : {}),
       ...(item.at ? { at: item.at } : {}),

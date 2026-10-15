@@ -1,0 +1,66 @@
+.attach-menu {
+  position: absolute;
+  bottom: calc(100% + 0.75rem);
+  left: 0;
+  z-index: 10;
+  width: min(19rem, 100%);
+  padding: 0.5rem;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+}
+
+.attach-menu__items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.attach-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  text-align: left;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.attach-menu__item svg {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.attach-menu__item:hover,
+.attach-menu__item:focus-visible {
+  background: var(--accent-tint-soft);
+}
+
+.attach-menu__item:focus-visible {
+  outline-offset: -2px;
+}
+
+.attach-menu__text {
+  display: flex;
+  flex-direction: column;
+}
+
+.attach-menu__label {
+  font-weight: 600;
+}
+
+.attach-menu__hint {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+.attach-menu__note {
+  margin: 0.375rem 0.5rem 0.25rem;
+  padding-top: 0.625rem;
+  border-top: 1px solid var(--overlay-10);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}

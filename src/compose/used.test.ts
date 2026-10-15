@@ -128,3 +128,21 @@ describe('what it is working from, in words', () => {
     expect(workingFrom(usedOf({ intent: 'hi', notes: { digests: [{ workspace: 'board', text: 'd' }], found: [] } }))).toBe('my notes on the board')
   })
 })
+
+describe('files attached to a message', () => {
+  const file = { kind: 'text' as const, name: 'notes.md', text: 'Kindred Gifting' }
+
+  it('are listed by name, as sent whole, with the plain warning that what is inside was read', () => {
+    const used = usedOf({ intent: 'read this', attachments: [file] })
+    expect(used.items[0].label).toBe('A file you attached')
+    expect(used.items[0].detail).toContain('notes.md')
+    expect(used.items[0].detail).toMatch(/sent whole.*private details included.*Not kept/)
+    expect(JSON.stringify(used)).not.toContain('Kindred Gifting')
+  })
+
+  it('are counted when there are several, and named in what it is working from', () => {
+    const two = usedOf({ intent: 'read these', attachments: [file, { ...file, name: 'more.md' }] })
+    expect(two.items[0].label).toBe('2 files you attached')
+    expect(workingFrom(two)).toBe('the files you attached')
+  })
+})

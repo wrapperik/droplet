@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { WORK_MODE_STORAGE_KEY } from '../lib/workMode.ts'
@@ -137,5 +137,117 @@ describe('the bar reading the room', () => {
   it('draws nothing above the bar when there is nothing to say', () => {
     render(<IntentBar hints={{ chips: [], selection: null }} />)
     expect(screen.queryByRole('group', { name: 'Suggestions' })).not.toBeInTheDocument()
+  })
+})
+
+describe('attaching files, and the workspaces menu beside the bar', () => {
+  const pickFile = async (user: ReturnType<typeof userEvent.setup>, file: File) => user.upload(screen.getByLabelText('Choose files to attach', { selector: 'input' }), file)
+  const textFile = () => new File(['# Ideas\n- Kindred Gifting'], 'notes.md', { type: 'text/markdown' })
+
+  it('opens a menu of kinds of file from the plus, and says the whole file is sent', async () => {
+    const user = userEvent.setup()
+    render(<IntentBar />)
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Attach a file' }))
+    const menu = screen.getByRole('menu', { name: 'Attach a file' })
+    expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Photo or screenshotPNG, JPG, WebP or GIF', 'PDFUp to 4 MB', 'Text filetxt, md, csv or json'])
+    expect(menu).toHaveTextContent('The whole file is sent to Droplet’s AI to read, for that message only')
+  })
+
+  it('opens the picker for the kind that was chosen, and only that kind', async () => {
+    const user = userEvent.setup()
+    render(<IntentBar />)
+    const picker = screen.getByLabelText('Choose files to attach', { selector: 'input' }) as HTMLInputElement
+    const click = vi.spyOn(picker, 'click').mockImplementation(() => undefined)
+    await user.click(screen.getByRole('button', { name: 'Attach a file' }))
+    await user.click(screen.getByRole('menuitem', { name: /^PDF/ }))
+    expect(picker.accept).toBe('.pdf,application/pdf')
+    expect(click).toHaveBeenCalledTimes(1)
+    await user.click(screen.getByRole('button', { name: 'Attach a file' }))
+    await user.click(screen.getByRole('menuitem', { name: /^Photo or screenshot/ }))
+    expect(picker.accept).toContain('image/png')
+    await user.click(screen.getByRole('button', { name: 'Attach a file' }))
+    await user.click(screen.getByRole('menuitem', { name: /^Text file/ }))
+    expect(picker.accept).toContain('.md')
+  })
+
+  it('shows a file as a chip with its name and size, and takes it away on its cross', async () => {
+    const user = userEvent.setup()
+    render(<IntentBar />)
+    await pickFile(user, textFile())
+    const chips = await screen.findByRole('group', { name: 'Files for your next message' })
+    expect(chips).toHaveTextContent('notes.md')
+    expect(chips).toHaveTextContent(/\d+ B/)
+    await user.click(screen.getByRole('button', { name: 'Remove notes.md' }))
+    expect(screen.queryByRole('group', { name: 'Files for your next message' })).not.toBeInTheDocument()
+  })
+
+  it('says why a file could not be read and still takes the others', async () => {
+    const user = userEvent.setup()
+    render(<IntentBar />)
+    await user.upload(screen.getByLabelText('Choose files to attach', { selector: 'input' }), [new File(['x'], 'song.mp3', { type: 'audio/mpeg' }), textFile()])
+    expect(await screen.findByRole('alert')).toHaveTextContent(/song\.mp3 is not a kind Droplet can read/)
+    expect(screen.getByRole('group', { name: 'Files for your next message' })).toHaveTextContent('notes.md')
+  })
+
+  it('refuses a fourth file, and says so', async () => {
+    const user = userEvent.setup()
+    render(<IntentBar />)
+    for (const name of ['a.txt', 'b.txt', 'c.txt', 'd.txt']) await pickFile(user, new File([`words in ${name}`], name, { type: 'text/plain' }))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/up to 3 files/))
+    expect(screen.queryByText('d.txt')).not.toBeInTheDocument()
+  })
+
+  it('sends the files with the message, and then forgets them', async () => {
+    const user = userEvent.setup()
+    const onSubmitIntent = vi.fn()
+    render(<IntentBar onSubmitIntent={onSubmitIntent} />)
+    await pickFile(user, textFile())
+    await screen.findByText('notes.md')
+    await write(user, 'What is in this?')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    expect(onSubmitIntent).toHaveBeenCalledTimes(1)
+    const [said, mode, , attachments] = onSubmitIntent.mock.calls[0]
+    expect(said).toBe('What is in this?')
+    expect(mode).toBe('base')
+    expect(attachments).toEqual([{ kind: 'text', name: 'notes.md', text: '# Ideas\n- Kindred Gifting' }])
+    expect(screen.queryByRole('group', { name: 'Files for your next message' })).not.toBeInTheDocument()
+    await write(user, 'And without')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    expect(onSubmitIntent).toHaveBeenLastCalledWith('And without', 'base')
+  })
+
+  it('can send only a file, which asks Droplet to read it', async () => {
+    const user = userEvent.setup()
+    const onSubmitIntent = vi.fn()
+    render(<IntentBar onSubmitIntent={onSubmitIntent} />)
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
+    await pickFile(user, textFile())
+    await screen.findByText('notes.md')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    expect(onSubmitIntent.mock.calls[0][0]).toBe('Please read the file I attached.')
+  })
+
+  it('opens the workspaces from a button of their own beside the bar, on the right, and one menu at a time', async () => {
+    const user = userEvent.setup()
+    const onChooseTask = vi.fn()
+    render(<IntentBar onChooseTask={onChooseTask} showTip={false} />)
+    await user.click(screen.getByRole('button', { name: 'Choose a task' }))
+    const menu = screen.getByRole('menu', { name: 'Workspaces' })
+    expect(menu).toHaveClass('task-menu--right')
+    expect(within(menu).getAllByRole('menuitem')).toHaveLength(5)
+    await user.click(screen.getByRole('button', { name: 'Attach a file' }))
+    await waitFor(() => expect(screen.queryByRole('menu', { name: 'Workspaces' })).not.toBeInTheDocument())
+    expect(screen.getByRole('menu', { name: 'Attach a file' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Choose a task' }))
+    await user.click(await screen.findByRole('menuitem', { name: /Make an invoice/ }))
+    expect(onChooseTask).toHaveBeenCalledWith('invoice')
+  })
+
+  it('opens the same menu from the tip, from the left', async () => {
+    const user = userEvent.setup()
+    render(<IntentBar />)
+    await user.click(screen.getByRole('button', { name: /Show me a menu of available workspaces/ }))
+    expect(screen.getByRole('menu', { name: 'Workspaces' })).not.toHaveClass('task-menu--right')
   })
 })

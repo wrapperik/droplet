@@ -2580,3 +2580,45 @@ describe('what Droplet says it is doing', () => {
     expect(screen.getByRole('button', { name: /^Used: the palette on screen/ })).toBeInTheDocument()
   })
 })
+
+describe('attaching files in the chat', () => {
+  const picker = () => screen.getByLabelText('Choose files to attach', { selector: 'input' })
+
+  it('sends the file with the message and only that message, shows its name in the thread, keeps no contents, and lists it as used', async () => {
+    const user = userEvent.setup()
+    answers = [reply('chat', 'A list of two names.'), reply('chat', 'Fine.')]
+    renderHome()
+    await user.upload(picker(), new File(['# Names\n- Kindred Gifting\n- Maker Box'], 'names.md', { type: 'text/markdown' }))
+    await screen.findByText('names.md')
+    await say(user, 'Which of these is best?')
+    await screen.findByText('A list of two names.')
+    const sent = asked[0] as unknown as { attachments?: { kind: string; name: string; text?: string }[] }
+    expect(sent.attachments).toEqual([{ kind: 'text', name: 'names.md', text: '# Names\n- Kindred Gifting\n- Maker Box' }])
+    // the thread shows the name
+    expect(within(screen.getByRole('log', { name: 'Conversation' })).getByRole('list', { name: 'Attached files' })).toHaveTextContent('names.md')
+    // the reply's line lists the file, as sent whole
+    await user.click(screen.getAllByRole('button', { name: /^Used:/ }).at(-1)!)
+    expect(screen.getByText(/names\.md: sent whole for Droplet to read/)).toBeInTheDocument()
+    // the next message carries no file, and the conversation says only that one was attached, never its words
+    await say(user, 'Thanks')
+    await screen.findByText('Fine.')
+    expect(asked[1]).not.toHaveProperty('attachments')
+    expect(JSON.stringify(asked[1])).toMatch(/Attached text file “names\.md”/)
+    expect(JSON.stringify(asked[1])).not.toContain('Maker Box')
+    // the saved chat keeps the name and kind, not the contents
+    const saved = JSON.stringify(await loadChatsFor())
+    expect(saved).toContain('names.md')
+    expect(saved).not.toContain('Maker Box')
+  })
+
+  it('says a file could not be read, and still sends a message without it', async () => {
+    const user = userEvent.setup()
+    answers = [reply('chat', 'Hello.')]
+    renderHome()
+    await user.upload(picker(), new File(['x'], 'song.mp3', { type: 'audio/mpeg' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/not a kind Droplet can read/)
+    await say(user, 'Hi')
+    await screen.findByText('Hello.')
+    expect(asked[0]).not.toHaveProperty('attachments')
+  })
+})

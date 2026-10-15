@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { attachmentsField } from './attachments.ts'
 import { boardSnapshotSchema, boardTurnSchema, type BoardTurn } from './boardSpec.ts'
 import { blocksField, messageField, opensField, proposeField, questionField, repliesField, titleField } from './conversationFields.ts'
 import { invoiceSnapshotSchema, invoiceTurnSchema, type InvoiceTurn } from './invoiceSpec.ts'
@@ -190,6 +191,8 @@ export type Mode = (typeof MODES)[number]
 export const modeOf = (request: { mode?: Mode }): Mode => request.mode ?? 'base'
 
 export const composeRequestSchema = z.object({
+  // Files the founder attached to this message (a picture, a PDF, a text file), for the model to read. For this message only: never stored.
+  attachments: attachmentsField.optional(),
   // Absent means base.
   mode: z.enum(MODES).optional(),
   intent: z.string().trim().min(1).max(600),

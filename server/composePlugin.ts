@@ -10,8 +10,9 @@ import { createAdvancedAllowance, createRateLimiter } from './rateLimit.ts'
 // runs on. The key is read here, on the server, from .env.local (a name without the VITE_ prefix, so it can never be bundled into the browser code).
 // In production the same service runs as a Supabase Edge Function.
 
-// A board is sent with the request, up to 120 things with their words, so this is room for one.
-const MAX_BODY_BYTES = 90_000
+// A board is sent with the request, and so can up to three attached files (8 MB, a third larger as base64): room for both. Everything else in a request is bounded
+// by its own schema, so a large body is only ever files.
+const MAX_BODY_BYTES = 12_000_000
 const HOUR_MS = 60 * 60 * 1000
 
 function readBody(req: IncomingMessage): Promise<unknown> {

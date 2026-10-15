@@ -37,6 +37,8 @@ export function usedOf(request: ComposeRequest, options: { searched?: string[] }
   const items: UsedItem[] = []
   const add = (label: string, detail: string) => items.push({ label, detail })
 
+  const files = request.attachments ?? []
+  if (files.length > 0) add(files.length === 1 ? 'A file you attached' : `${files.length} files you attached`, `${files.map((file) => file.name).join(', ')}: sent whole for Droplet to read, so anything inside ${files.length === 1 ? 'it' : 'them'}, private details included, was read. Not kept.`)
   if (request.history && request.history.length > 0) add('This chat', `The ${plural(request.history.length, 'message')} before this one, so a follow-up makes sense.`)
 
   if (request.view === 'brand' && request.workspace) add('The palette on screen', `${plural(request.workspace.blocks.length, 'colour')} with their roles, which one is selected, and the contrast figures worked out by the app.`)
@@ -94,6 +96,7 @@ export function usedOf(request: ComposeRequest, options: { searched?: string[] }
 // three things are named (the line is shown in the thread while Droplet works, so it stays short).
 const WORKING_FROM: Record<string, string> = {
   'This chat': 'this chat',
+  'A file you attached': 'the file you attached',
   'The palette on screen': 'the palette on screen',
   'The invoice on screen': 'the invoice on screen',
   'The board on screen': 'the board on screen',
@@ -109,7 +112,7 @@ export function workingFrom(used: Used): string {
   const phrases: string[] = []
   for (const item of used.items) {
     const known = WORKING_FROM[item.label]
-    const phrase = known ?? (/earlier chat/i.test(item.label) ? item.label.toLowerCase() : /^Notes on /.test(item.label) ? `my notes on ${item.label.slice('Notes on '.length)}` : null)
+    const phrase = known ?? (/files you attached/.test(item.label) ? 'the files you attached' : /earlier chat/i.test(item.label) ? item.label.toLowerCase() : /^Notes on /.test(item.label) ? `my notes on ${item.label.slice('Notes on '.length)}` : null)
     if (phrase && !phrases.includes(phrase)) phrases.push(phrase)
   }
   if (phrases.length === 0) return ''

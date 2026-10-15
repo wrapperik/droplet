@@ -136,3 +136,7 @@ addresses, so without this a founder is sent back to the wrong place.
 Nothing needs deploying to work on the app: in development the app asks the dev server's own `/api/compose`, which reads `GEMINI_API_KEY` from
 `.env`. To try the deployed function from the dev server, put its address in `.env` as `VITE_COMPOSE_URL` (see `.env.example`) and restart
 `npm run dev`; you must be signed in.
+
+## Files attached to a message
+
+A founder can attach up to three files (pictures, PDFs, text files) to a message, which the `compose` function sends to Gemini. The request body limit of the function is now 12 MB, so redeploy it (`npm run deploy:compose`) before using attachments on the live site. No migration is needed, and the files are never stored. If the deployed function refuses a large PDF, lower `MAX_PDF_BYTES` and `MAX_TOTAL_BYTES` in `src/compose/attachments.ts`.

@@ -414,3 +414,23 @@ describe('trying again and editing', () => {
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
   })
 })
+
+describe('files attached to a message', () => {
+  const thread: ThreadMessage[] = [
+    { id: 1, from: 'you', text: 'What is in these?', attachments: [{ name: 'notes.md', kind: 'text' }, { name: 'logo.png', kind: 'image' }], at: '2026-10-15T09:00:00.000Z' },
+    { id: 2, from: 'droplet', text: 'A list of names, and a logo.', at: '2026-10-15T09:00:05.000Z' },
+  ]
+
+  it('shows their names under the message', () => {
+    render(<ChatThread messages={thread} />)
+    const files = screen.getByRole('list', { name: 'Attached files' })
+    expect(files).toHaveTextContent('notes.md')
+    expect(files).toHaveTextContent('logo.png')
+  })
+
+  it('cannot be tried again or edited, since the files are not kept', () => {
+    render(<ChatThread messages={thread} onRetry={vi.fn()} onEdit={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit your message' })).not.toBeInTheDocument()
+  })
+})

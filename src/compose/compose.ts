@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { fallbackTurn, FALLBACK_NOTE } from './fallback.ts'
+import { inlineFilesOf, type InlineFile } from './attachments.ts'
 import type { Grounding } from './grounding.ts'
 import { buildUserContent, systemPromptFor } from './prompt.ts'
 import type { ComposeStage } from './progress.ts'
@@ -14,7 +15,8 @@ import { TASKS, isBoardAction, isInvoiceAction, modeOf, turnJsonSchema, turnSche
 // `mode` says which model to ask: Quick (base) or Advanced. `search` lets an Advanced request use Google Search, if its model can. The model decides
 // whether to. `userWithoutSearch` is the same request telling the model it cannot search, for a model that cannot (Quick, which Advanced falls back to,
 // or one the API will not let search), so it never thinks it looked something up.
-export type ModelRequest = { system: string; user: string; schema: Record<string, unknown>; mode?: Mode; search?: boolean; userWithoutSearch?: string }
+// `files` are pictures and PDFs the founder attached, which the API takes beside the text (a text file is part of `user`).
+export type ModelRequest = { system: string; user: string; schema: Record<string, unknown>; mode?: Mode; search?: boolean; userWithoutSearch?: string; files?: InlineFile[] }
 
 // How many tokens a reply used, as the API counts them. Logged, never shown to founders.
 export type Usage = { prompt: number; answer: number; thinking: number }
@@ -144,6 +146,7 @@ export async function composeWorkspace(request: ComposeRequest, call: ModelCalle
       user: buildUserContent(request, sent, search),
       schema,
       mode,
+      ...(inlineFilesOf(request.attachments).length > 0 ? { files: inlineFilesOf(request.attachments) } : {}),
       ...(search ? { search, userWithoutSearch: buildUserContent(request, sent, false) } : {}),
     })
     const reply: ModelReply = typeof raw === 'string' ? { text: raw } : raw

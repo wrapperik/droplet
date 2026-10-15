@@ -1,4 +1,5 @@
 import { ComposeError, type ModelCaller, type ModelReply, type Usage } from './compose.ts'
+import type { InlineFile } from './attachments.ts'
 import { groundingFromMetadata } from './grounding.ts'
 
 // Calls the Gemini API over REST. The key is passed in and sent only in a header; it is never put in a URL, a
@@ -86,7 +87,9 @@ function createModelCaller(options: GeminiOptions, model: string, thinkingLevel:
   // The schema of the request in hand, so it can be written into the prompt if the API will not take it as a field.
   let schemaFallback: Record<string, unknown> = {}
 
-  const send = async (system: string, user: string, schema: Record<string, unknown> | null, search: boolean): Promise<Response> => {
+  // `files` are the pictures and PDFs the founder attached to this request, sent beside the text. They are passed in, never kept in the caller, since the
+  // caller serves many requests and one founder's files must never ride on another's.
+  const send = async (system: string, user: string, schema: Record<string, unknown> | null, search: boolean, files: InlineFile[]): Promise<Response> => {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
     try {
@@ -95,7 +98,7 @@ function createModelCaller(options: GeminiOptions, model: string, thinkingLevel:
         headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: schema ? system : `${system}\n\nReply with only JSON that matches this JSON schema:\n${JSON.stringify(schemaFallback)}` }] },
-          contents: [{ role: 'user', parts: [{ text: user }] }],
+          contents: [{ role: 'user', parts: [{ text: user }, ...files.map((file) => ({ inlineData: { mimeType: file.mime, data: file.data } }))] }],
           // Google Search is the only tool, and only when this request may search. The model decides whether to use it.
           ...(search ? { tools: [{ googleSearch: {} }] } : {}),
           generationConfig: {
@@ -114,7 +117,7 @@ function createModelCaller(options: GeminiOptions, model: string, thinkingLevel:
     }
   }
 
-  return async ({ system, user, schema, search = false, userWithoutSearch }) => {
+  return async ({ system, user, schema, search = false, userWithoutSearch, files = [] }) => {
     schemaFallback = schema
     // Whether search was asked for and the API refused it, for the log.
     let searchRefused = search && !canSearch(model)
@@ -122,11 +125,11 @@ function createModelCaller(options: GeminiOptions, model: string, thinkingLevel:
     if (search && canSearch(model) && !searching()) searchRefused = true
     // Asked without search, the model is told it cannot search, so it never claims to have looked something up.
     const plainUser = userWithoutSearch ?? user
-    let response = await send(system, searching() ? user : plainUser, schemaAccepted ? schema : null, searching())
+    let response = await send(system, searching() ? user : plainUser, schemaAccepted ? schema : null, searching(), files)
 
     if (response.status === 503) {
       await new Promise((resolve) => setTimeout(resolve, overloadRetryMs))
-      response = await send(system, searching() ? user : plainUser, schemaAccepted ? schema : null, searching())
+      response = await send(system, searching() ? user : plainUser, schemaAccepted ? schema : null, searching(), files)
     }
 
     // A 400 with search on may be search, which a model or a key may not allow, and a 429 may be search's own quota (the same request without search
@@ -134,7 +137,7 @@ function createModelCaller(options: GeminiOptions, model: string, thinkingLevel:
     // A 429 for the model's own daily quota is not search's doing, and the same request without search would be refused the same way.
     const searchWasRefused = async () => response.status === 400 || (response.status === 429 && !readQuota((await response.clone().json().catch(() => ({}))) as GeminiReply).daily)
     if (searching() && (await searchWasRefused())) {
-      const retry = await send(system, plainUser, schemaAccepted ? schema : null, false)
+      const retry = await send(system, plainUser, schemaAccepted ? schema : null, false, files)
       if (retry.ok) {
         searchBlockedUntil = now() + SEARCH_BLOCK_MS
         searchRefused = true
@@ -145,7 +148,7 @@ function createModelCaller(options: GeminiOptions, model: string, thinkingLevel:
     // A 400 with a schema may be the schema, which the API can refuse for reasons it does not explain. Try once
     // without it, with the schema written into the prompt instead, and only remember that if the retry works.
     if (response.status === 400 && schemaAccepted) {
-      const retry = await send(system, plainUser, null, false)
+      const retry = await send(system, plainUser, null, false, files)
       if (retry.ok) schemaAccepted = false
       response = retry
     }

@@ -5,10 +5,12 @@ import './TaskMenu.css'
 
 type Props = {
   onSelect: (id: TaskId) => void
+  // Which side of the bar it opens from: the button for it sits beside the field, on the right.
+  align?: 'left' | 'right'
 }
 
 // The familiar path: a conventional menu of the five tasks. Opens upward from the intent bar.
-export default function TaskMenu({ onSelect }: Props) {
+export default function TaskMenu({ onSelect, align = 'left' }: Props) {
   const listRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -27,7 +29,7 @@ export default function TaskMenu({ onSelect }: Props) {
   return (
     <motion.div
       ref={listRef}
-      className="task-menu glass glass--strong"
+      className={align === 'right' ? 'task-menu task-menu--right glass glass--strong' : 'task-menu glass glass--strong'}
       role="menu"
       aria-label="Workspaces"
       onKeyDown={onKeyDown}

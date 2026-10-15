@@ -439,3 +439,37 @@ describe('the compose function, asked for progress', () => {
     expect(JSON.stringify(stages)).not.toMatch(/Ayesha|secret/)
   })
 })
+
+describe('the compose function, with files attached', () => {
+  const PDF = 'JVBERi0xLjQKJSBzbWFsbA=='
+
+  it('takes a request with a file in it that is far bigger than a request without one used to be', async () => {
+    const { handle } = setup()
+    const big = Buffer.alloc(900_000, 65).toString('base64')
+    const response = await handle(post({ intent: 'What is in this PDF?', attachments: [{ kind: 'pdf', name: 'brief.pdf', mime: 'application/pdf', data: big }] }))
+    expect(response.status).toBe(200)
+  })
+
+  it('passes the file to the model, and records the request without it', async () => {
+    const seen: unknown[] = []
+    const { handle, recorded } = setup({ call: async (request) => { seen.push(request.files); return validOpenReply } })
+    await handle(post({ intent: 'Read this', attachments: [{ kind: 'pdf', name: 'brief.pdf', mime: 'application/pdf', data: PDF }] }))
+    expect(seen[0]).toEqual([{ mime: 'application/pdf', data: PDF }])
+    expect(JSON.stringify(recorded)).not.toContain(PDF)
+    expect(JSON.stringify(recorded)).not.toContain('brief.pdf')
+  })
+
+  it('refuses a file that is not a kind it reads, with a plain 400, before the model is asked', async () => {
+    let asked = false
+    const { handle } = setup({ call: async () => { asked = true; return validOpenReply } })
+    const response = await handle(post({ intent: 'Read this', attachments: [{ kind: 'video', name: 'a.mp4', data: 'AAAAAAAA' }] }))
+    expect(response.status).toBe(400)
+    expect(asked).toBe(false)
+  })
+
+  it('still turns away a body past the limit', async () => {
+    const { handle } = setup()
+    const response = await handle(post('x'.repeat(MAX_BODY_BYTES + 10)))
+    expect(response.status).toBe(413)
+  })
+})
