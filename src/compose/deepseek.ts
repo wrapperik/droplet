@@ -106,7 +106,13 @@ export function createDeepSeekCaller(options: DeepSeekOptions): ModelCaller {
       response = await send(instructions, words, files)
     }
     // The API refused the request with the files in it (a PDF it does not take, or a picture it cannot read): once more without them, saying so to the model.
-    if (response.status === 400 && files.length > 0) response = await send(instructions, `${words}${unseen(files.length)}`)
+    if (response.status === 400 && files.length > 0) {
+      // Said in the server's own log (the terminal, or the function's log in the Supabase dashboard), as the API's words only and never the file, so it can be
+      // seen why a picture or a PDF was not read.
+      const why = ((await response.clone().json().catch(() => ({}))) as ChatReply).error?.message ?? 'no reason given'
+      console.error(`deepseek: the API refused the request with ${files.length} file(s) (${files.map((file) => file.mime).join(', ')}) in it, so they were left out: ${why.slice(0, 300)}`)
+      response = await send(instructions, `${words}${unseen(files.length)}`)
+    }
 
     if (!response.ok) {
       const body = (await response.json().catch(() => ({}))) as ChatReply
