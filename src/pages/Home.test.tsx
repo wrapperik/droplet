@@ -220,7 +220,8 @@ describe('asking Droplet to fill in the invoice', () => {
 })
 
 describe('the thread and the task menu', () => {
-  const entries = () => within(screen.getByRole('log', { name: 'Conversation' })).queryAllByRole('listitem')
+  // The side panel shows one exchange at a time, each a page that is a list item itself: only the messages and dividers are counted here.
+  const entries = () => within(screen.getByRole('log', { name: 'Conversation' })).queryAllByRole('listitem').filter((item) => !item.classList.contains('thread__page'))
   const sendAndWait = async (user: ReturnType<typeof userEvent.setup>, text: string, answer: string) => {
     answers = [reply('chat', answer)]
     await say(user, text)
@@ -630,7 +631,7 @@ describe('the chat history', () => {
 describe('a question and suggested replies', () => {
   const asking = (message: string, question: string, replies: string[]) => ({ outcome: 'valid', answeredBy: 'base', turn: { task: 'chat', message, question, replies, actions: [], memoryUsed: [] } })
 
-  it('shows the question after the answer, and sends a tapped reply as the founder\'s own message with the question in the history', async () => {
+  it('shows the question after the answer, offers no reply buttons, and sends the founder\'s typed answer with the question in the history', async () => {
     const user = userEvent.setup()
     answers = [
       asking('Three ways to price:\n\n- **Cost plus**\n- **Value based**', 'Do you know your costs?', ['Yes, I know them', 'Not sure yet']),
@@ -641,7 +642,9 @@ describe('a question and suggested replies', () => {
     await waitFor(() => expect(screen.getByText('Do you know your costs?')).toBeInTheDocument())
     expect(screen.getByText('Cost plus').tagName).toBe('STRONG')
 
-    await user.click(screen.getByRole('button', { name: 'Not sure yet' }))
+    // suggested replies are turned off: the question is answered in the box
+    expect(screen.queryByRole('button', { name: 'Not sure yet' })).toBeNull()
+    await say(user, 'Not sure yet')
     await waitFor(() => expect(screen.getByText('Then start with cost plus.')).toBeInTheDocument())
     expect(asked[1].intent).toBe('Not sure yet')
     // the earlier answer reaches the model with its question, so "Not sure yet" has something to answer
@@ -2620,5 +2623,24 @@ describe('attaching files in the chat', () => {
     await say(user, 'Hi')
     await screen.findByText('Hello.')
     expect(asked[0]).not.toHaveProperty('attachments')
+  })
+})
+
+describe('the side panel conversation', () => {
+  it('shows one exchange at a time with a rail to move between them, once a workspace is open, and the whole thread when it is not', async () => {
+    const user = userEvent.setup()
+    answers = [reply('chat', 'First answer.'), reply('chat', 'Second answer.')]
+    const { container } = renderHome()
+    await say(user, 'First question')
+    await screen.findByText('First answer.')
+    // the full chat is not paged
+    expect(container.querySelector('.thread__page')).toBeNull()
+    await pickTask(user, /Build the brand/)
+    await say(user, 'Second question')
+    await screen.findByText('Second answer.')
+    expect(container.querySelectorAll('.thread__page')).toHaveLength(2)
+    const rail = screen.getByRole('navigation', { name: 'Exchanges in this conversation' })
+    expect(within(rail).getAllByRole('button')).toHaveLength(2)
+    expect(within(rail).getByRole('button', { name: 'Go to exchange 1: First question' })).toBeInTheDocument()
   })
 })

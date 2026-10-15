@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { vi } from 'vitest'
-import ChatThread, { type ThreadMessage } from './ChatThread.tsx'
+import ChatThread, { SHOW_SUGGESTED_REPLIES, exchangesOf, type ThreadMessage } from './ChatThread.tsx'
 import DropletLoader from './DropletLoader.tsx'
 import ThinkingDots from './ThinkingDots.tsx'
 import DiamondLoader from './DiamondLoader.tsx'
@@ -208,14 +208,12 @@ describe('Droplet\'s messages laid out', () => {
     expect(bubble.querySelector('.rich')!.nextElementSibling).toHaveClass('thread__question')
   })
 
-  it('offers the replies under the newest message, and sends the one that is tapped', async () => {
-    const user = userEvent.setup()
-    const onReply = vi.fn()
-    render(<ChatThread onReply={onReply} messages={[{ id: 1, from: 'droplet', text: 'Hello.', question: 'Ready?', replies: ['Yes, go ahead', 'Not yet'] }]} />)
-    const group = screen.getByRole('list', { name: 'Suggested replies' })
-    expect(within(group).getAllByRole('button').map((button) => button.textContent)).toEqual(['Yes, go ahead', 'Not yet'])
-    await user.click(screen.getByRole('button', { name: 'Not yet' }))
-    expect(onReply).toHaveBeenCalledWith('Not yet')
+  it('does not show suggested replies any more: Droplet asks in words and the founder answers in the box, though a turn may still carry them', () => {
+    expect(SHOW_SUGGESTED_REPLIES).toBe(false)
+    render(<ChatThread onReply={vi.fn()} messages={[{ id: 1, from: 'droplet', text: 'Hello.', question: 'Ready?', replies: ['Yes, go ahead', 'Not yet'] }]} />)
+    expect(screen.getByText('Ready?')).toBeInTheDocument()
+    expect(screen.queryByRole('list', { name: 'Suggested replies' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Not yet' })).toBeNull()
   })
 
   it('takes the replies away once the conversation moves on, or while a reply is pending', () => {
@@ -343,12 +341,12 @@ describe('a reply that has just arrived', () => {
     { id: 2, from: 'droplet', text: 'First paragraph.\n\nSecond paragraph.', question: 'Which one?', replies: ['This one', 'That one'], ...(fresh ? { fresh: true } : {}), at: '2026-10-15T09:00:05.000Z' },
   ]
 
-  it('comes in paragraph by paragraph, then its question and its suggested replies, each with its place in the order', () => {
+  it('comes in paragraph by paragraph, then its question, each with its place in the order', () => {
     const { container } = render(<ChatThread messages={reply(true)} />)
     const paragraphs = [...container.querySelectorAll('.rich > [data-reveal]')]
     expect(paragraphs.map((node) => (node as HTMLElement).style.getPropertyValue('--i'))).toEqual(['0', '1'])
     expect((container.querySelector('.thread__question') as HTMLElement).style.getPropertyValue('--i')).toBe('4')
-    expect((container.querySelector('.thread__replies') as HTMLElement).style.getPropertyValue('--i')).toBe('5')
+    expect(container.querySelector('.thread__replies')).toBeNull()
   })
 
   it('is shown plainly once it is no longer fresh, so a thread mounted again does not play it again', () => {
@@ -432,5 +430,83 @@ describe('files attached to a message', () => {
     render(<ChatThread messages={thread} onRetry={vi.fn()} onEdit={vi.fn()} />)
     expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit your message' })).not.toBeInTheDocument()
+  })
+})
+
+describe('the side panel: one exchange at a time', () => {
+  const talk = (count: number): ThreadMessage[] =>
+    Array.from({ length: count }, (_, i) => [
+      { id: i * 2 + 1, from: 'you' as const, text: `Question ${i + 1}` },
+      { id: i * 2 + 2, from: 'droplet' as const, text: `Answer ${i + 1}` },
+    ]).flat()
+
+  it('cuts the thread into exchanges: each starts at a message from the founder and holds what follows it', () => {
+    const pages = exchangesOf([...talk(2), { id: 9, from: 'droplet', text: 'A note.', local: true }])
+    expect(pages.map((page) => page.messages.map((message) => message.id))).toEqual([[1, 2], [3, 4, 9]])
+    expect(pages[0].label).toBe('exchange 1: Question 1')
+  })
+
+  it('puts a divider with the exchange it introduces, and a first reply with no question before it on a page of its own', () => {
+    const pages = exchangesOf([{ id: 1, from: 'droplet', text: 'Welcome.' }, { id: 2, from: 'divider', text: 'Switched workspace to Invoice' }, { id: 3, from: 'you', text: 'Hi' }, { id: 4, from: 'droplet', text: 'Hello' }])
+    expect(pages.map((page) => page.messages.map((message) => message.id))).toEqual([[1], [2, 3, 4]])
+  })
+
+  it('draws each exchange as a page, and a rail with a tick for each, the one in view marked', () => {
+    const { container } = render(<ChatThread messages={talk(3)} paged />)
+    expect(container.querySelectorAll('.thread__page')).toHaveLength(3)
+    const rail = screen.getByRole('navigation', { name: 'Exchanges in this conversation' })
+    const ticks = within(rail).getAllByRole('button')
+    expect(ticks).toHaveLength(3)
+    // the newest is the one in view when nothing has been scrolled
+    expect(ticks.filter((tick) => tick.getAttribute('aria-current') === 'true')).toHaveLength(1)
+    expect(ticks[0]).toHaveAccessibleName('Go to exchange 1: Question 1')
+    expect(screen.getByRole('log', { name: 'Conversation' })).toHaveTextContent('Answer 3')
+  })
+
+  it('has no rail for a single exchange, and is not paged unless it is asked to be', () => {
+    const { container, rerender } = render(<ChatThread messages={talk(1)} paged />)
+    expect(screen.queryByRole('navigation', { name: 'Exchanges in this conversation' })).toBeNull()
+    rerender(<ChatThread messages={talk(3)} />)
+    expect(container.querySelector('.thread__page')).toBeNull()
+    expect(container.querySelector('.thread-wrap')).toBeNull()
+    expect(screen.queryByRole('navigation')).toBeNull()
+  })
+
+  it('scrolls to an exchange when its tick is pressed', async () => {
+    const user = userEvent.setup()
+    const scrolled: number[] = []
+    const scrollTo = { mockRestore: () => delete (HTMLElement.prototype as { scrollTo?: unknown }).scrollTo }
+    Object.defineProperty(HTMLElement.prototype, 'scrollTo', { configurable: true, value: (options: ScrollToOptions) => void scrolled.push(Number(options.top)) })
+    Object.defineProperty(HTMLElement.prototype, 'offsetTop', { configurable: true, get() { return Number((this as HTMLElement).dataset.page ?? 0) * 500 } })
+    try {
+      render(<ChatThread messages={talk(3)} paged />)
+      await user.click(screen.getByRole('button', { name: 'Go to exchange 1: Question 1' }))
+      expect(scrolled.at(-1)).toBe(0)
+      await user.click(screen.getByRole('button', { name: 'Go to exchange 2: Question 2' }))
+      expect(scrolled.at(-1)).toBe(500)
+    } finally {
+      scrollTo.mockRestore()
+      Object.defineProperty(HTMLElement.prototype, 'offsetTop', { configurable: true, get: () => 0 })
+    }
+  })
+
+  it('shows only the ticks near the exchange in view, so a long conversation does not run the rail off the panel', () => {
+    render(<ChatThread messages={talk(40)} paged />)
+    const ticks = within(screen.getByRole('navigation', { name: 'Exchanges in this conversation' })).getAllByRole('button')
+    expect(ticks.length).toBeLessThanOrEqual(10)
+    expect(ticks.at(-1)).toHaveAttribute('aria-current', 'true')
+  })
+
+  it('makes a tick shorter the further the exchange is from the one in view', () => {
+    render(<ChatThread messages={talk(6)} paged />)
+    const ticks = within(screen.getByRole('navigation')).getAllByRole('button')
+    expect(ticks.map((tick) => tick.getAttribute('data-distance'))).toEqual(['4', '4', '3', '2', '1', '0'])
+  })
+
+  it('still does everything a message can do inside a page: copy, try again and the pending line', () => {
+    render(<ChatThread messages={[...talk(2), { id: 9, from: 'you', text: 'Latest' }, { id: 10, from: 'droplet', text: '', pending: true }]} paged progress={{ words: 'Thinking it through', elapsed: '' }} onStop={vi.fn()} />)
+    expect(screen.getByText('Thinking it through')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Copy reply' }).length).toBeGreaterThan(0)
   })
 })

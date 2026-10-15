@@ -39,7 +39,7 @@ export function placeholderFor(room: Room): string {
     return room.board.items.length === 0 ? 'Say what you are thinking about, and I will start the board' : 'Ask for ideas, or to group or tidy the board'
   }
   if (room.view === 'invoice' && room.invoice) return room.invoice.clientNamed ? 'Add a line, or change the terms' : 'Who is this invoice for?'
-  if (room.view === 'brand') return room.palette?.selectedPosition ? `Ask about colour ${room.palette.selectedPosition}, or describe the feeling you want` : 'Describe the feeling you want'
+  if (room.view === 'brand') return room.palette?.selectedPosition ? `Ask about colour ${room.palette.selectedPosition}, or describe a feeling` : 'Describe the feeling you want'
   return 'Write your message...'
 }
 

@@ -277,7 +277,8 @@ describe('a long message in the bar', () => {
       // and it shrinks again when the text goes
       tall = 48
       await user.clear(field())
-      expect(field().style.height).toBe('48px')
+      // empty again: one line, left to the stylesheet, whatever the placeholder would measure
+      expect(field().style.height).toBe('')
     } finally {
       scroll.mockRestore()
     }
@@ -372,6 +373,24 @@ describe('where the menus open', () => {
       expect(menu).toMatch(/width:\s*min\(17\.5rem/)
       expect(menu).toMatch(/font-size:\s*0\.875rem/)
       expect(menu).not.toMatch(/radius-xl/)
+    }
+  })
+})
+
+describe('the empty bar', () => {
+  const css = readFileSync('src/components/IntentBar.css', 'utf8')
+
+  it('keeps a long hint to one line, cut with an ellipsis, so a narrow panel does not get a tall bar', () => {
+    expect(css).toMatch(/\.intent__input::placeholder\s*\{[^}]*overflow:\s*hidden[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/)
+  })
+
+  it('is one line when nothing is written, however long its hint, even where the browser would measure the hint as several lines', () => {
+    const scroll = vi.spyOn(HTMLTextAreaElement.prototype, 'scrollHeight', 'get').mockImplementation(() => 150)
+    try {
+      render(<IntentBar hints={{ placeholder: 'Ask about colour 1, or describe the feeling you want to see in this palette today' }} />)
+      expect((screen.getByLabelText('Describe what you need') as HTMLTextAreaElement).style.height).toBe('')
+    } finally {
+      scroll.mockRestore()
     }
   })
 })

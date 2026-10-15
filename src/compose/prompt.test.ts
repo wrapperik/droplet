@@ -1,6 +1,6 @@
 import { openSnapshot } from './fixtures.ts'
 import { invoiceTurnSchema } from './invoiceSpec.ts'
-import { buildUserContent, INVOICE_SYSTEM_PROMPT, SYSTEM_PROMPT } from './prompt.ts'
+import { BOARD_SYSTEM_PROMPT, buildUserContent, INVOICE_SYSTEM_PROMPT, SYSTEM_PROMPT, systemPromptFor } from './prompt.ts'
 import { turnSchema } from './spec.ts'
 
 describe('buildUserContent', () => {
@@ -83,12 +83,22 @@ describe('naming the chat', () => {
 })
 
 describe('how the model is told to talk', () => {
-  it('is told to ask one question and offer replies, and when not to', () => {
-    for (const prompt of [SYSTEM_PROMPT, INVOICE_SYSTEM_PROMPT]) {
+  it('is told to ask one question in words, not to give suggested replies, and when to leave the question out', () => {
+    for (const prompt of [SYSTEM_PROMPT, INVOICE_SYSTEM_PROMPT, BOARD_SYSTEM_PROMPT]) {
       expect(prompt).toMatch(/ask one question that moves their work forward/)
-      expect(prompt).toMatch(/"replies"/)
-      expect(prompt).toMatch(/never write a reply that puts a price/)
-      expect(prompt).toMatch(/Leave "question" and "replies" out/)
+      expect(prompt).toMatch(/Do not give "replies"/)
+      expect(prompt).toMatch(/name the choices in the question/)
+      expect(prompt).toMatch(/Leave "question" out/)
+    }
+  })
+
+  it('shows no suggested replies in any example, so it is not taught a field it should leave empty', () => {
+    for (const view of [undefined, 'brand', 'invoice', 'board'] as const) {
+      for (const mode of ['base', 'advanced'] as const) {
+        const prompt = systemPromptFor(view, mode)
+        expect(prompt, `${view}/${mode}`).not.toMatch(/"replies":/)
+        expect(prompt, `${view}/${mode}`).not.toMatch(/^\s*replies: \[/m)
+      }
     }
   })
 

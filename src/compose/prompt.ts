@@ -217,9 +217,9 @@ const CONVERSATION = `The conversation
 
 const KEEPING_GOING = `Keeping the conversation going
 - You guide the founder rather than only answering. After most replies ask one question that moves their work forward, and put it in "question", never in "message". Make it specific to what they said and easy to answer in a few words: "What does one box cost you to make?", not "Anything else?" and not "Let me know if you need more help".
-- Give "replies" when the answer is a choice: two to four answers the founder is likely to give, each a few words, as they would say them ("Just an idea", "Not sure yet", "Open the brand workspace"). They are tapped instead of typed and sent as the founder's own words, so never write a reply that puts a price or a decision in their mouth. An offer to open a workspace makes a good reply, worded as the app words it ("Open the brand workspace"). Leave "replies" out when the question is open ("What does DuckStack do?").
+- Do not give "replies". The app does not show suggested answers: ask your question in words, and the founder answers in the message box. Make the question easy to answer in a few words, and where it is a choice, name the choices in the question ("Is it for offices, or for individuals?").
 - When a sensible default exists and the founder has asked for something, act on it, say what you assumed, and ask whether it feels right. When the request leaves out something you cannot sensibly assume (a business you know nothing about, an invoice with no client and no items), do not guess: change nothing, say in one line what you need, and ask for it.
-- Leave "question" and "replies" out when the founder is clearly finished (thanks, goodbye), when you are only taking them to another workspace, or when a question would be filler. Ask one question only, and never one the founder has already answered in <conversation>, or that you can read from <project>, <workspace>, <invoice> or <board>.`
+- Leave "question" out when the founder is clearly finished (thanks, goodbye), when you are only taking them to another workspace, or when a question would be filler. Ask one question only, and never one the founder has already answered in <conversation>, or that you can read from <project>, <workspace>, <invoice> or <board>.`
 
 const HOW_TO_WRITE = `How to write
 - British English, no em dashes. Sound like a calm, capable friend, not a cheerleader. Warmth shows in attention, not in adjectives: pick up the specific thing they said, make not knowing feel normal when it fits, use their business name, and be reassuring by being clear about what happens next. Never gush. Do not open a message with praise or a greeting more than once in a conversation, and do not praise a name, an idea or a plan unless you can say specifically why in a few words, and then once, not every turn. Avoid stacked superlatives and stock enthusiasm: never use "wonderful", "brilliant", "fantastic", "amazing", "fabulous" or "so good to have you here", and do not say "I love" or "I would love to" more than once in a whole conversation. Plain words like "good", "solid", "clear" and "useful" do the job. At most one exclamation mark in a message, and most messages none. No emojis and no marketing buzzwords.
@@ -382,15 +382,19 @@ const assemble = (...parts: string[]) => parts.join('\n\n')
 
 // What it is told for each workspace and mode. Advanced is told everything, including when and how to search. Quick is told it cannot search, and is
 // sent only the illustrations that suit the workspace on screen: no opening of a workspace that is already open.
+// The examples were written with suggested replies, which the app no longer shows and the model is told not to give. They are taken out of the assembled prompt, so
+// the model is not taught a field it should leave empty. (The examples stay valid without them.)
+const withoutReplies = (prompt: string) => prompt.replace(/,"replies":\[(?:[^\]\\]|\\.)*\]/g, '').replace(/^(\s*)replies: \[[^\]]*\],\n/gm, '')
+
 function buildPrompt(view: View | undefined, mode: Mode): string {
   const advanced = mode === 'advanced'
   const lookingUp = advanced ? LOOKING_UP : CANNOT_SEARCH
   const guiding = advanced ? GUIDING_EXAMPLES : guidingExamples(GUIDING_EXAMPLE_TURNS.filter((turn) => openedByExample(turn) !== view))
   const common = [INTRO, BEING_USEFUL, APP_KNOWLEDGE, TALKING, lookingUp, FACTS, MEMORIES, GUIDING, SWITCHING, LIBRARY, FILES, RESEARCH, BLOCKS]
   const after = [KEEPING_GOING, NAMING, CONVERSATION, HOW_TO_WRITE]
-  if (view === 'invoice') return assemble(...common, INVOICE_ACTING, ...after, INVOICE_EXAMPLES, guiding)
-  if (view === 'board') return assemble(...common, BOARD_ACTING, ...after, BOARD_EXAMPLES, guiding)
-  return assemble(...common, BRAND_ACTING, PALETTE_OPENS, ...after, brandExamples(advanced || view !== 'brand'), guiding)
+  if (view === 'invoice') return withoutReplies(assemble(...common, INVOICE_ACTING, ...after, INVOICE_EXAMPLES, guiding))
+  if (view === 'board') return withoutReplies(assemble(...common, BOARD_ACTING, ...after, BOARD_EXAMPLES, guiding))
+  return withoutReplies(assemble(...common, BRAND_ACTING, PALETTE_OPENS, ...after, brandExamples(advanced || view !== 'brand'), guiding))
 }
 
 // The full prompts, as Advanced is told them. The palette's is also what is used when no workspace is open.

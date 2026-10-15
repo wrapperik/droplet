@@ -83,6 +83,11 @@ export default function IntentBar({ onSubmitIntent, onChooseTask, docked = false
   useLayoutEffect(() => {
     const field = inputRef.current
     if (!field) return
+    // Nothing written: one line, whatever the placeholder says, so the empty bar is never tall.
+    if (text === '') {
+      field.style.height = ''
+      return
+    }
     field.style.height = 'auto'
     field.style.height = `${Math.min(field.scrollHeight, MAX_FIELD_PX)}px`
   }, [text])

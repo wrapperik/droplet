@@ -192,7 +192,9 @@ describe('the shared illustrations in every prompt', () => {
     const turns = lines(SYSTEM_PROMPT)
     expect(turns.some((turn) => turn.blocks?.some((block) => block.type === 'checklist' && block.numbered))).toBe(true)
     expect(turns.some((turn) => turn.blocks?.some((block) => block.type === 'table'))).toBe(true)
-    expect(turns.some((turn) => turn.task === 'invoice' && turn.actions.length === 0 && !turn.opens && turn.replies?.includes('Invoice anyway'))).toBe(true)
+    expect(turns.some((turn) => turn.task === 'invoice' && turn.actions.length === 0 && !turn.opens && turn.question?.length)).toBe(true)
+    // suggested replies are not shown, so no example teaches them
+    expect(turns.every((turn) => !turn.replies)).toBe(true)
     expect(turns.some((turn) => turn.opens?.because === 'agreed')).toBe(true)
   })
 

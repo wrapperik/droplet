@@ -109,12 +109,50 @@ type Props = {
   // Try again was pressed on Droplet's last reply, or the founder edited their last message and sent it again. Home takes both back and asks again.
   onRetry?: (messageId: number) => void
   onEdit?: (messageId: number, text: string) => void
+  // One question and its answer at a time, with a rail of ticks to move between them. For the side panel, where the whole thread is too crowded to read.
+  paged?: boolean
+}
+
+// Suggested replies under the newest message are off: Droplet asks its question in words and the founder answers in the box. The reply buttons, their styles, their
+// tests and the `replies` field of a turn are kept, so setting this to true brings them back.
+export const SHOW_SUGGESTED_REPLIES = false
+
+// How many ticks either side of the exchange in view the rail shows.
+const RAIL_REACH = 9
+
+type Page = { key: number; label: string; messages: ThreadMessage[] }
+
+// The thread cut into exchanges: each begins at a message from the founder and holds the replies, notes and cards that follow it, and a divider belongs to the
+// exchange it introduces. Replies with no question before them (a greeting, a note from the app) are an exchange of their own.
+export function exchangesOf(messages: ThreadMessage[]): Page[] {
+  const pages: Page[] = []
+  let carry: ThreadMessage[] = []
+  for (const message of messages) {
+    if (message.from === 'divider') {
+      carry.push(message)
+      continue
+    }
+    const current = pages[pages.length - 1]
+    if (message.from === 'you' || !current) {
+      pages.push({ key: message.id, label: '', messages: [...carry, message] })
+      carry = []
+    } else {
+      current.messages.push(...carry, message)
+      carry = []
+    }
+  }
+  if (carry.length > 0 && pages.length > 0) pages[pages.length - 1].messages.push(...carry)
+  return pages.map((page, at) => {
+    const first = page.messages.find((message) => message.from !== 'divider')
+    const words = (first?.text ?? '').replace(/\s+/g, ' ').trim()
+    return { ...page, label: `exchange ${at + 1}: ${words.length > 50 ? `${words.slice(0, 49)}…` : words || 'no words'}` }
+  })
 }
 
 const NO_STEPS: ReadonlySet<JourneyStep> = new Set()
 
 // The running conversation. It scrolls on its own, and follows the newest message.
-export default function ChatThread({ messages, onAction, onReply, done = NO_STEPS, busy, onToggle, onOpenStep, onUndoReceipt, onShowReceipt, onRememberFact, onDismissFact, flight, renderResult, brand, onOpenHandoff, progress, onStop, onRetry, onEdit }: Props) {
+export default function ChatThread({ messages, onAction, onReply, done = NO_STEPS, busy, onToggle, onOpenStep, onUndoReceipt, onShowReceipt, onRememberFact, onDismissFact, flight, renderResult, brand, onOpenHandoff, progress, onStop, onRetry, onEdit, paged = false }: Props) {
   const listRef = useRef<HTMLOListElement>(null)
   // The founder's message being edited, and what it says now.
   const [editing, setEditing] = useState<{ id: number; text: string } | null>(null)
@@ -124,9 +162,11 @@ export default function ChatThread({ messages, onAction, onReply, done = NO_STEP
   const lastKey = last ? `${last.id}:${last.pending ? 'pending' : 'done'}:${last.text.length}:${last.question?.length ?? 0}` : ''
   useEffect(() => {
     const list = listRef.current
-    if (!list) return
+    // A paged thread goes to the top of the newest exchange instead (below).
+    if (!list || paged) return
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     list.scrollTo?.({ top: list.scrollHeight, behavior: reduce ? 'auto' : 'smooth' })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages.length, lastKey])
 
   // The last exchange can be tried again or edited, when it was a plain conversation: a reply that changed a workspace has its own Undo this, and one
@@ -138,9 +178,7 @@ export default function ChatThread({ messages, onAction, onReply, done = NO_STEP
   const again = !busy && !hadFiles && lastReply?.from === 'droplet' && !lastReply.pending && !lastReply.local && !lastReply.receipt && !lastReply.result && !(lastReply.actions && lastReply.actions.length > 0)
   const askedBy = again && messages[lastIndex - 1]?.from === 'you' ? messages[lastIndex - 1] : undefined
 
-  return (
-    <ol ref={listRef} className="thread" role="log" aria-label="Conversation" aria-live="polite" tabIndex={0}>
-      {messages.map((message, index) => {
+  const renderMessage = (message: ThreadMessage, index: number) => {
         if (message.from === 'divider') {
           return (
             <li key={message.id} className="thread__divider">
@@ -153,7 +191,7 @@ export default function ChatThread({ messages, onAction, onReply, done = NO_STEP
         const fresh = message.fresh === true && message.from === 'droplet'
         const base = fresh ? parseRichText(message.text).length : 0
         const at = (step: number) => (fresh ? ({ 'data-reveal': '', style: { '--i': base + step } as React.CSSProperties } as const) : {})
-        const replies = index === messages.length - 1 && message.from === 'droplet' && !message.pending && message.question ? (message.replies ?? []) : []
+        const replies = SHOW_SUGGESTED_REPLIES && index === messages.length - 1 && message.from === 'droplet' && !message.pending && message.question ? (message.replies ?? []) : []
         return (
           <Fragment key={message.id}>
             <li
@@ -301,8 +339,82 @@ export default function ChatThread({ messages, onAction, onReply, done = NO_STEP
             )}
           </Fragment>
         )
-      })}
-    </ol>
+  }
+
+  // One question and its answer at a time (the side panel): the thread is cut into exchanges, each its own page, and a rail of ticks beside it says where
+  // you are and jumps to another. Everything is still there to scroll up to.
+  const pages = paged ? exchangesOf(messages) : []
+  // The exchange scrolled to, once the founder has moved away from the newest; null means the newest, which is where the thread goes by itself.
+  const [viewed, setViewed] = useState<number | null>(null)
+  const pageRefs = useRef<(HTMLLIElement | null)[]>([])
+  const latest = pages.length - 1
+
+  // The newest exchange comes into view when it begins and as it fills, at its top, so the question is the first thing seen.
+  useEffect(() => {
+    if (!paged) return
+    const list = listRef.current
+    const page = pageRefs.current[latest]
+    if (!list || !page) return
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    list.scrollTo?.({ top: page.offsetTop, behavior: reduce ? 'auto' : 'smooth' })
+    setViewed(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paged, latest])
+
+  // Which exchange is in view: the last whose top is above a third of the way down.
+  const onScroll = () => {
+    const list = listRef.current
+    if (!paged || !list) return
+    let found = 0
+    pageRefs.current.forEach((page, at) => {
+      if (page && page.offsetTop <= list.scrollTop + list.clientHeight / 3) found = at
+    })
+    const next = found === latest ? null : found
+    setViewed((current) => (current === next ? current : next))
+  }
+
+  const jumpTo = (at: number) => {
+    const list = listRef.current
+    const page = pageRefs.current[at]
+    if (!list || !page) return
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    list.scrollTo?.({ top: page.offsetTop, behavior: reduce ? 'auto' : 'smooth' })
+    setViewed(at === latest ? null : at)
+  }
+
+  if (!paged) {
+    return (
+      <ol ref={listRef} className="thread" role="log" aria-label="Conversation" aria-live="polite" tabIndex={0}>
+        {messages.map(renderMessage)}
+      </ol>
+    )
+  }
+
+  const shown = viewed ?? Math.max(0, latest)
+  return (
+    <div className="thread-wrap">
+      {pages.length > 1 && (
+        <nav className="thread-rail" aria-label="Exchanges in this conversation">
+          {pages.map((page, at) => {
+            // The longer the tick, the nearer the exchange is to the one in view, so the rail reads as a gauge rather than a list. Far ones are dropped.
+            const distance = Math.abs(at - shown)
+            if (distance > RAIL_REACH) return null
+            return (
+              <button key={page.key} type="button" className="thread-rail__tick" data-distance={Math.min(distance, 4)} aria-current={at === shown ? 'true' : undefined} aria-label={`Go to ${page.label}`} title={page.label} onClick={() => jumpTo(at)}>
+                <span aria-hidden="true" />
+              </button>
+            )
+          })}
+        </nav>
+      )}
+      <ol ref={listRef} className="thread thread--paged" role="log" aria-label="Conversation" aria-live="polite" tabIndex={0} onScroll={onScroll}>
+        {pages.map((page, at) => (
+          <li key={page.key} ref={(node) => void (pageRefs.current[at] = node)} className="thread__page" data-page={at}>
+            <ol className="thread__page-list">{page.messages.map((message) => renderMessage(message, messages.indexOf(message)))}</ol>
+          </li>
+        ))}
+      </ol>
+    </div>
   )
 }
 

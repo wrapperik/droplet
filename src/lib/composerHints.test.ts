@@ -27,7 +27,7 @@ describe('the placeholder', () => {
 
   it('asks for the feeling in the palette, or about the selected colour', () => {
     expect(placeholderFor({ view: 'brand' })).toBe('Describe the feeling you want')
-    expect(placeholderFor({ view: 'brand', palette: { blocks: [], selectedPosition: 3 } })).toBe('Ask about colour 3, or describe the feeling you want')
+    expect(placeholderFor({ view: 'brand', palette: { blocks: [], selectedPosition: 3 } })).toBe('Ask about colour 3, or describe a feeling')
   })
 
   it('is the usual words where no workspace is open', () => {

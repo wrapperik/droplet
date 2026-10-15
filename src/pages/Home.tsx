@@ -1657,7 +1657,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
           onFocusCapture={() => void refreshProject()}
         >
           {chatBar(true)}
-          <ChatThread flight={flight} onFlightEnd={() => setFlight(null)} messages={thread} onAction={onThreadAction} onReply={submitIntent} done={doneSet} busy={composing} onToggle={toggleCheck} onOpenStep={openStep} onUndoReceipt={undoReceipt} onShowReceipt={showReceipt} onRememberFact={rememberFact} onDismissFact={dismissFact} renderResult={renderResult} brand={brand} onOpenHandoff={() => setHandoffOpen(true)} progress={composing && stage ? { words: stageWords(stage, stageContext), elapsed: elapsedLabel(elapsed) } : composing ? { words: 'Thinking', elapsed: elapsedLabel(elapsed) } : null} onStop={composing ? stopComposing : undefined} onRetry={retryReply} onEdit={sendAgain} />
+          <ChatThread flight={flight} onFlightEnd={() => setFlight(null)} messages={thread} onAction={onThreadAction} onReply={submitIntent} done={doneSet} busy={composing} onToggle={toggleCheck} onOpenStep={openStep} onUndoReceipt={undoReceipt} onShowReceipt={showReceipt} onRememberFact={rememberFact} onDismissFact={dismissFact} renderResult={renderResult} brand={brand} onOpenHandoff={() => setHandoffOpen(true)} progress={composing && stage ? { words: stageWords(stage, stageContext), elapsed: elapsedLabel(elapsed) } : composing ? { words: 'Thinking', elapsed: elapsedLabel(elapsed) } : null} onStop={composing ? stopComposing : undefined} onRetry={retryReply} onEdit={sendAgain} paged />
           {bar(true)}
         </motion.aside>
       )}

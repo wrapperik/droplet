@@ -124,6 +124,14 @@
 .intent__input::placeholder {
   color: var(--text-muted);
   opacity: 1;
+  /* One line, cut with an ellipsis if the bar is narrow, so a long hint never makes the empty bar tall. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.intent__input {
+  text-overflow: ellipsis;
 }
 
 .intent__mode {
