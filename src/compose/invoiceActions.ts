@@ -173,7 +173,7 @@ const quoted = (text: string) => `\u201c${text.trim().slice(0, 40)}\u201d`
 // One line of the receipt for an action that was applied, from the lines before and after it. It names what was set and never shows an address,
 // a contact or any detail of the client: only which details were set.
 function describeChange(action: InvoiceTurnAction, before: Line[], after: Line[]): Change | null {
-  // The fields a change was made in, by what they hold, so Show me finds them in the workspace's windows and in the guide alike.
+  // The fields a change was made in, by what they hold, so Show me finds them in the panel of either mode.
   const fields = (...ids: string[]) => ids.map((id) => ({ kind: 'field' as const, id, how: 'changed' as const }))
   const lineAt = (number: number) => ({ number, line: after[number - 1] })
   switch (action.type) {

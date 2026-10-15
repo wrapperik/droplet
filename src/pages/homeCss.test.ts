@@ -46,25 +46,14 @@ describe('the shell round the working screen', () => {
   })
 })
 
-describe('the screen in Guide mode', () => {
-  const guideCss = readFileSync('src/components/invoice/GuidedInvoice.css', 'utf8')
-  const guideRules = [...guideCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(([, selector, body]) => ({ selector: selector.replace(/\/\*[\s\S]*?\*\//g, '').trim(), body }))
-  const guideRule = (selector: string) => guideRules.find((r) => r.selector === selector)
-
-  it('does not scroll the canvas: the guide fills it and scrolls inside itself', () => {
-    expect(rule('.home__canvas--guide')?.body).toMatch(/overflow:\s*hidden/)
-    expect(guideRule('.guide')?.body).toMatch(/height:\s*100%/)
-    expect(guideRule('.guide__stage')?.body).toMatch(/min-height:\s*0/)
+describe('the screen when a task has a panel', () => {
+  it('does not scroll the canvas: the frame fills it and each pane scrolls inside itself', () => {
+    expect(rule('.home__canvas--panes')?.body).toMatch(/overflow:\s*hidden/)
+    expect(rule('.home__canvas--panes > .home__component')?.body).toMatch(/min-height:\s*0/)
   })
 
-  it('scrolls each half of the split view on its own, with the page on the left and the step on the right', () => {
-    expect(guideRule('.guide__pane')?.body).toMatch(/overflow-y:\s*auto/)
-    expect(guideRule('.guide__stage')?.body).toMatch(/grid-template-columns:\s*minmax\(0, 3fr\) minmax\(20rem, 2fr\)/)
-  })
-
-  it('keeps Back and Continue below both halves, never stuck over the page', () => {
-    expect(guideRule('.guide__actions')?.body).not.toMatch(/sticky/)
-    expect(guideCss).not.toMatch(/position:\s*sticky/)
+  it('has no separate screen for Guide mode: the brand and the invoice share one canvas class', () => {
+    expect(css).not.toContain('home__canvas--guide')
   })
 })
 

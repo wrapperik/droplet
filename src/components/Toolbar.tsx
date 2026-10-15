@@ -3,14 +3,14 @@ import { InfoCircleIcon } from '@solar-icons/react/linear'
 import './Toolbar.css'
 
 type ToolbarProps = {
-  // Used as the tool's accessible name. The toolbar shows it as a tooltip, with the reason, from the tool's icon.
+  // Used as the tool's accessible name. The task bar shows it as a tooltip, with the reason.
   title: string
   children: ReactNode
   className?: string
 }
 
-// One tool's controls, exactly as wide as they are. Tools sit side by side in the toolbar under the header
-// (`ToolShelf`), which draws the icon, the tooltip and the dividers between them.
+// One tool's controls, exactly as wide as they are. Tools sit side by side in the bar under the header
+// (`TaskBar`), which draws the tooltip and the dividers between them.
 export function Toolbar({ title, children, className }: ToolbarProps) {
   return (
     <div className={`toolbar ${className ?? ''}`} role="group" aria-label={title}>

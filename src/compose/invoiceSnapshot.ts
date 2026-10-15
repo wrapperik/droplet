@@ -57,7 +57,7 @@ export function stateOfInvoiceSnapshot(snapshot: InvoiceSnapshot): InvoiceState 
     lines: snapshot.lines.map((line, index) => ({ id: index + 1, description: line.description, quantity: line.quantity, unitCents: line.unitCents })),
     vatRegistered: snapshot.vatRegistered,
   }
-  const doc = invoiceDocOf(openInvoiceWorkspace(content, null, 'snapshot'))
+  const doc = invoiceDocOf(openInvoiceWorkspace(content, 'snapshot'))
   const history = createHistory(doc)
   return { history: { ...history, past: snapshot.canUndo ? [doc] : [], future: snapshot.canRedo ? [doc] : [] } }
 }

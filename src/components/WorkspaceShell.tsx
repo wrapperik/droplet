@@ -1,66 +1,46 @@
-import { useCallback, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { CheckIcon, DisketteIcon, RestartIcon, UndoLeftIcon, UndoRightIcon } from '@solar-icons/react/linear'
-import {
-  arrangementIsDefault,
-  isExpanded,
-  isVisible,
-  mergeLayout,
-  shownWindows,
-  toolbarTools,
-  type Arrangement,
-  type ArrangementAction,
-  type ArrangementSpec,
-} from '../lib/arrangement.ts'
-import type { Heights, Placement } from '../lib/gridLayout.ts'
-import ComponentsMenu from './ComponentsMenu.tsx'
-import GridWorkspace, { type GridHandle, type Incoming, type WorkspaceItem } from './GridWorkspace.tsx'
-import ToolShelf, { type Outside, type ShelfHandle, type ShelfTool } from './ToolShelf.tsx'
+import { CheckIcon, DisketteIcon, UndoLeftIcon, UndoRightIcon } from '@solar-icons/react/linear'
 import { useUndoKeys } from '../hooks/useUndoKeys.ts'
 import './WorkspaceShell.css'
 
 export type HeaderSlots = { start: HTMLElement | null; end: HTMLElement | null; shelf: HTMLElement | null }
 
 type Props = {
-  // What the task's components are, and where they start.
-  spec: ArrangementSpec
-  arrangement: Arrangement
-  dispatch: (action: ArrangementAction) => void
-  // Each tool as it is in the toolbar, and each window as it is on the grid (including the windows that tools become), by id.
-  tools: Record<string, ShelfTool>
-  windows: Record<string, WorkspaceItem>
+  // The task bar, under the header.
+  bar: ReactNode
   // History.
   canUndo: boolean
   canRedo: boolean
   onUndo: () => void
   onRedo: () => void
-  // Saving. Nothing is saved until the founder saves. A task with more to confirm than a single save gives its own control, which
-  // replaces the plain one.
+  // Saving. Nothing is saved until the founder saves. A task with more to confirm than a single save gives its own control, which replaces the plain one.
   saveStatus: string
   unsaved: boolean
   onSave: () => void
   saveControl?: ReactNode
-  // 'steps' draws each tool in the toolbar as its icon and name with a tick once its part is done, and keeps it there while it is
-  // open as a window. The default shows the tool's own controls, and a tool that is open leaves the bar.
-  toolbar?: 'tools' | 'steps'
   // The task's own export button, at the right of the header.
   exportButton: ReactNode
-  // Reports where each window is drawn and how tall, so the AI can place one component relative to another.
-  onResolved?: (resolved: Placement[], heights: Heights) => void
-  // Where the controls go: the left and right of the screen's fixed header, beside the logo, and the toolbar beneath it.
-  // Without them the controls are drawn above the grid.
+  // A menu that belongs to the task, at the left of the header after undo and redo (the invoice's list of invoices).
+  startExtra?: ReactNode
+  // Where the controls go: the left and right of the screen's fixed header, beside the logo, and the bar beneath it. Without them they are drawn above the panes.
   headerSlots?: HeaderSlots
+  // The frame: the thing being made on the left (three fifths), the tools panel on the right (two fifths), and an optional footer under the panel (Guide mode).
+  // Both scroll on their own. Under 42rem they become one column, the panel first, in the same tree, so nothing remounts. A task whose canvas fills the whole screen
+  // (the board) gives neither and draws its own.
+  thing?: ReactNode
+  panel?: ReactNode
+  footer?: ReactNode
+  // The panel's accessible name and the thing's.
+  thingLabel?: string
+  panelLabel?: string
 }
 
-// Everything about a workspace that is the same whatever the task: the toolbar of tools, the grid of windows, dragging a tool
-// out to be a window and back, the header controls (history, windows, reset, save, export), and the keyboard shortcuts for undo.
-// A task gives it components and a state to arrange, and it does the rest.
+// Everything about a workspace that is the same whatever the task and whichever mode: the header controls (history, the task's menu, save, export), the task bar,
+// the two panes, and the keyboard shortcuts for undo. A task gives it the parts and a state; where things sit never changes and nothing is moved, resized, hidden
+// or opened as a window. Popovers and dialogs are the only things that open.
 export default function WorkspaceShell({
-  spec,
-  arrangement,
-  dispatch,
-  tools,
-  windows,
+  bar,
   canUndo,
   canRedo,
   onUndo,
@@ -70,9 +50,13 @@ export default function WorkspaceShell({
   onSave,
   saveControl,
   exportButton,
-  toolbar = 'tools',
-  onResolved,
+  startExtra,
   headerSlots,
+  thing,
+  panel,
+  footer,
+  thingLabel = 'The work',
+  panelLabel = 'Tools',
 }: Props) {
   const [historyNote, setHistoryNote] = useState('')
 
@@ -91,45 +75,6 @@ export default function WorkspaceShell({
   // Ctrl or Cmd with Z undoes, with Shift (or Y) redoes. A text field keeps its own undo.
   useUndoKeys(undoStep, redoStep)
 
-  const moveTool = useCallback((id: string, before: string | null) => dispatch({ type: 'move_tool', id, before }), [dispatch])
-  const resize = useCallback((id: string, value: number) => dispatch({ type: 'resize', id, value }), [dispatch])
-
-  // A tool carried out of the toolbar becomes a window where it is let go. While it is carried, the grid outlines where.
-  const shelfControl = useRef<ShelfHandle | null>(null)
-  const gridControl = useRef<GridHandle | null>(null)
-  const [incoming, setIncoming] = useState<Incoming | null>(null)
-  const incomingOf = useCallback(
-    (outside: Outside): Incoming => ({
-      id: outside.id,
-      left: outside.left,
-      top: outside.top,
-      w: spec.windowSizes[outside.id].w,
-      heightPx: spec.windowSizes[outside.id].heightPx,
-    }),
-    [spec],
-  )
-  const carryOut = useCallback((outside: Outside | null) => setIncoming(outside ? incomingOf(outside) : null), [incomingOf])
-  const expandTool = (outside: Outside) => {
-    const placed = gridControl.current?.place(incomingOf(outside))
-    dispatch({ type: 'expand_tool', id: outside.id, ...(placed ? { layout: mergeLayout(arrangement.layout, placed) } : {}) })
-    setIncoming(null)
-  }
-  const returnTool = useCallback((id: string, before: string | null) => dispatch({ type: 'collapse_tool', id, before }), [dispatch])
-
-  // Hidden windows, and tools that are in the toolbar, are off the grid, and keep their place in the layout for when they come back.
-  const shown = shownWindows(spec, arrangement)
-  const visibleItems = shown.map((id) => windows[id]).filter(Boolean)
-  const visibleLayout = arrangement.layout.filter((placement) => shown.includes(placement.id))
-  const changeVisibleLayout = (next: Placement[]) => dispatch({ type: 'layout', layout: mergeLayout(arrangement.layout, next) })
-  const steps = toolbar === 'steps'
-  // In steps mode every tool stays in the bar, open or not.
-  const shelfIds = steps ? arrangement.tools.filter((id) => isVisible(arrangement, id)) : toolbarTools(arrangement)
-  const shelfTools = shelfIds.map((id) => tools[id]).filter(Boolean)
-  const toggleTool = useCallback(
-    (id: string) => dispatch(isExpanded(arrangement, id) ? { type: 'collapse_tool', id } : { type: 'expand_tool', id }),
-    [dispatch, arrangement],
-  )
-
   const startControls = (
     <>
       <div className="workspace__history" role="group" aria-label="History">
@@ -140,20 +85,7 @@ export default function WorkspaceShell({
           <UndoRightIcon size={18} aria-hidden="true" />
         </button>
       </div>
-      {/* A workspace with no window that can be taken away (such as the board, which is the whole screen) has no windows menu. */}
-      {spec.components.some((component) => component.kind === 'panel' && component.hideable) && (
-        <ComponentsMenu
-          components={spec.components}
-          kind="panel"
-          hidden={arrangement.hidden}
-          onShow={(component) => dispatch({ type: 'show', component })}
-          onHide={(component) => dispatch({ type: 'hide', component })}
-        />
-      )}
-      <button type="button" className="workspace__button" disabled={arrangementIsDefault(spec, arrangement)} onClick={() => dispatch({ type: 'reset_layout' })}>
-        <RestartIcon size={18} aria-hidden="true" />
-        <span className="workspace__label">Reset layout</span>
-      </button>
+      {startExtra}
     </>
   )
 
@@ -174,49 +106,35 @@ export default function WorkspaceShell({
     </>
   )
 
-  const shelf = (
-    <ToolShelf
-      tools={shelfTools}
-      onMove={moveTool}
-      onOutside={carryOut}
-      onExpand={expandTool}
-      controlRef={shelfControl}
-      steps={steps ? { open: arrangement.expanded, onToggle: toggleTool } : undefined}
-      add={
-        <ComponentsMenu
-          components={spec.components}
-          kind="toolbar"
-          hidden={arrangement.hidden}
-          onShow={(component) => dispatch({ type: 'show', component })}
-          onHide={(component) => dispatch({ type: 'hide', component })}
-        />
-      }
-    />
-  )
-
   const place = (slot: HTMLElement | null | undefined, controls: ReactNode) =>
     headerSlots ? slot && createPortal(controls, slot) : <div className="workspace__actions">{controls}</div>
 
+  const framed = thing !== undefined || panel !== undefined
+
   return (
-    <div className="workspace">
+    <>
       {place(headerSlots?.start, startControls)}
       {place(headerSlots?.end, endControls)}
-      {headerSlots ? headerSlots.shelf && createPortal(shelf, headerSlots.shelf) : shelf}
+      {headerSlots ? headerSlots.shelf && createPortal(bar, headerSlots.shelf) : bar}
       <p className="visually-hidden" role="status">
         {historyNote}
       </p>
 
-      <GridWorkspace
-        items={visibleItems}
-        layout={visibleLayout}
-        onLayoutChange={changeVisibleLayout}
-        onResize={resize}
-        onResolved={onResolved}
-        incoming={incoming}
-        controlRef={gridControl}
-        shelf={shelfControl}
-        onReturn={returnTool}
-      />
-    </div>
+      {framed && (
+        <div className="frame">
+          <div className="frame__stage">
+            <div className="frame__pane frame__pane--thing" role="region" aria-label={thingLabel}>
+              {thing}
+            </div>
+            <div className="frame__side">
+              <div className="frame__pane frame__pane--panel" role="region" aria-label={panelLabel}>
+                {panel}
+              </div>
+              {footer}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }

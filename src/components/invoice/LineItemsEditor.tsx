@@ -5,14 +5,12 @@ import { centsToField, formatRand, parseMoney } from '../../lib/money.ts'
 import type { InvoiceAction } from '../../lib/invoiceState.ts'
 import { lineSuggestions } from '../../lib/inlineAi.ts'
 import AskDroplet from '../AskDroplet.tsx'
-import ToolWindow from '../ToolWindow.tsx'
 import './LineItemsEditor.css'
 
 type Props = {
   lines: Line[]
   vatRegistered: boolean
   dispatch: (action: InvoiceAction) => void
-  reason: string
 }
 
 const LABELS: Record<LineProblem, string> = { description: 'a description', quantity: 'a quantity', price: 'a price' }
@@ -126,7 +124,7 @@ function Row({ line, index, count, problems, amount, dispatch }: RowProps) {
 
 // The line item editor: a row for each thing being charged for, with the amount worked out in code. A line that is begun and
 // still missing something is marked and named underneath, and a line with no price is counted as nothing until it has one.
-export default function LineItemsEditor({ lines, vatRegistered, dispatch, reason }: Props) {
+export default function LineItemsEditor({ lines, vatRegistered, dispatch }: Props) {
   const totals = computeTotals(lines, vatRegistered)
   const hintId = useId()
   const flagged = lines
@@ -134,7 +132,7 @@ export default function LineItemsEditor({ lines, vatRegistered, dispatch, reason
     .filter((entry) => entry.problems.length > 0)
 
   return (
-    <ToolWindow title="Line items" reason={reason}>
+    <>
       <div className="lines__head" aria-hidden="true">
         <span>Description</span>
         <span>Qty</span>
@@ -168,6 +166,6 @@ export default function LineItemsEditor({ lines, vatRegistered, dispatch, reason
           ))}
         </ul>
       )}
-    </ToolWindow>
+    </>
   )
 }

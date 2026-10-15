@@ -1,33 +1,61 @@
-import { useCallback, useMemo, useState, type ReactNode } from 'react'
-import { BillListIcon, BuildingsIcon, CalculatorIcon, CalendarIcon, CheckCircleIcon, SaleIcon, UserIcon } from '@solar-icons/react/linear'
-import { toolbarTools } from '../../lib/arrangement.ts'
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { AltArrowLeftIcon, AltArrowRightIcon, BuildingsIcon, CalendarIcon, CheckCircleIcon, CheckIcon, ListCheckIcon, SaleIcon, UserIcon } from '@solar-icons/react/linear'
+import type { Icon } from '@solar-icons/react/lib/types'
+import { useDismiss } from '../../hooks/useDismiss.ts'
 import { exportInvoice } from '../../lib/exportInvoice.ts'
-import { stepsDone, type Issue } from '../../lib/invoiceReadiness.ts'
+import { partsDone, type Issue } from '../../lib/invoiceReadiness.ts'
+import {
+  GUIDE_LEADS,
+  GUIDE_SHORT,
+  GUIDE_STEPS,
+  GUIDE_TITLES,
+  advance,
+  back,
+  goTo,
+  invoiceResultOf,
+  jumpTo,
+  stepBlockers,
+  stepIndex,
+  stepOfFix,
+  type GuideProgress,
+  type GuideStepId,
+  type InvoiceResult,
+} from '../../lib/invoiceGuide.ts'
 import { duplicateInvoice, openNewInvoice, openSavedInvoice } from '../../lib/invoiceStore.ts'
+import { canRedoInvoice, canUndoInvoice, type InvoiceAction, type InvoiceState } from '../../lib/invoiceState.ts'
+import { scrollToPart } from '../../lib/partNav.ts'
 import { forgetBusiness, forgetClient, forgetInvoice, markExported, settingOn } from '../../lib/projectMemory.ts'
-import { INVOICE_SPEC, INVOICE_WINDOW_SIZES, canRedoInvoice, canUndoInvoice, type InvoiceAction, type InvoiceState } from '../../lib/invoiceState.ts'
 import ExportButton from '../ExportButton.tsx'
-import type { WorkspaceItem } from '../GridWorkspace.tsx'
-import type { ShelfTool } from '../ToolShelf.tsx'
+import PartSection from '../PartSection.tsx'
+import TaskBar, { type BarItem } from '../TaskBar.tsx'
 import WorkspaceShell, { type HeaderSlots } from '../WorkspaceShell.tsx'
-import ConfirmSave from './ConfirmSave.tsx'
+import ConfirmSave, { ConfirmNote } from './ConfirmSave.tsx'
 import InvoiceDocument from './InvoiceDocument.tsx'
-import { InvoicesWindow } from './InvoicesPanel.tsx'
+import { BusinessPart, ClientPart, DetailsPart, TotalsPart, VatPart } from './InvoiceParts.tsx'
+import InvoicesMenu from './InvoicesMenu.tsx'
 import LeaveDialog from './LeaveDialog.tsx'
-import { BusinessWindow, ClientWindow, DetailsWindow, TotalsWindow, VatWindow } from './InvoiceWindows.tsx'
 import LineItemsEditor from './LineItemsEditor.tsx'
-import { ReadyWindow } from './ReadyPanel.tsx'
+import { ReadyPart } from './ReadyPanel.tsx'
 import { sameContent, useInvoiceMemory } from './useInvoiceMemory.ts'
+import './InvoiceWorkspace.css'
 
 type Props = {
+  // Workspace mode shows every part of the invoice stacked in the panel; Guide mode shows one at a time, with Back and Continue. Everything else is the same.
+  mode: 'guide' | 'workspace'
   projectId: string
   projectName: string
   state: InvoiceState
   dispatch: (action: InvoiceAction) => void
   // Another invoice takes the workspace's place: a new one, or one that was saved.
   onReplace: (state: InvoiceState) => void
-  // Asks for the note of what would be remembered to be opened (each change of the number is one ask), as the chat does when the
-  // founder is about to leave. And told when the founder has confirmed.
+  // Where the founder is in the guide. Held by Home, so it outlasts a visit to another workspace, and a switch of mode.
+  progress: GuideProgress
+  onProgress: (progress: GuideProgress) => void
+  // The invoice is finished in Guide mode: confirmed, saved and ready. Home closes it and shows the result in the chat.
+  onFinished: (result: InvoiceResult) => void
+  // Asks for the note of what would be remembered to be opened (each change of the number is one ask), as the chat does when the founder is about to leave.
+  // And told when the founder has confirmed.
   saveSignal?: number
   onConfirmed?: () => void
   // Changes when the logo is added or removed on the handoff card, so the page and the PDF read it again. And opens that card.
@@ -36,118 +64,225 @@ type Props = {
   headerSlots?: HeaderSlots
 }
 
-// What each tool is for, said once, shown as its tooltip and as its window's reason.
-const REASONS = {
-  invoices: 'Which invoice this is. An invoice keeps its number when you change it. Open it to see them all, or to start a new one.',
-  business: 'Your business details are entered once and go on every invoice. Open it to add your address and bank details.',
-  client: 'Who the invoice is for. Open it for their address, VAT number and reference.',
-  terms: 'When payment is due. Open it for the invoice number, the date and a note.',
-  vat: 'Whether you charge VAT. A business registered for VAT issues a tax invoice. Open it to see what changes.',
-  total: 'What the invoice comes to, worked out in code from the lines. Open it to see the working.',
-  ready: 'Checks the invoice before you export it, and names whatever is missing. Open it to see the list.',
-  document: 'The invoice as it will print on A4, in the colours you confirmed for the brand, so what you edit is what your client gets.',
-  lines: 'What you are charging for. Each line is a quantity and a price, and the amounts are worked out for you.',
-}
+// The icon of each part on the task bar.
+const PART_ICONS: Record<GuideStepId, Icon> = { business: BuildingsIcon, vat: SaleIcon, client: UserIcon, lines: ListCheckIcon, terms: CalendarIcon, review: CheckCircleIcon }
 
-// The invoice workspace: tools for the parts of an invoice in the toolbar, and windows for the document and the line items, on
-// the shared workspace shell. The document is drawn in the founder's confirmed palette. The project remembers the founder's
-// business, their clients and their invoices, so none is typed twice, but only what the founder confirms: Save opens a note of what
-// would be remembered, and nothing is kept unless it is confirmed. Leaving an invoice with unsaved changes asks first.
-export default function InvoiceWorkspace({ projectId, projectName, state, dispatch, onReplace, saveSignal, onConfirmed, logoVersion, onOpenHandoff, headerSlots }: Props) {
+// The invoice: the page as it will print on the left, the tools panel on the right, in the frame every task shares. The six parts are the same in both modes, with
+// the same names in the same order: on the task bar, ticked from the same check the export uses. The project remembers the founder's business, their clients and
+// their invoices, so none is typed twice, but only what the founder confirms: Save opens a note of what would be remembered, and nothing is kept unless it is
+// confirmed. Leaving an invoice with unsaved changes asks first. The composer works on the same invoice through the same reducer, so what it fills in shows at once.
+export default function InvoiceWorkspace({ mode, projectId, projectName, state, dispatch, onReplace, progress, onProgress, onFinished, saveSignal, onConfirmed, logoVersion, onOpenHandoff, headerSlots }: Props) {
   const { memory, logo, doc, content, roles, saved, unsaved, hasChanges, saveStatus, business, client, number, items, persist, confirm, readiness } = useInvoiceMemory(projectId, state, onConfirmed, logoVersion)
-  const [leaving, setLeaving] = useState<{ what: string; run: () => void | Promise<void> } | null>(null)
+  const guided = mode === 'guide'
+  const { step } = progress
+  const index = stepIndex(step)
+  const last = index === GUIDE_STEPS.length - 1
 
+  // ---- Leaving this invoice for another ----
+  const [leaving, setLeaving] = useState<{ what: string; run: () => void | Promise<void> } | null>(null)
   // Leaving saves nothing, so an invoice with changes asks first.
   const guard = (what: string, run: () => void | Promise<void>) => (hasChanges ? setLeaving({ what, run }) : run())
   const openInvoice = (id: string) =>
     guard(number, async () => {
-      const next = await openSavedInvoice(projectId, id, doc)
+      const next = await openSavedInvoice(projectId, id)
       if (next) onReplace(next)
     })
-  const newInvoice = () => guard(number, async () => onReplace(await openNewInvoice(projectId, doc)))
+  const newInvoice = () => guard(number, async () => onReplace(await openNewInvoice(projectId)))
   const copyInvoice = (id: string) =>
     guard(number, async () => {
-      const next = await duplicateInvoice(projectId, id, doc)
+      const next = await duplicateInvoice(projectId, id)
       if (next) onReplace(next)
     })
 
-  const reason = (id: keyof typeof REASONS) => doc.reasons[id] ?? REASONS[id]
+  // ---- Guide mode: moving between parts ----
+  // What was missing when Continue or Finish was pressed. Each goes as soon as it is fixed.
+  const [blocked, setBlocked] = useState<Issue[]>([])
+  const stillBlocked = blocked.filter((issue) => stepBlockers(step, readiness).some((now) => now.id === issue.id))
+  const [finishing, setFinishing] = useState(false)
+  const [finishNote, setFinishNote] = useState('')
+  const finishRef = useRef<HTMLDivElement>(null)
+  const closeFinish = useCallback(() => setFinishing(false), [])
+  useDismiss(finishing, closeFinish, finishRef)
 
+  // The part on screen in Guide mode. When the founder moves to a part, its first field takes the cursor as soon as the part is there (after the last one has gone),
+  // never when the guide first opens: the message bar keeps the cursor then.
+  const cardEl = useRef<HTMLDivElement | null>(null)
+  const moved = useRef(false)
+  const cardRef = useCallback((node: HTMLDivElement | null) => {
+    cardEl.current = node
+    if (!node || !moved.current) return
+    moved.current = false
+    // A field first (the heading comes before them on the page), or the part itself when it has none.
+    const field = node.querySelector<HTMLElement>('input, textarea, select') ?? node.querySelector<HTMLElement>('[data-part]') ?? node
+    field.focus({ preventScroll: true })
+  }, [])
 
-  // Goes to the part of the workspace that fixes something: a tool is shown as a window if it is in the toolbar (or brought back
-  // if it was hidden), then the first thing that needs doing in it is focused.
-  const fix = useCallback(
-    (id: string) => {
-      const actions: InvoiceAction[] = []
-      if (doc.hidden.includes(id)) actions.push({ type: 'show', component: id })
-      if (toolbarTools({ ...doc, hidden: [] }).includes(id)) actions.push({ type: 'expand_tool', id })
-      if (actions.length > 0) dispatch({ type: 'batch', actions })
-      // The window exists a frame or two later, so it is looked for then.
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => {
-          const part = document.querySelector<HTMLElement>(`.gw__item[data-id="${id}"]`)
-          if (!part) return
-          part.scrollIntoView?.({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest' })
-          part.querySelector<HTMLElement>('[aria-invalid="true"], input, textarea, select')?.focus({ preventScroll: true })
-        }),
-      )
-    },
-    [doc, dispatch],
+  const move = (next: GuideProgress) => {
+    if (next === progress) return
+    moved.current = true
+    setBlocked([])
+    setFinishNote('')
+    onProgress(next)
+  }
+
+  const showBlocked = (issues: Issue[]) => {
+    setBlocked(issues)
+    cardEl.current?.querySelector<HTMLElement>('[aria-invalid="true"], input, textarea, select')?.focus({ preventScroll: true })
+  }
+
+  const next = () => {
+    const result = advance(progress, readiness)
+    if (result.blocked.length > 0) showBlocked(result.blocked)
+    else move(result.progress)
+  }
+
+  // Finish: only an invoice with nothing required missing, and only through the confirm note. One that is already saved, unchanged, is finished as it is.
+  const finish = () => {
+    setFinishNote('')
+    if (!readiness.ready) return setBlocked(readiness.required)
+    if (unsaved) setFinishing(true)
+    else onFinished(invoiceResultOf(doc.invoiceId, content))
+  }
+  const confirmFinish = async (ids: string[]) => {
+    const keepsInvoice = ids.includes('invoice') || !items.some((item) => item.id === 'invoice')
+    const ok = await confirm(ids)
+    if (!ok) return setFinishNote('I could not save the invoice, because it could not be stored. Try again.')
+    if (!keepsInvoice) return setFinishNote('The invoice itself was left unticked, so it is not saved and stays open. Finish again and keep it ticked to save it.')
+    onFinished(invoiceResultOf(doc.invoiceId, content))
+  }
+
+  // ---- Workspace mode: the part in view ----
+  const [looking, setLooking] = useState<GuideStepId>(GUIDE_STEPS[0])
+  // The part the cursor is in is the one in view.
+  const noteFocus = (event: { target: EventTarget }) => {
+    const id = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-part]')?.dataset.part : undefined
+    if (id && (GUIDE_STEPS as readonly string[]).includes(id)) setLooking(id as GuideStepId)
+  }
+
+  // Goes to a part, whichever mode: scrolled to and given the cursor in Workspace mode, jumped to in Guide mode. The Fix buttons and the blocked Export use it.
+  const goToPart = (id: GuideStepId) => {
+    if (guided) return move(jumpTo(progress, id))
+    setLooking(id)
+    scrollToPart(id)
+  }
+
+  // A press on a part of the bar.
+  const select = (id: GuideStepId) => (guided ? move(goTo(progress, id)) : goToPart(id))
+
+  // ---- The parts ----
+  const done = useMemo(() => partsDone(readiness), [readiness])
+  const body: Record<GuideStepId, ReactNode> = {
+    business: <BusinessPart business={content.business} status={business} onForget={() => persist(forgetBusiness(memory))} dispatch={dispatch} />,
+    vat: <VatPart content={content} dispatch={dispatch} />,
+    client: <ClientPart client={content.client} status={client} remembered={memory.clients} onForget={(id) => persist(forgetClient(memory, id))} dispatch={dispatch} />,
+    lines: (
+      <>
+        <LineItemsEditor lines={content.lines} vatRegistered={content.vatRegistered} dispatch={dispatch} />
+        <h3 className="part__subheading">Totals</h3>
+        <TotalsPart content={content} />
+      </>
+    ),
+    terms: <DetailsPart details={content.details} dispatch={dispatch} />,
+    review: <ReadyPart readiness={readiness} onFix={(issue: Issue) => goToPart(stepOfFix(issue.fix))} />,
+  }
+  const section = (id: GuideStepId) => (
+    <PartSection key={id} id={id} title={GUIDE_TITLES[id]} lead={GUIDE_LEADS[id]}>
+      {body[id]}
+    </PartSection>
   )
 
-  // The toolbar holds each tool as its icon and name. A tick shows once its part of the invoice is complete.
-  const done = useMemo(() => stepsDone(readiness), [readiness])
-  const tools: Record<string, ShelfTool> = useMemo(
-    () => ({
-      invoices: { id: 'invoices', title: 'Invoices', icon: BillListIcon, reason: reason('invoices') },
-      business: { id: 'business', title: 'Your business', icon: BuildingsIcon, reason: reason('business'), done: done.business },
-      client: { id: 'client', title: 'Client', icon: UserIcon, reason: reason('client'), done: done.client },
-      terms: { id: 'terms', title: 'Terms', icon: CalendarIcon, reason: reason('terms'), done: done.terms },
-      vat: { id: 'vat', title: 'VAT', icon: SaleIcon, reason: reason('vat'), done: done.vat },
-      total: { id: 'total', title: 'Total', icon: CalculatorIcon, reason: reason('total'), done: done.total },
-      ready: { id: 'ready', title: 'Ready to export?', icon: CheckCircleIcon, reason: reason('ready'), done: done.ready },
-    }),
-    // reason() only reads doc.reasons.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [doc.reasons, done],
+  const bar: BarItem[] = GUIDE_STEPS.map((id, place) => ({
+    id,
+    title: GUIDE_TITLES[id],
+    label: GUIDE_SHORT[id],
+    reason: GUIDE_LEADS[id],
+    icon: PART_ICONS[id],
+    done: done[id],
+    current: guided ? (id === step ? 'step' : undefined) : id === looking ? 'location' : undefined,
+    // In Guide mode a part further on than the founder has got cannot be skipped to.
+    locked: guided && place > progress.reached,
+    onSelect: () => select(id),
+  }))
+
+  const preview = (
+    <div className="workspace__card">
+      <InvoiceDocument content={content} roles={roles} reason="The invoice as it will print on A4, in the colours you confirmed for the brand. It changes as you fill in each part." logo={logo} onOpenHandoff={onOpenHandoff} />
+    </div>
   )
 
-  const windows: Record<string, WorkspaceItem> = useMemo(() => {
-    const card = (node: ReactNode) => <div className="workspace__card">{node}</div>
-    const panel = (id: string, title: string, node: ReactNode, extra: Partial<WorkspaceItem> = {}): WorkspaceItem => ({
-      id,
-      title,
-      w: INVOICE_WINDOW_SIZES[id].w,
-      minCols: 6,
-      node: card(node),
-      ...extra,
-    })
-    return {
-      document: panel('document', 'Invoice', <InvoiceDocument content={content} roles={roles} reason={reason('document')} logo={logo} onOpenHandoff={onOpenHandoff} />, { distance: 0.12, minCols: 8 }),
-      lines: panel('lines', 'Line items', <LineItemsEditor lines={content.lines} vatRegistered={content.vatRegistered} dispatch={dispatch} reason={reason('lines')} />, { delay: 0.5, distance: 0.6, minCols: 8 }),
-      invoices: panel('invoices', 'Invoices', <InvoicesWindow currentId={doc.invoiceId} current={content} saved={memory.invoices} onOpen={openInvoice} onNew={newInvoice} onCopy={copyInvoice} onForget={(id) => persist(forgetInvoice(memory, id))} reason={reason('invoices')} />, { tool: true, distance: 0.3 }),
-      business: panel('business', 'Your business', <BusinessWindow business={content.business} status={business} onForget={() => persist(forgetBusiness(memory))} dispatch={dispatch} reason={reason('business')} />, { tool: true, distance: 0.3 }),
-      client: panel('client', 'Client', <ClientWindow client={content.client} status={client} remembered={memory.clients} onForget={(id) => persist(forgetClient(memory, id))} dispatch={dispatch} reason={reason('client')} />, { tool: true, distance: 0.3 }),
-      terms: panel('terms', 'Invoice details', <DetailsWindow details={content.details} dispatch={dispatch} reason={reason('terms')} />, { tool: true, distance: 0.3 }),
-      vat: panel('vat', 'VAT', <VatWindow content={content} dispatch={dispatch} reason={reason('vat')} />, { tool: true, distance: 0.3 }),
-      total: panel('total', 'Totals', <TotalsWindow content={content} reason={reason('total')} />, { tool: true, distance: 0.3 }),
-      ready: panel('ready', 'Ready to export?', <ReadyWindow readiness={readiness} onFix={(issue: Issue) => fix(issue.fix)} reason={reason('ready')} />, { tool: true, distance: 0.3 }),
-    }
-    // reason() only reads doc.reasons.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    // The open, new and copy handlers read the latest state each time they are called.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [content, doc.reasons, doc.invoiceId, roles, dispatch, readiness, fix, memory, business, client])
+  const footer = guided && (
+    <div className="guide__actions">
+      <button type="button" className="workspace__button" onClick={() => move(back(progress))} disabled={index === 0}>
+        <AltArrowLeftIcon size={18} aria-hidden="true" />
+        <span>Back</span>
+      </button>
+      {last ? (
+        <div className="confirm" ref={finishRef}>
+          <button type="button" className="workspace__button workspace__button--primary" onClick={finish} aria-haspopup="dialog" aria-expanded={finishing}>
+            <CheckIcon size={18} aria-hidden="true" />
+            <span>Finish</span>
+          </button>
+          <AnimatePresence>
+            {finishing && <ConfirmNote above projectName={projectName} items={items} notesOn={settingOn(memory, 'notes')} confirmLabel="Save and finish" onConfirm={(ids) => void confirmFinish(ids)} onCancel={closeFinish} />}
+          </AnimatePresence>
+        </div>
+      ) : (
+        <button type="button" className="workspace__button workspace__button--primary guide__next" onClick={next}>
+          <span>Continue</span>
+          <AltArrowRightIcon size={18} aria-hidden="true" />
+        </button>
+      )}
+      <div className="guide__missing" role="alert">
+        {finishNote ? (
+          <p>{finishNote}</p>
+        ) : (
+          stillBlocked.length > 0 && (
+            <>
+              <p className="guide__missing-title">{last ? 'Before you can finish:' : 'Before you go on:'}</p>
+              <ul>
+                {stillBlocked.slice(0, 4).map((issue) => (
+                  <li key={issue.id}>{issue.text}</li>
+                ))}
+                {stillBlocked.length > 4 && <li>{`And ${stillBlocked.length - 4} more.`}</li>}
+              </ul>
+            </>
+          )
+        )}
+      </div>
+    </div>
+  )
+
+  const panel = guided ? (
+    <AnimatePresence mode="wait" initial={false}>
+      <motion.div
+        key={step}
+        ref={cardRef}
+        tabIndex={-1}
+        className="guide__card"
+        initial={{ opacity: 0, y: 8, filter: 'blur(4px)' }}
+        animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+        exit={{ opacity: 0, y: -6, filter: 'blur(4px)' }}
+        transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
+      >
+        <p className="guide__count">{`Step ${index + 1} of ${GUIDE_STEPS.length}`}</p>
+        {section(step)}
+      </motion.div>
+    </AnimatePresence>
+  ) : (
+    <div className="frame__parts" onFocusCapture={noteFocus}>
+      {GUIDE_STEPS.map(section)}
+    </div>
+  )
 
   return (
     <>
       <WorkspaceShell
-        spec={INVOICE_SPEC}
-        arrangement={doc}
-        dispatch={dispatch}
-        tools={tools}
-        windows={windows}
-        toolbar="steps"
+        bar={<TaskBar kind="parts" label="Parts of the invoice" items={bar} />}
+        thing={preview}
+        thingLabel="The invoice"
+        panel={panel}
+        panelLabel={guided ? `Step ${index + 1} of ${GUIDE_STEPS.length}: ${GUIDE_TITLES[step]}` : 'The parts of the invoice'}
+        footer={footer}
         canUndo={canUndoInvoice(state)}
         canRedo={canRedoInvoice(state)}
         onUndo={() => dispatch({ type: 'undo' })}
@@ -155,7 +290,8 @@ export default function InvoiceWorkspace({ projectId, projectName, state, dispat
         saveStatus={saveStatus}
         unsaved={unsaved}
         onSave={() => {}}
-        saveControl={<ConfirmSave projectName={projectName} items={items} unsaved={unsaved} status={saveStatus} onConfirm={confirm} openSignal={saveSignal} notesOn={settingOn(memory, 'notes')} />}
+        startExtra={<InvoicesMenu currentId={doc.invoiceId} current={content} saved={memory.invoices} onOpen={openInvoice} onNew={newInvoice} onCopy={copyInvoice} onForget={(id) => persist(forgetInvoice(memory, id))} />}
+        saveControl={<ConfirmSave projectName={projectName} items={items} unsaved={unsaved} status={saveStatus} onConfirm={(ids) => void confirm(ids)} openSignal={saveSignal} notesOn={settingOn(memory, 'notes')} />}
         exportButton={
           <ExportButton
             onExport={async () => {
@@ -172,13 +308,18 @@ export default function InvoiceWorkspace({ projectId, projectName, state, dispat
                 ? undefined
                 : {
                     reason: `${readiness.required.length === 1 ? '1 thing needs' : `${readiness.required.length} things need`} fixing before you can export.`,
-                    onBlocked: () => fix('ready'),
+                    onBlocked: () => goToPart('review'),
                   }
             }
           />
         }
         headerSlots={headerSlots}
       />
+      {guided && (
+        <p className="visually-hidden" role="status">
+          {`Step ${index + 1} of ${GUIDE_STEPS.length}: ${GUIDE_TITLES[step]}.`}
+        </p>
+      )}
       {leaving && (
         <LeaveDialog
           what={leaving.what}

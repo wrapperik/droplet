@@ -5,7 +5,7 @@ import { newContent, type InvoiceContent } from '../../lib/invoice.ts'
 import { resolveRoles } from '../../lib/palette.ts'
 import { starterBlocks } from '../../compose/fallback.ts'
 import InvoiceDocument from './InvoiceDocument.tsx'
-import { BusinessWindow, ClientWindow, DetailsWindow, TotalsWindow, VatWindow } from './InvoiceWindows.tsx'
+import { BusinessPart, ClientPart, DetailsPart, TotalsPart, VatPart } from './InvoiceParts.tsx'
 
 const roles = resolveRoles(starterBlocks())
 const plain = (text: string | null) => (text ?? '').replace(/[\s ]/g, ' ')
@@ -102,11 +102,11 @@ describe('the logo on the invoice page', () => {
   })
 })
 
-describe('the windows', () => {
-  it('the business window changes one field at a time, and says where it is kept', async () => {
+describe('the parts', () => {
+  it('the Business part changes one field at a time, and says where it is kept', async () => {
     const user = userEvent.setup()
     const dispatch = vi.fn()
-    render(<BusinessWindow business={newContent('2026-10-04').business} status="none" onForget={vi.fn()} dispatch={dispatch} reason="Why." />)
+    render(<BusinessPart business={newContent('2026-10-04').business} status="none" onForget={vi.fn()} dispatch={dispatch} />)
     await user.type(screen.getByLabelText('Branch code'), '2')
     expect(dispatch).toHaveBeenLastCalledWith({ type: 'set_business', patch: { branchCode: '2' } })
     await user.type(screen.getByLabelText('Address'), 'x')
@@ -114,42 +114,42 @@ describe('the windows', () => {
     expect(screen.getByText('Kept on this device only.')).toBeInTheDocument()
   })
 
-  it('the client window changes the client', async () => {
+  it('the Client part changes the client', async () => {
     const user = userEvent.setup()
     const dispatch = vi.fn()
-    render(<ClientWindow client={newContent('2026-10-04').client} status="none" remembered={[]} onForget={vi.fn()} dispatch={dispatch} reason="Why." />)
+    render(<ClientPart client={newContent('2026-10-04').client} status="none" remembered={[]} onForget={vi.fn()} dispatch={dispatch} />)
     await user.type(screen.getByLabelText('Their reference'), 'P')
     expect(dispatch).toHaveBeenLastCalledWith({ type: 'set_client', patch: { reference: 'P' } })
   })
 
-  it('the details window shows a date field for the due date only when it is a date the founder chooses, and says what the terms come to', async () => {
+  it('the Details part shows a date field for the due date only when it is a date the founder chooses, and says what the terms come to', async () => {
     const user = userEvent.setup()
     const dispatch = vi.fn()
-    const { rerender } = render(<DetailsWindow details={newContent('2026-10-04').details} dispatch={dispatch} reason="Why." />)
+    const { rerender } = render(<DetailsPart details={newContent('2026-10-04').details} dispatch={dispatch} />)
     expect(screen.getByText('That is 18 October 2026.')).toBeInTheDocument()
     expect(screen.queryByLabelText('Due date')).not.toBeInTheDocument()
     await user.type(screen.getByLabelText('Invoice number'), '9')
     expect(dispatch).toHaveBeenLastCalledWith({ type: 'set_details', patch: { number: 'INV-00019' } })
-    rerender(<DetailsWindow details={{ ...newContent('2026-10-04').details, terms: 'custom' }} dispatch={dispatch} reason="Why." />)
+    rerender(<DetailsPart details={{ ...newContent('2026-10-04').details, terms: 'custom' }} dispatch={dispatch} />)
     expect(screen.getByLabelText('Due date')).toBeInTheDocument()
     expect(screen.getByText('Choose a date below.')).toBeInTheDocument()
   })
 
-  it('the VAT window explains what the switch changes, and asks for the VAT number only when registered', async () => {
+  it('the VAT part explains what the switch changes, and asks for the VAT number only when registered', async () => {
     const user = userEvent.setup()
     const dispatch = vi.fn()
-    const { rerender } = render(<VatWindow content={newContent('2026-10-04')} dispatch={dispatch} reason="Why." />)
+    const { rerender } = render(<VatPart content={newContent('2026-10-04')} dispatch={dispatch} />)
     expect(screen.getByText(/plain invoice with no VAT/)).toBeInTheDocument()
     expect(screen.queryByLabelText('Your VAT number')).not.toBeInTheDocument()
     await user.click(screen.getByRole('switch'))
     expect(dispatch).toHaveBeenCalledWith({ type: 'set_vat_registered', value: true })
-    rerender(<VatWindow content={complete()} dispatch={dispatch} reason="Why." />)
+    rerender(<VatPart content={complete()} dispatch={dispatch} />)
     expect(screen.getByText(/tax invoice. It charges 15% VAT/)).toBeInTheDocument()
     expect(screen.getByLabelText('Your VAT number')).toHaveValue('4123456789')
   })
 
-  it('the totals window shows the working for each counted line and warns about one that is not counted', () => {
-    render(<TotalsWindow content={complete()} reason="Why." />)
+  it('the totals shows the working for each counted line and warns about one that is not counted', () => {
+    render(<TotalsPart content={complete()} />)
     const working = screen.getByRole('list')
     expect(within(working).getAllByRole('listitem')).toHaveLength(1)
     expect(plain(working.textContent)).toContain('12 × R 450,00')
@@ -158,8 +158,8 @@ describe('the windows', () => {
     expect(screen.getByText('VAT (15%)')).toBeInTheDocument()
   })
 
-  it('the totals window says nothing is counted yet when no line is', () => {
-    render(<TotalsWindow content={newContent('2026-10-04')} reason="Why." />)
+  it('the totals says nothing is counted yet when no line is', () => {
+    render(<TotalsPart content={newContent('2026-10-04')} />)
     expect(screen.getByText(/Nothing is counted yet/)).toBeInTheDocument()
     expect(screen.queryByRole('list')).not.toBeInTheDocument()
   })

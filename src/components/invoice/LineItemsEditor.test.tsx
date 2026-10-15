@@ -13,7 +13,7 @@ function Harness({ vat = false }: { vat?: boolean }) {
   const { content } = invoiceDocOf(state)
   return (
     <>
-      <LineItemsEditor lines={content.lines} vatRegistered={content.vatRegistered} dispatch={dispatch} reason="Because." />
+      <LineItemsEditor lines={content.lines} vatRegistered={content.vatRegistered} dispatch={dispatch} />
       <button type="button" onClick={() => dispatch({ type: 'undo' })}>
         Undo
       </button>

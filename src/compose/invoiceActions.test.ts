@@ -5,7 +5,7 @@ import { invoiceDocOf, openInvoiceWorkspace, reduceInvoice, type InvoiceState } 
 import { amountsIn, applyInvoiceTurnActions, priceWasGiven, type KnownClient } from './invoiceActions.ts'
 import type { InvoiceTurnAction } from './invoiceSpec.ts'
 
-const fresh = () => openInvoiceWorkspace(newContent('2026-10-04', 'INV-0007'), null, 'i1')
+const fresh = () => openInvoiceWorkspace(newContent('2026-10-04', 'INV-0007'), 'i1')
 const saved: KnownClient[] = [{ name: 'Pretoria Print Works', client: { ...emptyClient(), name: 'Pretoria Print Works', address: '5 Church Square' } }]
 const apply = (actions: InvoiceTurnAction[], founder = ['x'], base: InvoiceState = fresh()) => applyInvoiceTurnActions({ base, actions, clients: saved, founderText: founder })
 const content = (state: InvoiceState) => invoiceDocOf(state).content

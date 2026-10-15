@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -29,7 +29,7 @@ const seed = async () => {
   memory = withClient(memory, client, '2026-10-01T08:00:00.000Z', 'c1')
   memory = withInvoice(memory, 'i1', complete('INV-0001'), '2026-10-02T08:00:00.000Z')
   await saveMemory(PROJECT, memory)
-  await savePalette(PROJECT, { blocks: [{ id: 1, hex: '#0E1A2B', role: 'text' }, { id: 2, hex: '#F4F8FB', role: 'background' }], layout: [] })
+  await savePalette(PROJECT, { blocks: [{ id: 1, hex: '#0E1A2B', role: 'text' }, { id: 2, hex: '#F4F8FB', role: 'background' }] })
 }
 
 beforeEach(() => {
@@ -105,7 +105,7 @@ describe('the library in Home', () => {
     await openLibrary(user)
     await user.click(await screen.findByRole('button', { name: 'Build the brand' }))
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Library' })).not.toBeInTheDocument())
-    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Save' })).toBeInTheDocument()
   })
 
   it('returns to the workspace that was open, with its work, when closed', async () => {
@@ -137,9 +137,7 @@ describe('the library in Home', () => {
     await user.click(screen.getByRole('button', { name: 'Choose a task' }))
     await user.click(await screen.findByRole('menuitem', { name: /Make an invoice/ }))
     // The invoice that opens is the saved one, so something is changed in it.
-    const step = within(await screen.findByRole('toolbar', { name: 'Tools' })).getByRole('button', { name: /^Client\./ })
-    if (step.getAttribute('aria-expanded') !== 'true') await user.click(step)
-    await user.type(screen.getByLabelText('Client or company name'), ' Ltd')
+    await user.type(await screen.findByLabelText('Client or company name'), ' Ltd')
     await openLibrary(user)
     await user.click(await screen.findByRole('button', { name: 'Make a new invoice from Invoice INV-0001' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('changes that are not saved')

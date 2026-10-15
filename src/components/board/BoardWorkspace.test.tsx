@@ -66,6 +66,15 @@ describe('the board workspace', () => {
     expect((await loadMemory('p1')).idea).toBeUndefined()
   })
 
+  it('has the seven tools on the task bar with their names written out, in a fixed order, and nothing to add, remove, move or reset', () => {
+    render(<Harness />)
+    const bar = screen.getByRole('toolbar', { name: 'Board tools' })
+    expect(within(bar).getAllByRole('group').map((group) => group.getAttribute('aria-label'))).toEqual(['Select', 'Sticky note', 'Shape', 'Text', 'Frame', 'Arrow', 'Templates'])
+    for (const label of ['Select', 'Note', 'Shape', 'Text', 'Frame', 'Arrow', 'Templates']) expect(within(bar).getByRole('button', { name: label })).toHaveTextContent(label)
+    expect(within(bar).getAllByRole('tooltip')).toHaveLength(7)
+    for (const name of [/Reset layout/, /Add or remove/, /Windows/, /drag/i]) expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
+  })
+
   it('has an Export button in the header', () => {
     render(<Harness />)
     expect(screen.getByRole('button', { name: 'Export the board' })).toBeInTheDocument()

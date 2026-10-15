@@ -17,7 +17,7 @@ export type Issue = {
   id: string
   severity: IssueSeverity
   text: string
-  // The component that fixes it: a tool or a window of the invoice workspace.
+  // The part of the invoice that fixes it.
   fix: 'business' | 'client' | 'terms' | 'vat' | 'lines'
 }
 
@@ -79,19 +79,20 @@ export function checkInvoice(content: InvoiceContent, { usedNumbers = [] }: Chec
   return { ready: required.length === 0, required, recommended: issues.filter((issue) => issue.severity === 'recommended') }
 }
 
-// Which toolbar steps are complete: a step is complete when nothing required of its part is outstanding. A tool with nothing to
-// complete (the list of invoices) has no entry. Recommended items never hold a step back.
-export type StepId = 'business' | 'client' | 'terms' | 'vat' | 'total' | 'ready'
+// Which parts of the invoice are complete, for the ticks on the task bar in both modes and for the export's blocked state: a part is complete when nothing
+// required of it is outstanding. The names are the six parts of the invoice, in the order they are shown (see `GUIDE_STEPS`). 'review' is the whole invoice.
+// Recommended items never hold a part back.
+export type PartId = Issue['fix'] | 'review'
 
-export function stepsDone(readiness: Readiness): Record<StepId, boolean> {
+export function partsDone(readiness: Readiness): Record<PartId, boolean> {
   const clear = (fix: Issue['fix']) => !readiness.required.some((issue) => issue.fix === fix)
   return {
     business: clear('business'),
-    client: clear('client'),
-    terms: clear('terms'),
     vat: clear('vat'),
-    // The total is the lines, worked out: it is done when every line is whole and the sum is more than nothing.
-    total: clear('lines'),
-    ready: readiness.ready,
+    client: clear('client'),
+    // The items are the lines, worked out: done when every line begun is whole and the sum is more than nothing.
+    lines: clear('lines'),
+    terms: clear('terms'),
+    review: readiness.ready,
   }
 }

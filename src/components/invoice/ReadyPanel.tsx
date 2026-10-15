@@ -1,6 +1,5 @@
 import { CheckIcon, HourglassIcon } from '@solar-icons/react/linear'
 import type { Issue, Readiness } from '../../lib/invoiceReadiness.ts'
-import ToolWindow from '../ToolWindow.tsx'
 import '../StatusMark.css'
 import './ReadyPanel.css'
 
@@ -32,11 +31,11 @@ function IssueList({ issues, onFix }: { issues: Issue[]; onFix: (issue: Issue) =
   )
 }
 
-// The window: every required item named, with a button that goes to the part of the workspace that fixes it, and then what is
+// The Review part: every required item named, with a button that goes to the part of the invoice that fixes it, and then what is
 // only worth adding. Nothing here is hidden once the invoice is ready: the suggestions stay, since they never block.
-export function ReadyWindow({ readiness, onFix, reason }: { readiness: Readiness; onFix: (issue: Issue) => void; reason: string }) {
+export function ReadyPart({ readiness, onFix }: { readiness: Readiness; onFix: (issue: Issue) => void }) {
   return (
-    <ToolWindow title="Ready to export?" reason={reason}>
+    <>
       <div className="ready">
         <Status ready={readiness.ready} count={readiness.required.length} />
         {readiness.ready ? (
@@ -54,6 +53,6 @@ export function ReadyWindow({ readiness, onFix, reason }: { readiness: Readiness
           </>
         )}
       </div>
-    </ToolWindow>
+    </>
   )
 }

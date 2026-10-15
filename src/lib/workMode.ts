@@ -1,5 +1,5 @@
 // How a task opens. In Guide mode the founder is shown one part of the task at a time, in the middle of the screen, until it is finished.
-// In Workspace mode the whole workspace opens at once, with every tool in the toolbar and the windows on the grid. The founder chooses
+// In Workspace mode every part of the task is in the panel at once. The founder chooses
 // in the menu beside the message box, and the choice stays until they change it. It is kept per device, like the theme.
 export type WorkMode = 'guide' | 'workspace'
 

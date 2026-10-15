@@ -1,7 +1,6 @@
 import { newContent, type InvoiceContent } from './invoice.ts'
 import { checkInvoice } from './invoiceReadiness.ts'
-import { invoiceDocOf, openInvoiceWorkspace } from './invoiceState.ts'
-import { GUIDE_STEPS, advance, back, changedSteps, goTo, revealActions, stepsOfTargets, stepToShow, invoiceResultOf, invoiceResultSchema, jumpTo, progressFor, resultMessage, startGuide, stepBlockers, stepOfFix } from './invoiceGuide.ts'
+import { GUIDE_STEPS, advance, back, changedSteps, goTo, stepsOfTargets, stepToShow, invoiceResultOf, invoiceResultSchema, jumpTo, progressFor, resultMessage, startGuide, stepBlockers, stepOfFix } from './invoiceGuide.ts'
 
 const blank = (): InvoiceContent => newContent('2026-10-10', 'INV-0007')
 
@@ -118,25 +117,17 @@ describe('showing what Droplet changed', () => {
     expect(stepToShow('lines', ['client', 'lines'])).toBeNull()
     expect(stepToShow('business', [])).toBeNull()
   })
-
-  it('opens the windows of the parts that changed in the workspace, and shows one that was hidden', () => {
-    const doc = invoiceDocOf(openInvoiceWorkspace(blank()))
-    expect(revealActions(doc, ['client', 'lines'])).toEqual([{ type: 'expand_tool', id: 'client' }])
-    expect(revealActions({ ...doc, hidden: ['terms'] }, ['terms'])).toEqual([{ type: 'show', component: 'terms' }, { type: 'expand_tool', id: 'terms' }])
-    expect(revealActions({ ...doc, expanded: [...doc.expanded, 'client'] }, ['client'])).toEqual([])
-    expect(revealActions(doc, ['review'])).toEqual([])
-  })
 })
 
 describe('the parts a change touched', () => {
-  it('reads a field by what it holds, a line as the items, and a window as its own part, in the guide\'s order', () => {
+  it('reads a field by what it holds, a line as the items, and a part as itself, in the guide\'s order', () => {
     expect(
       stepsOfTargets([
         { kind: 'line', id: 3 },
         { kind: 'field', id: 'client.name' },
         { kind: 'field', id: 'details.terms' },
         { kind: 'field', id: 'vat.registered' },
-        { kind: 'window', id: 'business' },
+        { kind: 'part', id: 'business' },
         { kind: 'item', id: 'n1' },
       ]),
     ).toEqual(['business', 'vat', 'client', 'lines', 'terms'])

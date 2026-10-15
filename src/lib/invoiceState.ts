@@ -1,15 +1,3 @@
-import {
-  isArrangementAction,
-  openArrangement,
-  reduceArrangement,
-  arrangementIsDefault,
-  arrangementUnsaved,
-  type Arrangement,
-  type ArrangementAction,
-  type ArrangementSave,
-  type ArrangementSpec,
-} from './arrangement.ts'
-import type { Placement } from './gridLayout.ts'
 import { newId } from './ids.ts'
 import { canRedo, canUndo, commit, createHistory, redo, undo, type History } from './history.ts'
 import {
@@ -26,47 +14,7 @@ import type { SavedInvoice } from './memorySave.ts'
 // Everything about the invoice workspace that can change, and the one set of actions that changes it. As with the palette,
 // the interface and (later) the AI both go through `reduce`, and one undo step covers a person's edit or a whole turn.
 
-// The tools sit in the toolbar and become windows when dragged out. The document and the line items are always windows.
-export const INVOICE_COMPONENTS: ArrangementSpec['components'] = [
-  { id: 'invoices', label: 'Invoices', kind: 'toolbar', hideable: true },
-  { id: 'business', label: 'Your business', kind: 'toolbar', hideable: true },
-  { id: 'client', label: 'Client', kind: 'toolbar', hideable: true },
-  { id: 'terms', label: 'Terms', kind: 'toolbar', hideable: true },
-  { id: 'vat', label: 'VAT', kind: 'toolbar', hideable: true },
-  { id: 'total', label: 'Total', kind: 'toolbar', hideable: true },
-  { id: 'ready', label: 'Ready to export?', kind: 'toolbar', hideable: true },
-  { id: 'document', label: 'Invoice', kind: 'panel', hideable: false },
-  { id: 'lines', label: 'Line items', kind: 'panel', hideable: false },
-]
-
-export const INVOICE_WINDOW_SIZES: ArrangementSpec['windowSizes'] = {
-  document: { w: 14, heightPx: 900 },
-  lines: { w: 10, heightPx: 340 },
-  invoices: { w: 8, heightPx: 420 },
-  business: { w: 8, heightPx: 560 },
-  client: { w: 8, heightPx: 460 },
-  terms: { w: 8, heightPx: 420 },
-  vat: { w: 8, heightPx: 320 },
-  total: { w: 8, heightPx: 300 },
-  ready: { w: 8, heightPx: 380 },
-}
-
-// The invoice document beside the line items. The tools also have a place on the grid, kept for when they are dragged out.
-export const INVOICE_LAYOUT: Placement[] = [
-  { id: 'document', col: 0, row: 0, w: INVOICE_WINDOW_SIZES.document.w },
-  { id: 'lines', col: 14, row: 0, w: INVOICE_WINDOW_SIZES.lines.w },
-  { id: 'invoices', col: 16, row: 120, w: INVOICE_WINDOW_SIZES.invoices.w },
-  { id: 'business', col: 0, row: 60, w: INVOICE_WINDOW_SIZES.business.w },
-  { id: 'client', col: 8, row: 60, w: INVOICE_WINDOW_SIZES.client.w },
-  { id: 'terms', col: 16, row: 60, w: INVOICE_WINDOW_SIZES.terms.w },
-  { id: 'vat', col: 0, row: 90, w: INVOICE_WINDOW_SIZES.vat.w },
-  { id: 'total', col: 8, row: 90, w: INVOICE_WINDOW_SIZES.total.w },
-  { id: 'ready', col: 16, row: 90, w: INVOICE_WINDOW_SIZES.ready.w },
-]
-
-export const INVOICE_SPEC: ArrangementSpec = { components: INVOICE_COMPONENTS, layout: INVOICE_LAYOUT, windowSizes: INVOICE_WINDOW_SIZES }
-
-export type InvoiceDoc = Arrangement & {
+export type InvoiceDoc = {
   // Which invoice this is. It stays the same when the invoice is changed and confirmed again, and so does its number.
   invoiceId: string
   content: InvoiceContent
@@ -87,26 +35,23 @@ export type InvoiceAction =
   // The last line left is cleared instead of removed, so there is always one to type in.
   | { type: 'remove_line'; id: number }
   | { type: 'move_line'; id: number; direction: 'up' | 'down' }
-  | ArrangementAction
   | { type: 'undo' }
   | { type: 'redo' }
   // Several actions applied together and undone together.
   | { type: 'batch'; actions: InvoiceAction[] }
 
-// A workspace for this invoice, arranged as the project's saved arrangement if there is one.
-export function openInvoiceWorkspace(content: InvoiceContent, arrangement?: ArrangementSave | null, invoiceId: string = newId()): InvoiceState {
-  return { history: createHistory({ invoiceId, content, ...openArrangement(INVOICE_SPEC, arrangement) }) }
+// A workspace for this invoice.
+export function openInvoiceWorkspace(content: InvoiceContent, invoiceId: string = newId()): InvoiceState {
+  return { history: createHistory({ invoiceId, content }) }
 }
 
 export const invoiceDocOf = (state: InvoiceState): InvoiceDoc => state.history.present
 export const canUndoInvoice = (state: InvoiceState) => canUndo(state.history)
 export const canRedoInvoice = (state: InvoiceState) => canRedo(state.history)
-export const invoiceArrangementIsDefault = (doc: InvoiceDoc) => arrangementIsDefault(INVOICE_SPEC, doc)
 
-// Whether the invoice differs from what was confirmed (against its saved version, if it has one). How the workspace is arranged is not
-// something that is kept, so it is never a difference (see `arrangementUnsaved`).
-export function isInvoiceUnsaved(doc: InvoiceDoc, saved: SavedInvoice | undefined, arrangement: ArrangementSave | null): boolean {
-  return !saved || JSON.stringify(doc.content) !== JSON.stringify(saved.content) || arrangementUnsaved(INVOICE_SPEC, doc, arrangement ?? {})
+// Whether the invoice differs from what was confirmed (against its saved version, if it has one).
+export function isInvoiceUnsaved(doc: InvoiceDoc, saved: SavedInvoice | undefined): boolean {
+  return !saved || JSON.stringify(doc.content) !== JSON.stringify(saved.content)
 }
 
 const withContent = (doc: InvoiceDoc, content: InvoiceContent): InvoiceDoc => ({ ...doc, content })
@@ -179,11 +124,6 @@ function step(doc: InvoiceDoc, action: InvoiceAction): InvoiceDoc {
     case 'undo':
     case 'redo':
       return doc
-
-    default: {
-      if (!isArrangementAction(action)) return doc
-      return reduceArrangement(INVOICE_SPEC, doc, action)
-    }
   }
 }
 

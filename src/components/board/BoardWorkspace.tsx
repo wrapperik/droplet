@@ -1,12 +1,12 @@
 import { useMemo, useRef, useState, type RefObject } from 'react'
 import { CursorIcon, FrameIcon, LayersMinimalisticIcon, NotesIcon, RoutingIcon, StopIcon, TextFieldIcon } from '@solar-icons/react/linear'
-import { BOARD_SPEC, canRedoBoard, canUndoBoard, docOf, isBoardUnsaved, type BoardAction, type BoardState } from '../../lib/boardState.ts'
+import { canRedoBoard, canUndoBoard, docOf, isBoardUnsaved, type BoardAction, type BoardState } from '../../lib/boardState.ts'
 import { loadBoard, markBoardExported, saveBoard } from '../../lib/boardStore.ts'
 import { loadMemory, saveMemory } from '../../lib/memoryStore.ts'
 import type { ProjectMemory } from '../../lib/memorySave.ts'
 import { useLoaded } from '../../hooks/useLoaded.ts'
 import { emptyMemory, forgetIdea, withIdea, type IdeaKind } from '../../lib/projectMemory.ts'
-import type { ShelfTool } from '../ToolShelf.tsx'
+import TaskBar, { type BarItem } from '../TaskBar.tsx'
 import WorkspaceShell, { type HeaderSlots } from '../WorkspaceShell.tsx'
 import BoardCanvas, { type BoardHandle } from './BoardCanvas.tsx'
 import BoardExportMenu from './BoardExportMenu.tsx'
@@ -25,7 +25,7 @@ type Props = {
   topInset?: number
 }
 
-// What each part is for, said once, shown as its tooltip and as the window's reason.
+// What each part is for, said once, shown as its tooltip on the task bar and as the board's reason.
 const REASONS = {
   select: 'Move, resize and write in notes, drag a box around several, and delete. This is the tool in hand unless you pick another.',
   sticky: 'Press it, then click on the board where the note goes. The colours are for the next note. The plus puts one in the middle of the view.',
@@ -37,8 +37,8 @@ const REASONS = {
   board: 'Your thinking, laid out. The board has an edge, and nothing goes past it. Notes in pink were written by Droplet when you asked.',
 }
 
-// The board workspace: a toolbar of the tools in hand, and the board, on the shared workspace shell. "Save" saves the notes and how the
-// workspace is arranged. Nothing is saved until the founder saves.
+// The board workspace: the task bar of the tools in hand, and the board, on the shared workspace shell. "Save" saves what is on the board. Nothing is saved
+// until the founder saves. The board fills the whole screen behind the header and the bar, so it has no panes.
 export default function BoardWorkspace({ projectId, projectName = 'Droplet', state, dispatch, handleRef, headerSlots, topInset = 0 }: Props) {
   // What was saved, and what the project remembers, are read from storage, which takes a moment. Until they have arrived the bar says nothing
   // and Save waits.
@@ -63,36 +63,29 @@ export default function BoardWorkspace({ projectId, projectName = 'Droplet', sta
   const saveStatus = !loaded ? '' : saveFailed ? 'Could not save' : !saved ? 'Not saved yet' : unsaved ? 'Unsaved changes' : 'All changes saved'
 
   const save = async () => {
-    const result = await saveBoard(projectId, { items: doc.items, layout: doc.layout, tools: doc.tools, expanded: doc.expanded, hidden: doc.hidden })
+    const result = await saveBoard(projectId, { items: doc.items })
     setSaveFailed(result === null)
     if (result) setSaved(result)
   }
 
-  const reason = (id: keyof typeof REASONS) => doc.reasons[id] ?? REASONS[id]
-
-  const tools: Record<string, ShelfTool> = useMemo(
-    () => ({
-      select: { id: 'select', title: 'Select', icon: CursorIcon, reason: reason('select'), fixed: true, node: <SelectTool state={state} dispatch={dispatch} /> },
-      sticky: { id: 'sticky', title: 'Sticky note', icon: NotesIcon, reason: reason('sticky'), fixed: true, node: <StickyTool state={state} dispatch={dispatch} boardRef={boardRef} /> },
-      shape: { id: 'shape', title: 'Shape', icon: StopIcon, reason: reason('shape'), fixed: true, node: <ShapeTool state={state} dispatch={dispatch} boardRef={boardRef} /> },
-      text: { id: 'text', title: 'Text', icon: TextFieldIcon, reason: reason('text'), fixed: true, node: <TextTool state={state} dispatch={dispatch} boardRef={boardRef} /> },
-      frame: { id: 'frame', title: 'Frame', icon: FrameIcon, reason: reason('frame'), fixed: true, node: <FrameTool state={state} dispatch={dispatch} boardRef={boardRef} /> },
-      templates: { id: 'templates', title: 'Templates', icon: LayersMinimalisticIcon, reason: reason('templates'), fixed: true, node: <TemplatesTool boardRef={boardRef} /> },
-      connector: { id: 'connector', title: 'Arrow', icon: RoutingIcon, reason: reason('connector'), fixed: true, node: <ArrowTool state={state} dispatch={dispatch} /> },
-    }),
-    // reason() only reads doc.reasons.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state, dispatch, doc.reasons],
-  )
+  // Each tool is an icon and its name, and draws its own control (the button that puts it in hand, and its options). The order is fixed.
+  const bar: BarItem[] = useMemo(() => {
+    const item = (id: keyof typeof REASONS, title: string, icon: BarItem['icon'], control: BarItem['control']): BarItem => ({ id, title, label: title, reason: REASONS[id], icon, control })
+    return [
+      item('select', 'Select', CursorIcon, <SelectTool state={state} dispatch={dispatch} />),
+      item('sticky', 'Sticky note', NotesIcon, <StickyTool state={state} dispatch={dispatch} boardRef={boardRef} />),
+      item('shape', 'Shape', StopIcon, <ShapeTool state={state} dispatch={dispatch} boardRef={boardRef} />),
+      item('text', 'Text', TextFieldIcon, <TextTool state={state} dispatch={dispatch} boardRef={boardRef} />),
+      item('frame', 'Frame', FrameIcon, <FrameTool state={state} dispatch={dispatch} boardRef={boardRef} />),
+      item('connector', 'Arrow', RoutingIcon, <ArrowTool state={state} dispatch={dispatch} />),
+      item('templates', 'Templates', LayersMinimalisticIcon, <TemplatesTool boardRef={boardRef} />),
+    ]
+  }, [state, dispatch, boardRef])
 
   return (
     <>
     <WorkspaceShell
-      spec={BOARD_SPEC}
-      arrangement={doc}
-      dispatch={dispatch}
-      tools={tools}
-      windows={{}}
+      bar={<TaskBar kind="tools" label="Board tools" items={bar} />}
       canUndo={canUndoBoard(state)}
       canRedo={canRedoBoard(state)}
       onUndo={() => dispatch({ type: 'undo' })}
@@ -116,7 +109,7 @@ export default function BoardWorkspace({ projectId, projectName = 'Droplet', sta
       }
       headerSlots={headerSlots}
     />
-    <BoardCanvas state={state} dispatch={dispatch} reason={reason('board')} controlRef={boardRef} decide={{ memory, remember, forget }} topInset={topInset} />
+    <BoardCanvas state={state} dispatch={dispatch} reason={REASONS.board} controlRef={boardRef} decide={{ memory, remember, forget }} topInset={topInset} />
     </>
   )
 }

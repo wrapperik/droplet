@@ -1,8 +1,7 @@
 import { MagicWand3Icon } from '@solar-icons/react/linear'
 import { HARMONIES, generatePalette, type Harmony } from '../lib/harmony.ts'
 import type { PaletteBlock } from '../lib/palette.ts'
-import ToolWindow from './ToolWindow.tsx'
-import './GenerateWindow.css'
+import './HarmonyCards.css'
 
 type Props = {
   blocks: PaletteBlock[]
@@ -13,7 +12,6 @@ type Props = {
   canGenerate: boolean
   onHarmonyChange: (harmony: Harmony) => void
   onGenerate: () => void
-  reason: string
 }
 
 const WHAT_IT_IS: Record<Harmony, string> = {
@@ -23,11 +21,11 @@ const WHAT_IT_IS: Record<Harmony, string> = {
   monochrome: 'One hue in lighter and darker tones. Quiet and consistent.',
 }
 
-// The generate tool as a window: each harmony as a card with a preview of the palette it would make from the selected
+// The harmony choice and the Generate button: each harmony as a card with a preview of the palette it would make from the selected
 // colour, so the choice is seen before it is made. Colours that are kept stay as they are, in every preview.
-export default function GenerateWindow({ blocks, selectedId, harmony, variation, canGenerate, onHarmonyChange, onGenerate, reason }: Props) {
+export default function HarmonyCards({ blocks, selectedId, harmony, variation, canGenerate, onHarmonyChange, onGenerate }: Props) {
   return (
-    <ToolWindow title="Harmonies" reason={reason}>
+    <>
       <div className="harmonies" role="radiogroup" aria-label="Harmony">
         {HARMONIES.map((option) => {
           const preview = generatePalette(blocks, selectedId, option.id, variation)
@@ -56,6 +54,6 @@ export default function GenerateWindow({ blocks, selectedId, harmony, variation,
         <MagicWand3Icon size={18} aria-hidden="true" />
         {canGenerate ? 'Generate' : 'All locked'}
       </button>
-    </ToolWindow>
+    </>
   )
 }

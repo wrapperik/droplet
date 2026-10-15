@@ -7,10 +7,10 @@ const state = () =>
 
 describe('snapshots', () => {
   it('does not send how the screen is arranged, whatever the workspace holds', () => {
-    const moved = reduce(reduce(state(), { type: 'move_tool', id: 'generate', before: 'picker' }), { type: 'hide', component: 'role' })
-    const snapshot = snapshotOfState(moved, 'none')
+    const snapshot = snapshotOfState(state(), 'none')
     for (const key of ['tools', 'expanded', 'hidden', 'layout']) expect(snapshot).not.toHaveProperty(key)
-    expect(docOf(stateOfSnapshot(snapshot)).tools).toEqual(['picker', 'role', 'generate'])
+    // the workspace has no arrangement to rebuild
+    expect(Object.keys(docOf(stateOfSnapshot(snapshot))).sort()).toEqual(['blocks', 'reasons'])
   })
 
   it('describes the workspace in a form the request schema accepts', () => {
@@ -23,10 +23,7 @@ describe('snapshots', () => {
   it('still accepts the arrangement fields an older browser sends, and ignores them', () => {
     const old = { ...snapshotOfState(state(), 'none'), hidden: ['preview'], expanded: ['picker'], tools: ['role'], layout: [{ id: 'canvas', col: 0, row: 0, w: 24 }] }
     expect(workspaceSnapshotSchema.safeParse(old).success).toBe(true)
-    const rebuilt = docOf(stateOfSnapshot(old))
-    expect(rebuilt.hidden).toEqual([])
-    expect(rebuilt.expanded).toEqual([])
-    expect(rebuilt.tools).toEqual(['picker', 'role', 'generate'])
+    expect(Object.keys(docOf(stateOfSnapshot(old))).sort()).toEqual(['blocks', 'reasons'])
   })
 
   it('rebuilds a workspace from a snapshot, with undo and redo allowed only as they were', () => {

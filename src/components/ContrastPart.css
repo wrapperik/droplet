@@ -1,0 +1,53 @@
+.contrast {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.contrast__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--overlay-10);
+  border-radius: var(--radius-md);
+  background: var(--overlay-06);
+}
+
+/* The two colours, as they sit on each other. */
+.contrast__sample {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--radius-sm);
+  box-shadow: inset 0 0 0 1px var(--overlay-10);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.contrast__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.contrast__label {
+  font-weight: 600;
+}
+
+.contrast__hex {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.contrast__note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}

@@ -1,7 +1,6 @@
 import type { BoardSave } from './boardSave.ts'
 import { docOf as boardDocOf, isBoardUnsaved, sameItems, type BoardState } from './boardState.ts'
 import { isInvoiceUnsaved, invoiceDocOf, type InvoiceState } from './invoiceState.ts'
-import type { InvoiceSave } from './invoiceSave.ts'
 import type { ProjectMemory } from './memorySave.ts'
 import { savedInvoice } from './projectMemory.ts'
 import type { PaletteSave } from './projectStore.ts'
@@ -19,10 +18,10 @@ export function paletteHasChanges(state: WorkspaceState, saved: PaletteSave | nu
   return !sameBlocks(began.blocks, state.history.present.blocks)
 }
 
-export function invoiceHasChanges(state: InvoiceState, memory: ProjectMemory, arrangement: InvoiceSave | null): boolean {
+export function invoiceHasChanges(state: InvoiceState, memory: ProjectMemory): boolean {
   const doc = invoiceDocOf(state)
   const saved = savedInvoice(memory, doc.invoiceId)
-  if (saved) return isInvoiceUnsaved(doc, saved, arrangement)
+  if (saved) return isInvoiceUnsaved(doc, saved)
   const began = state.history.past[0] ?? doc
   return JSON.stringify(began.content) !== JSON.stringify(doc.content)
 }

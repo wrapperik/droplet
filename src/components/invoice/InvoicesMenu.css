@@ -1,3 +1,22 @@
+.invoices-menu {
+  position: relative;
+}
+
+/* A popover under the button. It is as wide as its list needs and never wider than the screen. */
+.invoices-menu__panel {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  z-index: 40;
+  box-sizing: border-box;
+  width: min(26rem, calc(100vw - 2rem));
+  max-height: min(32rem, 70vh);
+  padding: 0.875rem;
+  overflow-y: auto;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
 .invoices {
   display: flex;
   flex-direction: column;

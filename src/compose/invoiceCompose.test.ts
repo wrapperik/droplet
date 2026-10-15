@@ -69,7 +69,7 @@ describe('the invoice snapshot', () => {
     client: { ...emptyClient(), name: 'Karoo Candles', address: '9 Dorp Street', email: 'thandi@karoo.example', contact: 'Thandi' },
   }
   const memory = withClient(emptyMemory(), { ...emptyClient(), name: 'Pretoria Print Works', email: 'secret@pretoria.example' }, 'x', 'c1')
-  const snapshot = snapshotOfInvoice(openInvoiceWorkspace(content, null, 'i1'), memory, '2026-10-04')
+  const snapshot = snapshotOfInvoice(openInvoiceWorkspace(content, 'i1'), memory, '2026-10-04')
 
   it('is a request the schema accepts', () => {
     expect(invoiceSnapshotSchema.safeParse(snapshot).success).toBe(true)
@@ -90,7 +90,7 @@ describe('the invoice snapshot', () => {
     expect(invoice.needs).toEqual(['Add your business name.', 'Add the name of the client.', 'Add at least one line, with a description, a quantity and a price.'])
     expect(invoice.canUndo).toBe(false)
     expect(invoice.canRedo).toBe(false)
-    const edited = reduceInvoice(openInvoiceWorkspace(content, null, 'i1'), { type: 'set_vat_registered', value: true })
+    const edited = reduceInvoice(openInvoiceWorkspace(content, 'i1'), { type: 'set_vat_registered', value: true })
     expect(snapshotOfInvoice(edited, memory, '2026-10-04').canUndo).toBe(true)
     expect(snapshotOfInvoice(reduceInvoice(edited, { type: 'undo' }), memory, '2026-10-04').canRedo).toBe(true)
   })
@@ -300,7 +300,7 @@ describe('Guide mode on the invoice', () => {
       expect(prompt).toContain('When there is a <guide> block, the founder is in Guide mode')
       expect(prompt).toMatch(/You cannot move them to another step or finish the invoice/)
     }
-    expect(SYSTEM_PROMPT).toMatch(/Guide mode \(the default\) shows the invoice one step at a time/)
+    expect(SYSTEM_PROMPT).toMatch(/Guide mode \(the default\) shows the invoice's six parts one at a time/)
   })
 
   it('accepts a guide in the request only with a step the guide has', () => {

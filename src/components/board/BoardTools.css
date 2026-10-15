@@ -1,22 +1,29 @@
 .boardtool__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
   height: 2.25rem;
-  padding: 0 0.875rem;
-  border: 1px solid var(--overlay-10);
+  padding: 0 0.75rem 0 0.625rem;
+  border: 0;
   border-radius: var(--radius-pill);
-  background: var(--overlay-06);
-  font-size: 0.875rem;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.9375rem;
   font-weight: 600;
   white-space: nowrap;
-  transition: background var(--duration-fast) var(--ease-out);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
 }
 
-.boardtool__toggle:hover {
-  background: var(--accent-tint-soft);
+.boardtool__toggle:hover,
+.boardtool__toggle:focus-visible {
+  background: var(--overlay-06);
+  color: var(--text);
 }
 
-/* The tool in hand. It is a button that is pressed, so it is told by its weight and its fill as well as its colour. */
+/* The tool in hand. It is a button that is pressed, so it is told by its fill as well as its colour. */
 .boardtool__toggle[aria-pressed='true'] {
-  border-color: transparent;
   background: var(--accent-tint);
   color: var(--accent);
 }
@@ -164,12 +171,6 @@
 
 .templates {
   position: relative;
-}
-
-.templates__button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
 }
 
 .templates__menu {

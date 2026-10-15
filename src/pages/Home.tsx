@@ -13,9 +13,9 @@ import ChatThread, { type ThreadAction, type ThreadMessage } from '../components
 import IntentBar from '../components/IntentBar.tsx'
 import Library from '../components/Library.tsx'
 import InvoiceWorkspace from '../components/invoice/InvoiceWorkspace.tsx'
-import GuidedInvoice from '../components/invoice/GuidedInvoice.tsx'
 import InvoiceResultCard from '../components/InvoiceResultCard.tsx'
-import { GUIDE_STEPS, changedSteps, jumpTo, progressFor, resultMessage, revealActions, stepIndex, stepsOfTargets, stepToShow, type GuideProgress, type InvoiceResult } from '../lib/invoiceGuide.ts'
+import { GUIDE_STEPS, changedSteps, type GuideStepId, jumpTo, progressFor, resultMessage, stepIndex, stepsOfTargets, stepToShow, type GuideProgress, type InvoiceResult } from '../lib/invoiceGuide.ts'
+import { scrollToPartWhenThere } from '../lib/partNav.ts'
 import { useWorkMode } from '../store/workMode.ts'
 import PaletteWorkspace from '../components/PaletteWorkspace.tsx'
 import ActingOverlay from '../components/ActingOverlay.tsx'
@@ -58,7 +58,7 @@ import { loadPalette, savePalette } from '../lib/projectStore.ts'
 import { shownWorkspace, type WorkspaceView } from '../lib/shownWorkspace.ts'
 import type { TaskId } from '../lib/tasks.ts'
 import { todayIso } from '../lib/invoice.ts'
-import { duplicateInvoice, loadInvoice, openInvoiceForProject, openNewInvoice, openSavedInvoice } from '../lib/invoiceStore.ts'
+import { duplicateInvoice, openInvoiceForProject, openNewInvoice, openSavedInvoice } from '../lib/invoiceStore.ts'
 import { exportLibraryItem, type ExportTarget, type OpenTarget } from '../lib/libraryActions.ts'
 import { findInvoice, libraryOf, type InvoiceItem } from '../lib/library.ts'
 import { snapshotOfLibrary } from '../compose/librarySnapshot.ts'
@@ -129,6 +129,22 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   // Where the founder is in the guided invoice. Kept here, so a visit to another workspace does not lose the place.
   const [guide, setGuide] = useState<GuideProgress | null>(null)
   const guideRef = useRef<GuideProgress | null>(null)
+  // Brings the parts of the invoice that a change touched on screen, to edit by hand: one function for both modes. Guide mode goes to the first part that changed,
+  // unless the founder is already on one of them. Workspace mode scrolls the panel to it once it is drawn. The cursor stays where it is unless asked.
+  const showInvoiceParts = useCallback((parts: GuideStepId[], options: { focus?: boolean } = {}) => {
+    const open = invoiceRef.current
+    if (!open || parts.length === 0) return
+    if (useWorkMode.getState().mode === 'guide') {
+      const progress = progressFor(guideRef.current, invoiceDocOf(open).invoiceId)
+      const to = stepToShow(progress.step, parts)
+      if (to) {
+        guideRef.current = jumpTo(progress, to)
+        setGuide(guideRef.current)
+      }
+    } else {
+      scrollToPartWhenThere(parts[0], { focus: options.focus ?? false })
+    }
+  }, [])
   // Which workspace is on screen. Each keeps its own state while another is shown.
   const [view, setView] = useState<WorkspaceView>('brand')
   // The library is shown in place of the workspaces, which keep their state while it is. Opening a workspace from it, or by asking, closes it.
@@ -165,7 +181,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   // The two ends of the header, where the workspace puts its controls beside the logo.
   const [headerStart, setHeaderStart] = useState<HTMLElement | null>(null)
   const [headerEnd, setHeaderEnd] = useState<HTMLElement | null>(null)
-  // Beneath the header, where the workspace puts its toolbar.
+  // Beneath the header, where the workspace puts its task bar.
   const [shelfSlot, setShelfSlot] = useState<HTMLElement | null>(null)
   const [thread, setThread] = useState<ThreadMessage[]>([])
   // Where the project is on the journey, from what it holds, so a plan in the chat can tick the steps that are done.
@@ -408,7 +424,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         }
       } else if (!workspaceRef.current) {
         const saved = await loadPalette(currentProjectId)
-        const opened = openWorkspace(saved?.blocks ?? starterBlocks(), saved)
+        const opened = openWorkspace(saved?.blocks ?? starterBlocks())
         workspaceRef.current = opened
         setWorkspace(opened)
       }
@@ -564,26 +580,11 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         }
         // What changed is shown where it can be edited: the parts of the invoice that differ, worked out from the invoice itself.
         const changedParts = changedSteps(invoiceDocOf(base).content, invoiceDocOf(applied.state).content)
-        const guided = useWorkMode.getState().mode === 'guide'
-        // In Workspace mode the windows of those parts open first, as a step of their own, so Undo this takes back the change and leaves them open.
-        const reveal = guided ? [] : revealActions(invoiceDocOf(base), changedParts)
-        if (reveal.length > 0) {
-          base = reduceInvoice(base, { type: 'batch', actions: reveal })
-          applied = apply(base)
-        }
         if (applied.state !== base) {
           arrivalRef.current = prepareArrival(focusOf(applied.changes))
           invoiceRef.current = applied.state
           setInvoice(applied.state)
-          // In Guide mode the guide goes to the first part that changed, unless the founder is already on one of them.
-          if (guided) {
-            const progress = progressFor(guideRef.current, invoiceDocOf(applied.state).invoiceId)
-            const to = stepToShow(progress.step, changedParts)
-            if (to) {
-              guideRef.current = jumpTo(progress, to)
-              setGuide(guideRef.current)
-            }
-          }
+          showInvoiceParts(changedParts)
         }
         done = { workspace: 'invoice', changes: applied.changes, skipped: applied.skipped, before: invoiceDocOf(base), after: invoiceDocOf(applied.state) }
       } else if (view === 'board' && boardOpen) {
@@ -615,7 +616,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         const apply = () =>
           applyTurnActions({
             base: workspaceRef.current,
-            open: (blocks) => openWorkspace(blocks, saved),
+            open: (blocks) => openWorkspace(blocks),
             actions: result.turn.actions.filter((action): action is PaletteAction => !isInvoiceAction(action) && !isBoardAction(action) && !isScreenAction(action)),
           })
         let applied = apply()
@@ -822,7 +823,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         if (workspaceRef.current) return
         const saved = await loadPalette(currentProjectId)
         if (workspaceRef.current) return
-        const opened = openWorkspace(saved?.blocks ?? starterBlocks(), saved)
+        const opened = openWorkspace(saved?.blocks ?? starterBlocks())
         workspaceRef.current = opened
         setWorkspace(opened)
         workspaceOpened()
@@ -893,30 +894,14 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         spaceRef.current = live.workspace === 'board' ? 'ideation' : live.workspace
         changeView(live.workspace)
       }
-      // On the invoice, the part that changed is brought on screen first: in Guide mode the guide goes to its step, and in Workspace mode its window opens.
-      if (live.workspace === 'invoice' && invoiceRef.current) {
-        const parts = stepsOfTargets(live.targets)
-        if (useWorkMode.getState().mode === 'guide') {
-          const progress = progressFor(guideRef.current, invoiceDocOf(invoiceRef.current).invoiceId)
-          const to = stepToShow(progress.step, parts)
-          if (to) {
-            guideRef.current = jumpTo(progress, to)
-            setGuide(guideRef.current)
-          }
-        } else {
-          const reveal = revealActions(invoiceDocOf(invoiceRef.current), parts)
-          if (reveal.length > 0) {
-            invoiceRef.current = reduceInvoice(invoiceRef.current, { type: 'batch', actions: reveal })
-            setInvoice(invoiceRef.current)
-          }
-        }
-      }
+      // On the invoice, the part that changed is brought on screen first: in Guide mode the guide goes to its step, and in Workspace mode the panel scrolls to it.
+      if (live.workspace === 'invoice') showInvoiceParts(stepsOfTargets(live.targets))
       // Each thing that changed gets a blue border that draws in and stays, once it is on screen, until another message or a press elsewhere.
       void markTargets(live.targets)
     },
     // onScreen only reads refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [settleReceipt],
+    [settleReceipt, showInvoiceParts],
   )
 
   // A fact Droplet offered was settled, so its chip goes.
@@ -1161,9 +1146,9 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
     let invoiceChanged = false
     let boardChanged = false
     try {
-      const [palette, memory, arrangement, board] = await Promise.all([loadPalette(currentProjectId), loadMemory(currentProjectId), loadInvoice(currentProjectId), loadBoard(currentProjectId)])
+      const [palette, memory, board] = await Promise.all([loadPalette(currentProjectId), loadMemory(currentProjectId), loadBoard(currentProjectId)])
       brand = workspaceRef.current ? paletteHasChanges(workspaceRef.current, palette) : false
-      invoiceChanged = invoiceRef.current ? invoiceHasChanges(invoiceRef.current, memory, arrangement) : false
+      invoiceChanged = invoiceRef.current ? invoiceHasChanges(invoiceRef.current, memory) : false
       boardChanged = boardRef.current ? boardHasChanges(boardRef.current, board) : false
     } finally {
       checkingLeaveRef.current = false
@@ -1224,7 +1209,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         closeWorkspaces()
       } else if (actionId === 'save-brand' && workspaceRef.current) {
         const doc = docOf(workspaceRef.current)
-        const result = await savePalette(currentProjectId, { blocks: doc.blocks, layout: doc.layout, tools: doc.tools, expanded: doc.expanded, hidden: doc.hidden })
+        const result = await savePalette(currentProjectId, { blocks: doc.blocks })
         if (result === null) settleLeave(messageId, 'I could not save the palette, because it could not be stored.', leaveActions(prompt))
         else {
           prompt.brand = false
@@ -1232,7 +1217,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         }
       } else if (actionId === 'save-board' && boardRef.current) {
         const doc = boardDocOf(boardRef.current)
-        const result = await saveBoard(currentProjectId, { items: doc.items, layout: doc.layout, tools: doc.tools, expanded: doc.expanded, hidden: doc.hidden })
+        const result = await saveBoard(currentProjectId, { items: doc.items })
         if (result === null) settleLeave(messageId, 'I could not save the board, because it could not be stored.', leaveActions(prompt))
         else {
           prompt.board = false
@@ -1250,8 +1235,8 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   const invoiceConfirmed = useCallback(async () => {
     const prompt = leaveRef.current
     if (!prompt?.invoice) return
-    const [memory, arrangement] = await Promise.all([loadMemory(currentProjectId), loadInvoice(currentProjectId)])
-    const still = invoiceRef.current ? invoiceHasChanges(invoiceRef.current, memory, arrangement) : false
+    const memory = await loadMemory(currentProjectId)
+    const still = invoiceRef.current ? invoiceHasChanges(invoiceRef.current, memory) : false
     if (still) return
     prompt.invoice = false
     savedForLeave('I saved the invoice.')
@@ -1279,7 +1264,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         setBoard(nextBoard)
       }
       if (workspaceRef.current) {
-        const opened = openWorkspace(palette?.blocks ?? starterBlocks(), palette)
+        const opened = openWorkspace(palette?.blocks ?? starterBlocks())
         workspaceRef.current = opened
         setWorkspace(opened)
       }
@@ -1333,12 +1318,6 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
     if (workspaceRef.current === null && invoiceRef.current === null && boardRef.current === null) setCollapsed(false)
   }, [])
 
-  // The invoice workspace takes a replacement: a saved invoice, a copy of one or a new one. The arrangement stays as it is now.
-  const arrangementNow = async () => {
-    const present = invoiceRef.current
-    return present ? invoiceDocOf(present) : await loadInvoice(currentProjectId)
-  }
-
   // Does what a library item's Open asks for. Replacing the invoice that is open loses its unsaved changes, so that says so first and goes
   // ahead only when the founder has agreed.
   const openFromLibrary = useCallback(
@@ -1359,15 +1338,14 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         return 'done'
       }
       if (present && target.kind !== 'business_details' && !options?.confirmed) {
-        const [memory, arrangement] = await Promise.all([loadMemory(currentProjectId), loadInvoice(currentProjectId)])
-        if (invoiceHasChanges(present, memory, arrangement)) return 'unsaved'
+        const memory = await loadMemory(currentProjectId)
+        if (invoiceHasChanges(present, memory)) return 'unsaved'
       }
-      const arrangement = await arrangementNow()
       let next: InvoiceState | null = null
-      if (target.kind === 'invoice') next = await openSavedInvoice(currentProjectId, target.id, arrangement)
-      else if (target.kind === 'copy_invoice') next = await duplicateInvoice(currentProjectId, target.id, arrangement)
+      if (target.kind === 'invoice') next = await openSavedInvoice(currentProjectId, target.id)
+      else if (target.kind === 'copy_invoice') next = await duplicateInvoice(currentProjectId, target.id)
       else if (target.kind === 'new_invoice') {
-        next = await openNewInvoice(currentProjectId, arrangement)
+        next = await openNewInvoice(currentProjectId)
         const client = target.clientId ? (await loadMemory(currentProjectId)).clients.find((saved) => saved.id === target.clientId)?.client : undefined
         if (next && client) next = reduceInvoice(next, { type: 'set_client', patch: client })
       } else if (!present) next = await openInvoiceForProject(currentProjectId)
@@ -1376,19 +1354,18 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         setInvoice(next)
       }
       if (!invoiceRef.current) return 'done'
-      // Your business details: the invoice with that step open, ready to edit. In Guide mode, the guide's own step.
+      // Your business details: the invoice at that part, ready to edit. In Guide mode the guide's own step; in Workspace mode the part is scrolled to once it is on screen.
       const openId = invoiceDocOf(invoiceRef.current).invoiceId
       if (target.kind === 'business_details') {
-        invoiceRef.current = reduceInvoice(invoiceRef.current, { type: 'batch', actions: [{ type: 'show', component: 'business' }, { type: 'expand_tool', id: 'business' }] })
-        setInvoice(invoiceRef.current)
         setGuide((current) => jumpTo(progressFor(current, openId), 'business'))
+        if (useWorkMode.getState().mode !== 'guide') showInvoiceParts(['business'], { focus: true })
       }
       // A saved invoice is whole, so the guide opens on its last step, where every step before it can be gone back to.
       if (target.kind === 'invoice') setGuide({ invoiceId: openId, step: 'review', reached: GUIDE_STEPS.length - 1 })
       await openWorkspaceFor('invoice')
       return 'done'
     },
-    // arrangementNow reads refs and the project.
+    // showInvoiceParts reads refs only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [currentProjectId, openWorkspaceFor],
   )
@@ -1498,7 +1475,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         }}
       >
         <ChatGlow />
-        {/* The header and the toolbar, together: over a board that fills the screen they are lit from below by a gradual blur. */}
+        {/* The header and the task bar, together: over a board that fills the screen they are lit from below by a gradual blur. */}
         <div className="home__top" ref={topRef}>
         <header className="home__header">
           <div className="home__header-start">
@@ -1525,7 +1502,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         <div className="home__shelf" ref={setShelfSlot} />
         </div>
 
-        <main className={docked ? (shown === 'board' ? 'home__canvas home__canvas--board' : shown === 'invoice' && workMode === 'guide' ? 'home__canvas home__canvas--guide' : 'home__canvas') : 'home__canvas home__canvas--chat'} aria-busy={composing}>
+        <main className={docked ? (shown === 'board' ? 'home__canvas home__canvas--board' : (shown === 'invoice' || shown === 'brand') ? 'home__canvas home__canvas--panes' : 'home__canvas') : 'home__canvas home__canvas--chat'} aria-busy={composing}>
           <h1 className="visually-hidden">Home</h1>
           {/* Before there is a workspace, the whole screen is the conversation. Droplet answers like any assistant until it is asked to build something. */}
           {!docked && (
@@ -1534,7 +1511,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
               <ChatThread flight={flight} onFlightEnd={() => setFlight(null)} messages={thread} onAction={onThreadAction} onReply={submitIntent} done={doneSet} busy={composing} onToggle={toggleCheck} onOpenStep={openStep} onUndoReceipt={undoReceipt} onShowReceipt={showReceipt} onRememberFact={rememberFact} onDismissFact={dismissFact} renderResult={renderResult} brand={brand} onOpenHandoff={() => setHandoffOpen(true)} progress={composing && stage ? { words: stageWords(stage, stageContext), elapsed: elapsedLabel(elapsed) } : composing ? { words: 'Thinking', elapsed: elapsedLabel(elapsed) } : null} onStop={composing ? stopComposing : undefined} onRetry={retryReply} onEdit={sendAgain} />
             </div>
           )}
-          {/* One workspace at a time: the one on screen leaves before the other arrives, so their toolbars and header controls never overlap. */}
+          {/* One workspace at a time: the one on screen leaves before the other arrives, so their task bars and header controls never overlap. */}
           <AnimatePresence mode="wait">
             {libraryOpen && (
               <motion.div key="library" className="home__component" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.2 } }}>
@@ -1572,40 +1549,26 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
                 className={composing ? 'home__component home__component--busy' : 'home__component'}
                 exit={{ opacity: 0, transition: { duration: 0.2 } }}
               >
-                {workMode === 'guide' ? (
-                  <GuidedInvoice
-                    key={`${currentProjectId}:${invoice.history.present.invoiceId}`}
-                    projectId={currentProjectId}
-                    projectName={projectName(currentProjectId)}
-                    state={invoice}
-                    dispatch={dispatchInvoice}
-                    progress={progressFor(guide, invoice.history.present.invoiceId)}
-                    onProgress={(next) => {
-                      guideRef.current = next
-                      setGuide(next)
-                    }}
-                    onFinished={finishGuided}
-                    saveSignal={invoiceSaveSignal}
-                    onConfirmed={invoiceConfirmed}
-                    logoVersion={libraryVersion}
-                    onOpenHandoff={() => setHandoffOpen(true)}
-                    headerSlots={{ start: headerStart, end: headerEnd, shelf: shelfSlot }}
-                  />
-                ) : (
                 <InvoiceWorkspace
                   key={`${currentProjectId}:${invoice.history.present.invoiceId}`}
+                  mode={workMode}
                   projectId={currentProjectId}
                   projectName={projectName(currentProjectId)}
                   state={invoice}
                   dispatch={dispatchInvoice}
                   onReplace={setInvoice}
+                  progress={progressFor(guide, invoice.history.present.invoiceId)}
+                  onProgress={(next) => {
+                    guideRef.current = next
+                    setGuide(next)
+                  }}
+                  onFinished={finishGuided}
                   saveSignal={invoiceSaveSignal}
                   onConfirmed={invoiceConfirmed}
                   logoVersion={libraryVersion}
                   onOpenHandoff={() => setHandoffOpen(true)}
                   headerSlots={{ start: headerStart, end: headerEnd, shelf: shelfSlot }}
                 />
-                )}
               </motion.div>
             )}
             {board && shown === 'board' && (
@@ -1632,8 +1595,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
             {bar(false)}
           </motion.footer>
         )}
-        {/* Only while Droplet acts on the workspace on screen, not while it thinks or talks: the screen goes soft with a loader on it. The blue orbs
-            (RippleGlow) and the ripple of the windows (useRipple) used to show for every message; both are kept, unused, to bring back. */}
+        {/* Only while Droplet acts on the workspace on screen, not while it thinks or talks: the screen goes soft with a loader on it. */}
         <ActingOverlay active={acting} />
       </div>
 

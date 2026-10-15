@@ -5,7 +5,6 @@ import { resolveRoles } from '../../lib/palette.ts'
 import { starterBlocks } from '../../compose/fallback.ts'
 import { loadPalette } from '../../lib/projectStore.ts'
 import { newId } from '../../lib/ids.ts'
-import { loadInvoice, saveArrangement } from '../../lib/invoiceStore.ts'
 import { useLoaded } from '../../hooks/useLoaded.ts'
 import { useProjectLogo } from '../../hooks/useProjectLogo.ts'
 import { loadMemory, saveMemory } from '../../lib/memoryStore.ts'
@@ -19,14 +18,12 @@ export const sameContent = (a: InvoiceContent, b: InvoiceContent) => JSON.string
 // What the invoice workspace and the guide share: what the project remembers, the confirmed palette, what confirming would remember,
 // and the confirm itself. Nothing is remembered unless the founder confirms it, and only what they ticked.
 export function useInvoiceMemory(projectId: string, state: InvoiceState, onConfirmed?: () => void, logoVersion = 0) {
-  // What the project remembers, how the workspace was arranged and the confirmed palette are read from storage, which takes a moment. Until
-  // they have arrived the status says nothing and saving waits, so nothing is judged against what has not been read yet.
-  const { value: memory, loaded: memoryLoaded, set: setMemory } = useLoaded<ProjectMemory>(projectId, () => loadMemory(projectId), emptyMemory())
-  const { value: arrangementSave, loaded: arrangementLoaded, set: setArrangementSave } = useLoaded(projectId, () => loadInvoice(projectId), null)
+  // What the project remembers and the confirmed palette are read from storage, which takes a moment. Until they have arrived the status says nothing
+  // and saving waits, so nothing is judged against what has not been read yet.
+  const { value: memory, loaded, set: setMemory } = useLoaded<ProjectMemory>(projectId, () => loadMemory(projectId), emptyMemory())
   const { value: paletteBlocks } = useLoaded(projectId, async () => (await loadPalette(projectId))?.blocks ?? starterBlocks(), starterBlocks())
   // The logo brought back from another tool: undefined until read, null if there is none. It is drawn on the page and in the PDF, and goes nowhere else.
   const logo = useProjectLogo(projectId, logoVersion)
-  const loaded = memoryLoaded && arrangementLoaded
   const [saveFailed, setSaveFailed] = useState(false)
 
   const doc = invoiceDocOf(state)
@@ -38,7 +35,7 @@ export function useInvoiceMemory(projectId: string, state: InvoiceState, onConfi
   const roles = useMemo(() => resolveRoles(paletteBlocks), [paletteBlocks])
 
   const saved = savedInvoice(memory, doc.invoiceId)
-  const unsaved = loaded && isInvoiceUnsaved(doc, saved, arrangementSave)
+  const unsaved = loaded && isInvoiceUnsaved(doc, saved)
   // Changes that would be lost on leaving: anything different from what was confirmed, or from a new invoice if none was.
   const hasChanges = saved ? !sameContent(content, saved.content) : !sameContent(content, opened)
   const saveStatus = !loaded ? '' : saveFailed ? 'Could not save' : !saved ? 'Not saved yet' : unsaved ? 'Unsaved changes' : 'All changes saved'
@@ -69,17 +66,14 @@ export function useInvoiceMemory(projectId: string, state: InvoiceState, onConfi
     return false
   }
 
-  // Only what the founder ticked is remembered. How the workspace is arranged is not a memory, so it is kept with it. Says whether it all went.
+  // Only what the founder ticked is remembered. Says whether it all went.
   const confirm = async (ids: string[]) => {
     const now = new Date().toISOString()
     let next = memory
     if (ids.includes('business')) next = withBusiness(next, content.business, now)
     if (ids.includes('client')) next = withClient(next, content.client, now, newId())
     if (ids.includes('invoice')) next = withInvoice(next, doc.invoiceId, content, now)
-    const remembered = next === memory || (await persist(next))
-    const arrangement = await saveArrangement(projectId, doc)
-    if (arrangement) setArrangementSave(arrangement)
-    const ok = remembered && arrangement !== null
+    const ok = next === memory || (await persist(next))
     setSaveFailed(!ok)
     if (ok) onConfirmed?.()
     return ok

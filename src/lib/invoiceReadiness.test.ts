@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { newContent, type InvoiceContent } from './invoice.ts'
-import { INVOICE_COMPONENTS } from './invoiceState.ts'
-import { checkInvoice, stepsDone, vatNumberIsValid } from './invoiceReadiness.ts'
+import { GUIDE_STEPS } from './invoiceGuide.ts'
+import { checkInvoice, partsDone, vatNumberIsValid } from './invoiceReadiness.ts'
 
 // A plain invoice that has everything it needs.
 const ready = (): InvoiceContent => {
@@ -103,9 +103,9 @@ describe('checkInvoice', () => {
     expect(ids(content)).toEqual(['total'])
   })
 
-  it('every fix points at a part of the invoice workspace that exists', () => {
+  it('every fix points at one of the six parts of the invoice', () => {
     const everything = checkInvoice({ ...newContent('2026-10-04'), vatRegistered: true })
-    for (const issue of [...everything.required, ...everything.recommended]) expect(INVOICE_COMPONENTS.map((c) => c.id)).toContain(issue.fix)
+    for (const issue of [...everything.required, ...everything.recommended]) expect(GUIDE_STEPS).toContain(issue.fix)
   })
 
   it('recognises a VAT number of ten digits, with spaces allowed', () => {
@@ -115,47 +115,47 @@ describe('checkInvoice', () => {
   })
 })
 
-describe('stepsDone', () => {
-  const done = (content: InvoiceContent) => stepsDone(checkInvoice(content))
+describe('partsDone', () => {
+  const done = (content: InvoiceContent) => partsDone(checkInvoice(content))
 
-  it('has every step done when the invoice is ready', () => {
-    expect(done(ready())).toEqual({ business: true, client: true, terms: true, vat: true, total: true, ready: true })
+  it('has every part done when the invoice is ready', () => {
+    expect(done(ready())).toEqual({ business: true, vat: true, client: true, lines: true, terms: true, review: true })
   })
 
-  it('leaves the business, client, total and readiness steps open on a new invoice, which already has its terms and no VAT settled', () => {
-    expect(done(newContent('2026-10-04', 'INV-0001'))).toEqual({ business: false, client: false, terms: true, vat: true, total: false, ready: false })
+  it('leaves the business, client, items and review open on a new invoice, which already has its details and no VAT settled', () => {
+    expect(done(newContent('2026-10-04', 'INV-0001'))).toEqual({ business: false, vat: true, client: false, lines: false, terms: true, review: false })
   })
 
   it('takes the tick from the terms when the number is gone, or is one another invoice has', () => {
     const content = ready()
     content.details = { ...content.details, number: '' }
     expect(done(content).terms).toBe(false)
-    const used = stepsDone(checkInvoice(ready(), { usedNumbers: ['INV-0007'] }))
+    const used = partsDone(checkInvoice(ready(), { usedNumbers: ['INV-0007'] }))
     expect(used.terms).toBe(false)
-    expect(used.ready).toBe(false)
+    expect(used.review).toBe(false)
   })
 
-  it('holds the VAT and business steps back until a business registered for VAT gives its number and address', () => {
+  it('holds the VAT and business parts back until a business registered for VAT gives its number and address', () => {
     const content = ready()
     content.vatRegistered = true
     content.business = { ...content.business, address: '', vatNumber: '' }
-    expect(done(content)).toMatchObject({ vat: false, business: false, ready: false })
+    expect(done(content)).toMatchObject({ vat: false, business: false, review: false })
     content.business = { ...content.business, address: '12 Jacaranda Street', vatNumber: '4123456789' }
     expect(done(content)).toMatchObject({ vat: true, business: true })
   })
 
-  it('holds the total back while a line is begun but not whole, or adds up to nothing', () => {
+  it('holds the items back while a line is begun but not whole, or adds up to nothing', () => {
     const content = ready()
     content.lines = [{ id: 1, description: 'Gift box', quantity: 2, unitCents: null }]
-    expect(done(content).total).toBe(false)
+    expect(done(content).lines).toBe(false)
     content.lines = [{ id: 1, description: 'Gift box', quantity: 2, unitCents: 0 }]
-    expect(done(content).total).toBe(false)
+    expect(done(content).lines).toBe(false)
   })
 
-  it('never lets a recommended item hold a step back', () => {
+  it('never lets a recommended item hold a part back', () => {
     const content = ready()
     content.business = { ...content.business, email: '', phone: '', accountNumber: '' }
     expect(checkInvoice(content).recommended.length).toBeGreaterThan(0)
-    expect(done(content)).toMatchObject({ business: true, ready: true })
+    expect(done(content)).toMatchObject({ business: true, review: true })
   })
 })

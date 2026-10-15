@@ -1,0 +1,32 @@
+/* A part of the tools panel. It is a container of its own, so the controls inside answer to its width and not the screen's. */
+.part {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  /* A part scrolled to by the task bar or a Fix button stops a little below the top of the panel. */
+  scroll-margin-top: 0.5rem;
+}
+
+.part:focus {
+  outline: none;
+}
+
+.part__header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.part__title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.part__lead {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}

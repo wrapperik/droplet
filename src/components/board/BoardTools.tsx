@@ -1,14 +1,16 @@
 import { useCallback, useId, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { AddCircleIcon, AltArrowDownIcon } from '@solar-icons/react/linear'
+import { AddCircleIcon, CursorIcon, FrameIcon, LayersMinimalisticIcon, NotesIcon, RoutingIcon, StopIcon, TextFieldIcon } from '@solar-icons/react/linear'
+import type { Icon } from '@solar-icons/react/lib/types'
 import { useDismiss } from '../../hooks/useDismiss.ts'
 import { TEMPLATES, framesOf, type TemplateDef } from '../../lib/boardTemplates.ts'
 import { COLOUR_LABELS, CONNECTOR_STYLES, CONNECTOR_STYLE_LABELS, FOUNDER_COLOURS, SHAPE_KINDS, SHAPE_LABELS, type BoardAction, type BoardState, type Tool } from '../../lib/boardState.ts'
+import { useBarTip } from '../taskBarContext.ts'
 import { Toolbar } from '../Toolbar.tsx'
 import type { AddKind, BoardHandle } from './BoardCanvas.tsx'
 import './BoardTools.css'
 
-// The tools in the toolbar of the board. A tool is in hand until the next click on the board, and has no bigger form to be dragged out
+// The tools on the task bar of the board. A tool is in hand until the next click on the board, and has no bigger form to be dragged out
 // into, since what it does is done on the board itself. Each that puts something on the board also has a plus, which puts one in the middle of
 // the view at once: that is the way to add one without a pointer. A tool shows its own options (the colour of the next note, the kind of the
 // next shape, the line of the next arrow, the plus) only while it is in hand, so the bar stays one short row and what is on it is what can be
@@ -18,14 +20,30 @@ type Dispatch = (action: BoardAction) => void
 type Common = { state: BoardState; dispatch: Dispatch }
 type WithBoard = Common & { boardRef: RefObject<BoardHandle | null> }
 
-// The button that puts a tool in hand, or puts it down when it is pressed again.
-function Toggle({ state, dispatch, tool, label }: Common & { tool: Tool; label: string }) {
-  const inHand = state.tool === tool
+// A tool's button on the bar: its icon and its name, always visible, with the tooltip of the bar's item (its full title and reason) as its description.
+function BarButton({ icon: ToolIcon, label, ...props }: { icon: Icon; label: string; pressed?: boolean; onClick: () => void; menu?: { expanded: boolean; controls: string } }) {
+  const tip = useBarTip()
   return (
-    <button type="button" className="boardtool__toggle" aria-pressed={inHand} onClick={() => dispatch({ type: 'set_tool', tool: inHand ? 'select' : tool })}>
+    <button
+      type="button"
+      className="boardtool__toggle taskbar__trigger"
+      aria-pressed={props.pressed}
+      aria-haspopup={props.menu ? 'menu' : undefined}
+      aria-expanded={props.menu?.expanded}
+      aria-controls={props.menu?.controls}
+      aria-describedby={tip}
+      onClick={props.onClick}
+    >
+      <ToolIcon size={18} aria-hidden="true" />
       {label}
     </button>
   )
+}
+
+// The button that puts a tool in hand, or puts it down when it is pressed again.
+function Toggle({ state, dispatch, tool, label, icon }: Common & { tool: Tool; label: string; icon: Icon }) {
+  const inHand = state.tool === tool
+  return <BarButton icon={icon} label={label} pressed={inHand} onClick={() => dispatch({ type: 'set_tool', tool: inHand ? 'select' : tool })} />
 }
 
 // The options of a tool in hand. They slide open beside the tool and close when it is put down. Reduced motion is respected by the page's
@@ -60,9 +78,7 @@ function Plus({ boardRef, kind, label }: { boardRef: RefObject<BoardHandle | nul
 export function SelectTool({ state, dispatch }: Common) {
   return (
     <Toolbar title="Select">
-      <button type="button" className="boardtool__toggle" aria-pressed={state.tool === 'select'} onClick={() => dispatch({ type: 'set_tool', tool: 'select' })}>
-        Select
-      </button>
+      <BarButton icon={CursorIcon} label="Select" pressed={state.tool === 'select'} onClick={() => dispatch({ type: 'set_tool', tool: 'select' })} />
     </Toolbar>
   )
 }
@@ -71,7 +87,7 @@ export function SelectTool({ state, dispatch }: Common) {
 export function StickyTool({ state, dispatch, boardRef }: WithBoard) {
   return (
     <Toolbar title="Sticky note">
-      <Toggle state={state} dispatch={dispatch} tool="sticky" label="Note" />
+      <Toggle state={state} dispatch={dispatch} tool="sticky" label="Note" icon={NotesIcon} />
       <Options show={state.tool === 'sticky'}>
         <span className="boardtool__colours" role="radiogroup" aria-label="Colour of the next note">
           {FOUNDER_COLOURS.map((colour) => (
@@ -88,7 +104,7 @@ export function StickyTool({ state, dispatch, boardRef }: WithBoard) {
 export function ShapeTool({ state, dispatch, boardRef }: WithBoard) {
   return (
     <Toolbar title="Shape">
-      <Toggle state={state} dispatch={dispatch} tool="shape" label="Shape" />
+      <Toggle state={state} dispatch={dispatch} tool="shape" label="Shape" icon={StopIcon} />
       <Options show={state.tool === 'shape'}>
         <span className="boardtool__kinds" role="radiogroup" aria-label="Kind of the next shape">
           {SHAPE_KINDS.map((kind) => (
@@ -107,7 +123,7 @@ export function ShapeTool({ state, dispatch, boardRef }: WithBoard) {
 export function TextTool({ state, dispatch, boardRef }: WithBoard) {
   return (
     <Toolbar title="Text">
-      <Toggle state={state} dispatch={dispatch} tool="text" label="Text" />
+      <Toggle state={state} dispatch={dispatch} tool="text" label="Text" icon={TextFieldIcon} />
       <Options show={state.tool === 'text'}>
         <Plus boardRef={boardRef} kind="text" label="Add text to the middle of the view" />
       </Options>
@@ -119,7 +135,7 @@ export function TextTool({ state, dispatch, boardRef }: WithBoard) {
 export function FrameTool({ state, dispatch, boardRef }: WithBoard) {
   return (
     <Toolbar title="Frame">
-      <Toggle state={state} dispatch={dispatch} tool="frame" label="Frame" />
+      <Toggle state={state} dispatch={dispatch} tool="frame" label="Frame" icon={FrameIcon} />
       <Options show={state.tool === 'frame'}>
         <Plus boardRef={boardRef} kind="frame" label="Add a frame to the middle of the view" />
       </Options>
@@ -131,7 +147,7 @@ export function FrameTool({ state, dispatch, boardRef }: WithBoard) {
 export function ArrowTool({ state, dispatch }: Common) {
   return (
     <Toolbar title="Arrow">
-      <Toggle state={state} dispatch={dispatch} tool="connector" label="Arrow" />
+      <Toggle state={state} dispatch={dispatch} tool="connector" label="Arrow" icon={RoutingIcon} />
       <Options show={state.tool === 'connector'}>
         <span className="boardtool__styles" role="radiogroup" aria-label="Line of the next arrow">
           {CONNECTOR_STYLES.map((style) => (
@@ -168,10 +184,7 @@ export function TemplatesTool({ boardRef }: { boardRef: RefObject<BoardHandle | 
   return (
     <Toolbar title="Templates">
       <div className="templates" ref={wrapRef}>
-        <button type="button" className="boardtool__toggle templates__button" aria-haspopup="menu" aria-expanded={open} aria-controls={menuId} onClick={() => setOpen((value) => !value)}>
-          Templates
-          <AltArrowDownIcon size={14} aria-hidden="true" />
-        </button>
+        <BarButton icon={LayersMinimalisticIcon} label="Templates" onClick={() => setOpen((value) => !value)} menu={{ expanded: open, controls: menuId }} />
         <AnimatePresence>
           {open && (
             <motion.div

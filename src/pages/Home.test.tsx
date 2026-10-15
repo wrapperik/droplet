@@ -75,12 +75,11 @@ const renderHome = () =>
 
 const loadChatsFor = () => loadChats('duckstack')
 
-// The client's name is in the client window, which opens from its step in the toolbar.
-const clientName = async (user: ReturnType<typeof userEvent.setup>) => {
-  const step = within(screen.getByRole('toolbar', { name: 'Tools' })).getByRole('button', { name: /^Client\./ })
-  if (step.getAttribute('aria-expanded') !== 'true') await user.click(step)
-  return screen.getByLabelText('Client or company name')
-}
+// The task bar of whichever workspace is open: the parts of the brand or of the invoice, or the board's tools. Null when none is.
+const taskBar = () => screen.queryByRole('group', { name: /^Parts of the (brand|invoice)$/ }) ?? screen.queryByRole('toolbar', { name: 'Board tools' })
+
+// In Workspace mode the client's name is in the Client part of the panel, which is always there.
+const clientName = async (_user: ReturnType<typeof userEvent.setup>) => screen.getByLabelText('Client or company name')
 
 // The tasks are chosen from the message bar's menu: the sidebar has no list of them.
 const pickTask = async (user: ReturnType<typeof userEvent.setup>, name: RegExp) => {
@@ -113,18 +112,18 @@ describe('asking Droplet to fill in the invoice', () => {
     expect(screen.getByLabelText(/^Invoice INV-0001/)).toHaveTextContent('Karoo Candles')
     expect(screen.getByLabelText(/^Invoice INV-0001/)).toHaveTextContent('Soy candle')
     expect(screen.getByLabelText('Price each, in rand')).toHaveValue('85.00')
-    // one undo takes back everything it did (a window opened from the toolbar is a step of its own, so none is opened first)
+    // one undo takes back everything it did
     await user.click(screen.getByRole('button', { name: 'Undo' }))
     expect(await clientName(user)).toHaveValue('')
     expect(screen.getByLabelText('Price each, in rand')).toHaveValue('')
   })
 
-  it('opens the window of the part it changed, so the change is on screen to edit, and Undo leaves it open', async () => {
+  it('changes the part of the panel it touched, which is always on screen to edit, and Undo this takes the change back', async () => {
     const user = userEvent.setup()
     answers = [reply('invoice', 'Set.', [{ type: 'set_client', name: 'Karoo Candles' }])]
     renderHome()
     await pickTask(user, /Make an invoice/)
-    expect(screen.queryByLabelText('Client or company name')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Client or company name')).toHaveValue('')
     await say(user, 'It is for Karoo Candles')
     await screen.findByText('Set.')
     expect(await screen.findByLabelText('Client or company name')).toHaveValue('Karoo Candles')
@@ -185,7 +184,7 @@ describe('asking Droplet to fill in the invoice', () => {
     expect(asked[0].view).toBe('invoice')
     expect(asked[1].view).toBe('brand')
     expect(asked[1].workspace).toBeDefined()
-    await waitFor(() => expect(within(screen.getByRole('toolbar', { name: 'Tools' })).getByRole('group', { name: 'Colour picker' })).toBeInTheDocument())
+    await waitFor(() => expect(within(screen.getByRole('group', { name: 'Parts of the brand' })).getByRole('button', { name: /^Colours/ })).toBeInTheDocument())
   })
 
   it('leaves the invoice alone when the composer only answers', async () => {
@@ -338,7 +337,7 @@ describe('the start of the conversation', () => {
 
 describe('going back to the full chat', () => {
   const back = () => screen.getByRole('button', { name: 'Back to the full chat' })
-  const toolbar = () => screen.queryByRole('toolbar', { name: 'Tools' })
+  const toolbar = taskBar
   const prompt = () => screen.getByText(/You have unsaved changes in/)
 
   it('has no such button until a workspace is open', async () => {
@@ -789,7 +788,7 @@ describe('the light while Droplet works', () => {
 })
 
 describe('the board for shaping the business idea', () => {
-  const toolbar = () => screen.queryByRole('toolbar', { name: 'Tools' })
+  const toolbar = taskBar
   // The plus is among the options of the sticky note tool, which show while it is in hand.
   const addNote = async (user: ReturnType<typeof userEvent.setup>) => {
     const note = await screen.findByRole('button', { name: 'Note' })
@@ -806,12 +805,16 @@ describe('the board for shaping the business idea', () => {
     expect(within(screen.getByRole('log', { name: 'Conversation' })).queryAllByRole('listitem')).toHaveLength(0)
   })
 
-  it('has the board tools in the toolbar, which cannot be taken away', async () => {
+  it('has the board tools on the task bar, each with its name written out, in a fixed order, with nothing to add, remove or reset', async () => {
     const user = userEvent.setup()
     renderHome()
     await pickTask(user, /Shape the business idea/)
     const bar = within(toolbar()!)
-    for (const name of ['Select', 'Sticky note', 'Shape', 'Text', 'Frame', 'Arrow', 'Templates']) expect(bar.getByRole('group', { name })).toBeInTheDocument()
+    const names = ['Select', 'Sticky note', 'Shape', 'Text', 'Frame', 'Arrow', 'Templates']
+    for (const name of names) expect(bar.getByRole('group', { name })).toBeInTheDocument()
+    expect(bar.getAllByRole('group').map((group) => group.getAttribute('aria-label'))).toEqual(names)
+    // the label is on the bar itself: each tool's button has its name as text
+    for (const label of ['Select', 'Note', 'Shape', 'Text', 'Frame', 'Arrow', 'Templates']) expect(bar.getByRole('button', { name: label })).toHaveTextContent(label)
     // the options of a tool are there while it is in hand
     expect(bar.queryByRole('radiogroup', { name: 'Colour of the next note' })).not.toBeInTheDocument()
     await user.click(bar.getByRole('button', { name: 'Note' }))
@@ -820,9 +823,9 @@ describe('the board for shaping the business idea', () => {
     expect(bar.getByRole('radiogroup', { name: 'Kind of the next shape' })).toBeInTheDocument()
     await user.click(bar.getByRole('button', { name: 'Arrow' }))
     expect(bar.getByRole('radiogroup', { name: 'Line of the next arrow' })).toBeInTheDocument()
-    // none of them can be taken away
-    await user.click(bar.getByRole('button', { name: 'Add or remove a tool' }))
-    for (const item of within(screen.getByRole('menu', { name: 'Tools in the toolbar' })).getAllByRole('menuitemcheckbox')) expect(item).toBeDisabled()
+    // nothing to add or take away, and no layout to reset
+    expect(screen.queryByRole('button', { name: /Add or remove a tool/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Reset layout/ })).not.toBeInTheDocument()
   })
 
   it('keeps the board while another workspace is shown, and brings it back as it was', async () => {
@@ -977,7 +980,7 @@ describe('the AI on the board', () => {
     await user.keyboard(`${text}{Escape}`)
   }
   const pink = () => [...document.querySelectorAll<HTMLElement>('.note[data-colour="pink"]')]
-  const toolbar = () => screen.queryByRole('toolbar', { name: 'Tools' })
+  const toolbar = taskBar
 
   it('offers a few ways in on an empty board, and sends the one that is pressed as the founder\'s own request', async () => {
     const user = userEvent.setup()
@@ -1326,7 +1329,7 @@ describe('guiding the founder', () => {
     await say(user, 'I want to create a dev studio called DuckStack')
     await waitFor(() => expect(screen.getByText('How far along are you?')).toBeInTheDocument())
     expect(asked).toHaveLength(1)
-    expect(screen.queryByRole('toolbar', { name: 'Tools' })).not.toBeInTheDocument()
+    expect(taskBar()).not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Board' })).not.toBeInTheDocument()
   })
 
@@ -1337,7 +1340,7 @@ describe('guiding the founder', () => {
     renderHome()
     await say(user, 'I want to create a dev studio called DuckStack')
     await waitFor(() => expect(screen.getByText(/I got an answer I could not use/)).toBeInTheDocument())
-    expect(screen.queryByRole('toolbar', { name: 'Tools' })).not.toBeInTheDocument()
+    expect(taskBar()).not.toBeInTheDocument()
     expect(screen.queryByText('Here are colours.')).not.toBeInTheDocument()
   })
 
@@ -1501,19 +1504,18 @@ describe('Guide mode', () => {
   const continueOn = (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole('button', { name: 'Continue' }))
   const onStep = (title: string) => expect(screen.getByRole('region', { name: title })).toBeInTheDocument()
 
-  it('opens the invoice one step at a time, with the page beside it and no toolbar', async () => {
+  it('opens the invoice one step at a time, with the page beside it and the parts on the task bar', async () => {
     const user = userEvent.setup()
     renderHome()
     await pickTask(user, /Make an invoice/)
     expect(await screen.findByText('Step 1 of 6')).toBeInTheDocument()
     onStep('Your business')
-    expect(screen.getByRole('complementary', { name: 'Preview' })).toHaveTextContent('INV-0001')
-    expect(screen.queryByRole('toolbar', { name: 'Tools' })).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'The invoice' })).toHaveTextContent('INV-0001')
     // the steps ahead are shown, but cannot be skipped to
-    const steps = within(screen.getByRole('navigation', { name: 'Invoice steps' })).getAllByRole('button')
-    expect(steps.map((step) => step.textContent)).toEqual(['1Business', '2VAT', '3Client', '4Items', '5Details', '6Review'])
+    const steps = within(screen.getByRole('group', { name: 'Parts of the invoice' })).getAllByRole('button')
+    expect(steps.map((step) => step.querySelector('.taskbar__label')?.textContent)).toEqual(['Business', 'VAT', 'Client', 'Items', 'Details', 'Review'])
     expect(steps[0]).toHaveAttribute('aria-current', 'step')
-    expect(steps[2]).toBeDisabled()
+    expect(steps[2]).toHaveAttribute('aria-disabled', 'true')
   })
 
   it('does not move on while the step is missing something required, and says what', async () => {
@@ -1533,7 +1535,7 @@ describe('Guide mode', () => {
     // Back, and forward again from the row of steps, as far as the founder got
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(await screen.findByText('Step 1 of 6')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /^Step 2, VAT/ }))
+    await user.click(within(screen.getByRole('group', { name: 'Parts of the invoice' })).getByRole('button', { name: /^VAT/ }))
     expect(await screen.findByText('Step 2 of 6')).toBeInTheDocument()
   })
 
@@ -1567,7 +1569,7 @@ describe('Guide mode', () => {
     await screen.findByText('Step 1 of 6')
     await say(user, 'It is for Karoo Candles')
     await screen.findByText('Added.')
-    expect(screen.getByRole('complementary', { name: 'Preview' })).toHaveTextContent('Karoo Candles')
+    expect(screen.getByRole('region', { name: 'The invoice' })).toHaveTextContent('Karoo Candles')
   })
 
   it('goes to the step Droplet changed, and Show me marks the field it changed even after the founder has moved away', async () => {
@@ -1581,7 +1583,7 @@ describe('Guide mode', () => {
     // the change is shown where it can be edited
     expect(await screen.findByText('Step 3 of 6')).toBeInTheDocument()
     expect(screen.getByLabelText('Client or company name')).toHaveValue('Niel Pretorius')
-    await user.click(screen.getByRole('button', { name: /^Step 1, Your business/ }))
+    await user.click(within(screen.getByRole('group', { name: 'Parts of the invoice' })).getByRole('button', { name: /^Business/ }))
     expect(await screen.findByText('Step 1 of 6')).toBeInTheDocument()
     const receipt = screen.getByRole('region', { name: /Changed on the invoice/ })
     await user.click(within(receipt).getByRole('button', { name: 'Show me' }))
@@ -1601,7 +1603,9 @@ describe('Guide mode', () => {
     await user.type(await screen.findByLabelText('Business name'), 'Kindred Gifting')
     await user.click(screen.getByRole('button', { name: /Choose how Droplet works/ }))
     await user.click(screen.getByRole('menuitemradio', { name: /Workspace/ }))
-    expect(await screen.findByRole('toolbar', { name: 'Tools' })).toBeInTheDocument()
+    // every part of the invoice is in the panel at once, on the same invoice
+    expect(await screen.findByRole('region', { name: 'Invoice details' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Client' })).toBeInTheDocument()
     expect(screen.getByLabelText(/^Invoice INV-0001/)).toHaveTextContent('Kindred Gifting')
   })
 
@@ -1670,7 +1674,7 @@ describe('Quick only', () => {
 })
 
 describe('opening, switching and closing workspaces', () => {
-  const toolbar = () => screen.queryByRole('toolbar', { name: 'Tools' })
+  const toolbar = taskBar
   const inBrand = () => screen.queryByRole('button', { name: /^Remove colour 1,/ })
   const inInvoice = () => screen.queryByLabelText(/^Invoice INV-0001/)
 

@@ -1,10 +1,9 @@
 import { z } from 'zod'
 import { computeTotals, dueDateOf, lineIsBlank, type InvoiceContent } from './invoice.ts'
 import type { Issue, Readiness } from './invoiceReadiness.ts'
-import { toolbarTools, type Arrangement } from './arrangement.ts'
-import type { InvoiceAction } from './invoiceState.ts'
 
-// Guide mode for the invoice: one part of the invoice at a time, in the middle of the screen, in a fixed order, until it is finished.
+// The six parts of the invoice, in a fixed order, the same in both modes: Guide mode shows one at a time until it is finished, and Workspace mode shows them all
+// stacked in the panel. The names and the order are the app's, here.
 // The order is the app's, never the model's, so a founder always knows what comes next. A step is left only when the founder presses
 // Continue, and only once nothing required of it is outstanding (from the same check the export uses). A founder can always go back
 // to a step they have already reached.
@@ -18,10 +17,10 @@ export const GUIDE_TITLES: Record<GuideStepId, string> = {
   client: 'Client',
   lines: 'What you are charging',
   terms: 'Invoice details',
-  review: 'Review and finish',
+  review: 'Review',
 }
 
-// The names in the row of steps above the guide, short enough for six to sit side by side.
+// The names on the task bar, short enough for six to sit side by side.
 export const GUIDE_SHORT: Record<GuideStepId, string> = {
   business: 'Business',
   vat: 'VAT',
@@ -31,14 +30,14 @@ export const GUIDE_SHORT: Record<GuideStepId, string> = {
   review: 'Review',
 }
 
-// One line under each step's title, on what it asks for.
+// One line under each part's title, on what it asks for. It is the part's reason on screen (manifesto principle 3).
 export const GUIDE_LEADS: Record<GuideStepId, string> = {
   business: 'Who the invoice comes from. Entered once, it is on every invoice after this one.',
   vat: 'Whether you charge VAT. Leave it off unless SARS has given you a VAT number.',
   client: 'Who the invoice is for. Pick a client you saved, or add a new one.',
   lines: 'Each thing you are charging for, with a quantity and a price. The amounts are worked out for you.',
   terms: 'The number, the date and when payment is due.',
-  review: 'The invoice as your client will get it. Finish to save it.',
+  review: 'Everything the invoice needs before you can export it, checked in code.',
 }
 
 // Where the founder is in the guide for one invoice: the step on screen, and the furthest step reached (by its place), which they can go back to.
@@ -107,8 +106,8 @@ export function stepToShow(current: GuideStepId, changed: GuideStepId[]): GuideS
   return changed[0]
 }
 
-// The parts of the invoice the things a change touched belong to, in the guide's order: a field by what it holds (`client.name` is the client),
-// a line of the invoice is the items, and a window is its own part.
+// The parts of the invoice the things a change touched belong to, in the order of the parts: a field by what it holds (`client.name` is the client),
+// a line of the invoice is the items, and a part is itself.
 const PART_OF_FIELD: Record<string, GuideStepId> = { business: 'business', vat: 'vat', client: 'client', details: 'terms' }
 
 export function stepsOfTargets(targets: { kind: string; id: string | number }[]): GuideStepId[] {
@@ -118,21 +117,9 @@ export function stepsOfTargets(targets: { kind: string; id: string | number }[])
     else if (target.kind === 'field') {
       const part = PART_OF_FIELD[String(target.id).split('.')[0]]
       if (part) parts.add(part)
-    } else if (target.kind === 'window' && (GUIDE_STEPS as readonly string[]).includes(String(target.id))) parts.add(target.id as GuideStepId)
+    } else if (target.kind === 'part' && (GUIDE_STEPS as readonly string[]).includes(String(target.id))) parts.add(target.id as GuideStepId)
   }
   return GUIDE_STEPS.filter((step) => parts.has(step))
-}
-
-// In Workspace mode, what opens the windows of the parts Droplet changed, so each change is on screen to edit: a tool in the toolbar becomes its
-// window, and a window that was hidden is shown. Nothing when they are all open already.
-export function revealActions(arrangement: Arrangement, changed: GuideStepId[]): InvoiceAction[] {
-  const inBar = toolbarTools({ ...arrangement, hidden: [] })
-  return changed
-    .filter((step) => step !== 'review')
-    .flatMap((id): InvoiceAction[] => [
-      ...(arrangement.hidden.includes(id) ? [{ type: 'show' as const, component: id }] : []),
-      ...(inBar.includes(id) ? [{ type: 'expand_tool' as const, id }] : []),
-    ])
 }
 
 // A finished invoice, as the card in the chat shows it. Only the number, the client's name, the dates and the sums: never an address, a

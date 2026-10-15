@@ -1,7 +1,6 @@
 import { useId, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react'
 import { hexToRgb, hsvToRgb, normaliseHex, readableTextColour, rgbToHex, rgbToHsv, type Hsv } from '../lib/colour.ts'
-import ToolWindow from './ToolWindow.tsx'
-import './ColourWheelWindow.css'
+import './ColourWheel.css'
 
 type Block = { id: number; hex: string }
 
@@ -11,7 +10,6 @@ type Props = {
   onSelect: (id: number) => void
   // Changes one colour. The wheel works on whichever colour the pointer picked up, which may not be the selected one yet.
   onChange: (id: number, hex: string) => void
-  reason: string
 }
 
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value))
@@ -19,16 +17,25 @@ const hsvOf = (hex: string): Hsv => rgbToHsv(hexToRgb(hex))
 // How close, in pixels, a press must be to a colour's marker to pick that marker up.
 const PICK_RADIUS_PX = 16
 
-// The colour picker as a window: a colour wheel with every colour in the palette on it. Drag a colour to change its hue
-// and saturation. Brightness is the slider beneath, and every value also has a slider or a field, so nothing needs the
-// pointer.
-export default function ColourWheelWindow({ blocks, selectedId, onSelect, onChange, reason }: Props) {
+// The colour wheel, with every colour in the palette on it. Drag a colour to change its hue and saturation. Brightness is the slider beneath, and every value
+// also has a slider or a field (hex, or red, green and blue), so nothing needs the pointer.
+export default function ColourWheel({ blocks, selectedId, onSelect, onChange }: Props) {
   const wheelRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<number | null>(null)
   const id = useId()
   const selected = blocks.find((block) => block.id === selectedId) ?? blocks[0]
   const hsv = hsvOf(selected.hex)
   const [draft, setDraft] = useState<string | null>(null)
+  // A channel being typed, which may be half a number, until it is left.
+  const [channelDraft, setChannelDraft] = useState<{ channel: 'r' | 'g' | 'b'; text: string } | null>(null)
+  const rgb = hexToRgb(selected.hex)
+  const setChannel = (channel: 'r' | 'g' | 'b', text: string) => {
+    setChannelDraft({ channel, text })
+    if (!/^\d{1,3}$/.test(text.trim())) return
+    const value = Number(text)
+    if (value > 255) return
+    onChange(selected.id, rgbToHex({ ...rgb, [channel]: value }))
+  }
 
   const commit = (blockId: number, next: Hsv) => {
     setDraft(null)
@@ -114,7 +121,7 @@ export default function ColourWheelWindow({ blocks, selectedId, onSelect, onChan
   const pure = rgbToHex(hsvToRgb({ h: hsv.h, s: hsv.s, v: 1 }))
 
   return (
-    <ToolWindow title="Colour wheel" reason={reason}>
+    <>
       <div className="wheel">
         <div
           ref={wheelRef}
@@ -223,8 +230,23 @@ export default function ColourWheelWindow({ blocks, selectedId, onSelect, onChan
               Use three or six hex digits, like #1F8FE0.
             </span>
           )}
+          <div className="wheel__rgb" role="group" aria-label={`Red, green and blue of colour ${blocks.findIndex((block) => block.id === selected.id) + 1}`}>
+            {(['r', 'g', 'b'] as const).map((channel) => (
+              <label key={channel} className="wheel__field wheel__field--channel">
+                <span>{{ r: 'Red', g: 'Green', b: 'Blue' }[channel]}</span>
+                <input
+                  className="wheel__hex wheel__channel"
+                  inputMode="numeric"
+                  value={channelDraft?.channel === channel ? channelDraft.text : String(rgb[channel])}
+                  onChange={(event) => setChannel(channel, event.target.value)}
+                  onBlur={() => setChannelDraft(null)}
+                  autoComplete="off"
+                />
+              </label>
+            ))}
+          </div>
         </div>
       </div>
-    </ToolWindow>
+    </>
   )
 }

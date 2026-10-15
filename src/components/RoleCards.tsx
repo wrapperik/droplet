@@ -1,8 +1,7 @@
 import { CheckIcon } from '@solar-icons/react/linear'
 import { readableTextColour } from '../lib/colour.ts'
 import { COLOUR_ROLES, type ColourRole, type ResolvedRoles } from '../lib/palette.ts'
-import ToolWindow from './ToolWindow.tsx'
-import './RoleWindow.css'
+import './RoleCards.css'
 
 type Props = {
   roles: ResolvedRoles
@@ -11,7 +10,6 @@ type Props = {
   numberOf: (blockId: number) => number
   onChange: (role: ColourRole | null) => void
   onSelect: (blockId: number) => void
-  reason: string
 }
 
 const WHAT_FOR: Record<ColourRole, string> = {
@@ -21,11 +19,11 @@ const WHAT_FOR: Record<ColourRole, string> = {
   text: 'The colour of body text. It has to read clearly on the background.',
 }
 
-// The role tool as a window: every role as a card, with the colour that holds it. Choosing a role for the selected colour
+// The roles: every role as a card, with the colour that holds it. Choosing a role for the selected colour
 // moves it from the colour that held it. A role the founder did not choose is suggested from the colours, and says so.
-export default function RoleWindow({ roles, selected, numberOf, onChange, onSelect, reason }: Props) {
+export default function RoleCards({ roles, selected, numberOf, onChange, onSelect }: Props) {
   return (
-    <ToolWindow title="Colour roles" reason={reason}>
+    <>
       <ul className="roles">
         {COLOUR_ROLES.map((option) => {
           const held = roles[option.id]
@@ -62,6 +60,6 @@ export default function RoleWindow({ roles, selected, numberOf, onChange, onSele
           )
         })}
       </ul>
-    </ToolWindow>
+    </>
   )
 }

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearBoard, loadBoard, openBoardForProject, saveBoard } from './boardStore.ts'
 import { clearChats, loadChats, saveChats } from './chatStore.ts'
 import { openBoard, docOf } from './boardState.ts'
-import { loadInvoice, saveArrangement } from './invoiceStore.ts'
+import { loadInvoice } from './invoiceStore.ts'
 import { loadMemory, saveMemory } from './memoryStore.ts'
 import { emptyMemory, withIdea } from './projectMemory.ts'
 import { loadPalette, savePalette } from './projectStore.ts'
@@ -54,14 +54,15 @@ describe('swapping the storage', () => {
     before = setDocumentStorage(driver)
     expect(documentStorage()).toBe(driver)
 
-    const palette = await savePalette('p', { blocks: [{ id: 1, hex: '#1F8FE0' }, { id: 2, hex: '#0B4F8A' }], layout: [] })
-    const board = await saveBoard('p', { ...docOf(openBoard([])), layout: [] })
-    const arrangement = await saveArrangement('p', { layout: [] })
+    const palette = await savePalette('p', { blocks: [{ id: 1, hex: '#1F8FE0' }, { id: 2, hex: '#0B4F8A' }] })
+    const board = await saveBoard('p', { items: docOf(openBoard([])).items })
+    // The invoice document is only read now (an older save of the invoice), so a test writes one itself.
+    const arrangement = await documentStorage().write('p', 'invoice', { savedAt: '2026-10-05T09:00:00' })
     expect(await saveMemory('p', withIdea(emptyMemory(), 'name', 'Kindred', '2026-10-05T09:00:00'))).toBe(true)
     expect(await saveChats('p', [{ id: 'c', title: 'Hello', updatedAt: '2026-10-05T10:00:00', messages: [{ id: 1, from: 'you', text: 'Hello' }] }])).toBe(true)
     expect(palette).not.toBeNull()
     expect(board).not.toBeNull()
-    expect(arrangement).not.toBeNull()
+    expect(arrangement).toBe(true)
 
     expect([...documents.keys()].sort()).toEqual(['p/board', 'p/chats', 'p/invoice', 'p/memory', 'p/palette'])
     expect(window.localStorage.length).toBe(0)
@@ -90,7 +91,7 @@ describe('swapping the storage', () => {
     before = setDocumentStorage(driver)
     await saveChats('p', [])
     await clearChats('p')
-    await saveBoard('p', { ...docOf(openBoard([])), layout: [] })
+    await saveBoard('p', { items: docOf(openBoard([])).items })
     await clearBoard('p')
     expect(documents.size).toBe(0)
     expect(calls).toContain('remove p/chats')

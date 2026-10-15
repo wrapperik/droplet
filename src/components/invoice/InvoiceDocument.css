@@ -1,6 +1,27 @@
+/* The frame round the page: a heading and the page. It is the container the page's units measure against. */
+.paper-frame {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.paper-frame__header {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.paper-frame__title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
 /* The page, laid out as it prints: A4, with the same margins, type sizes and column widths as the PDF (`src/export/invoicePdf.tsx`),
-   all scaled to the width of the window. --pt is one PDF point, so a size here is the size in the PDF, and the page looks the same at
-   any width. The window is the container the units measure against. Its colours come from the founder's palette, through the
+   all scaled to the width of the page's frame. --pt is one PDF point, so a size here is the size in the PDF, and the page looks the same at
+   any width. The frame is the container the units measure against. Its colours come from the founder's palette, through the
    --paper-* properties set on it. */
 .paper {
   --pt: 0.16807cqw; /* 100 / 595, the width of A4 in points */

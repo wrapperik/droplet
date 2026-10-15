@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { BOARD_H, BOARD_W, NOTE_DEFAULT, NOTE_MAX, NOTE_MIN } from './boardGeometry.ts'
 import {
-  BOARD_LAYOUT,
   MAX_ITEMS,
   MAX_NOTE_TEXT,
-  boardArrangementIsDefault,
   canRedoBoard,
   canUndoBoard,
   docOf,
@@ -32,7 +30,7 @@ describe('opening a board', () => {
     const state = empty()
     expect(docOf(state).items).toEqual([])
     expect(state).toMatchObject({ selection: [], tool: 'select', noteColour: 'yellow' })
-    expect(docOf(state).layout).toEqual(BOARD_LAYOUT)
+    expect(Object.keys(docOf(state))).toEqual(['items'])
     expect(canUndoBoard(state)).toBe(false)
   })
 
@@ -243,27 +241,12 @@ describe('batch', () => {
   })
 })
 
-describe('the arrangement', () => {
-  it('handles the shared arrangement actions, so the toolbar and the window work as in every workspace', () => {
-    const state = run(empty(), { type: 'resize', id: 'board', value: 18 })
-    expect(docOf(state).layout.find((placement) => placement.id === 'board')?.w).toBe(18)
-    expect(boardArrangementIsDefault(docOf(state))).toBe(false)
-    expect(boardArrangementIsDefault(docOf(run(state, { type: 'reset_layout' })))).toBe(true)
-  })
-
-  it('does not let the fixed tools be hidden', () => {
-    const state = empty()
-    expect(run(state, { type: 'hide', component: 'select' })).toBe(state)
-    expect(run(state, { type: 'hide', component: 'sticky' })).toBe(state)
-  })
-})
-
 describe('isBoardUnsaved', () => {
   it('is unsaved with nothing saved, and saved once it matches what was', () => {
     const state = run(empty(), add('a'))
     const doc = docOf(state)
     expect(isBoardUnsaved(doc, null)).toBe(true)
-    const saved = { items: doc.items, layout: doc.layout, tools: doc.tools, expanded: doc.expanded, hidden: doc.hidden, savedAt: 'x' }
+    const saved = { items: doc.items, savedAt: 'x' }
     expect(isBoardUnsaved(doc, saved)).toBe(false)
     expect(isBoardUnsaved(docOf(run(state, { type: 'set_text', id: 'a', text: 'new' })), saved)).toBe(true)
   })
@@ -289,7 +272,7 @@ describe('sameItems', () => {
   it('does not count a board that was saved and read back from storage as changed', () => {
     const state = run(empty(), add('a'), { type: 'set_text', id: 'a', text: 'Saved' })
     const doc = docOf(state)
-    const stored = JSON.parse(JSON.stringify({ items: (doc.items as NoteItem[]).map((item) => ({ id: item.id, kind: item.kind, x: item.x, y: item.y, w: item.w, h: item.h, text: item.text, colour: item.colour, author: item.author })), layout: doc.layout, tools: doc.tools, expanded: doc.expanded, hidden: doc.hidden, savedAt: 'x' }))
+    const stored = JSON.parse(JSON.stringify({ items: (doc.items as NoteItem[]).map((item) => ({ id: item.id, kind: item.kind, x: item.x, y: item.y, w: item.w, h: item.h, text: item.text, colour: item.colour, author: item.author })), savedAt: 'x' }))
     expect(isBoardUnsaved(doc, stored)).toBe(false)
   })
 })
@@ -621,11 +604,6 @@ describe('tool settings', () => {
     expect(state).toMatchObject({ shapeKind: 'diamond', connectorStyle: 'elbow', tool: 'connector' })
     expect(state.history.past).toHaveLength(0)
   })
-
-  it('has every tool in the toolbar, none of which can be hidden', () => {
-    const state = empty()
-    for (const id of ['select', 'sticky', 'shape', 'text', 'frame', 'connector']) expect(run(state, { type: 'hide', component: id })).toBe(state)
-  })
 })
 
 // ---- Several things at once, and templates ----
@@ -802,6 +780,6 @@ describe('keeping things in mind', () => {
   })
 
   it('counts as a change, so the board is not saved until it is', () => {
-    expect(isBoardUnsaved(docOf(reduceBoard(two(), { type: 'set_starred', ids: ['a'], starred: true })), { items: docOf(two()).items, layout: docOf(two()).layout })).toBe(true)
+    expect(isBoardUnsaved(docOf(reduceBoard(two(), { type: 'set_starred', ids: ['a'], starred: true })), { items: docOf(two()).items })).toBe(true)
   })
 })

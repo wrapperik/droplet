@@ -56,7 +56,7 @@ export const openSnapshot = (): WorkspaceSnapshot => {
 // A new invoice open in the workspace, dated 4 October 2026, in a project that remembers one client.
 export const openInvoiceSnapshot = (): InvoiceSnapshot => {
   const memory = withClient(emptyMemory(), { ...emptyClient(), name: 'Pretoria Print Works', address: '5 Church Square' }, '2026-10-01T10:00', 'c1')
-  return snapshotOfInvoice(openInvoiceWorkspace(newContent('2026-10-04', 'INV-0007'), null, 'i1'), memory, '2026-10-04')
+  return snapshotOfInvoice(openInvoiceWorkspace(newContent('2026-10-04', 'INV-0007'), 'i1'), memory, '2026-10-04')
 }
 
 // A board with a frame of name ideas holding two notes, and three loose notes about the business, as the founder might have left it. The first

@@ -3,7 +3,7 @@ import { readableTextColour } from '../../lib/colour.ts'
 import type { InvoiceContent } from '../../lib/invoice.ts'
 import { invoiceView, logoSlotOf, type LogoSlot, type Text } from '../../lib/invoiceView.ts'
 import type { ResolvedRoles } from '../../lib/palette.ts'
-import ToolWindow from '../ToolWindow.tsx'
+import { ReasonTip } from '../Toolbar.tsx'
 import './InvoiceDocument.css'
 
 type Props = {
@@ -24,7 +24,11 @@ const Part = ({ text }: { text: Text }) => (text.placeholder ? <span className="
 // moment and says what is still to come. The colours are set as custom properties and used only inside the page.
 export default function InvoiceDocument({ content, roles, reason, logo, onOpenHandoff }: Props) {
   return (
-    <ToolWindow title="Invoice" reason={reason}>
+    <section className="paper-frame" aria-label="Invoice">
+      <header className="paper-frame__header">
+        <h2 className="paper-frame__title">Invoice</h2>
+        <ReasonTip reason={reason} />
+      </header>
       <InvoicePaper content={content} roles={roles} logo={logoSlotOf(logo)} />
       <p className="paper-note">Shown as it will print on A4.</p>
       {/* An outstanding logo flags the invoice and never blocks it: the business name is the brand until the logo is added, on the page and in the PDF. */}
@@ -41,7 +45,7 @@ export default function InvoiceDocument({ content, roles, reason, logo, onOpenHa
           )}
         </p>
       )}
-    </ToolWindow>
+    </section>
   )
 }
 

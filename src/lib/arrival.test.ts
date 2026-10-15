@@ -31,7 +31,7 @@ describe('where a thing is on screen', () => {
     expect(selectorFor({ kind: 'block', id: 3, how: 'added' })).toBe('.palette__block[data-block-id="3"]')
     expect(selectorFor({ kind: 'line', id: 2, how: 'added' })).toBe('.lines__row[data-line-id="2"]')
     expect(selectorFor({ kind: 'item', id: 'abc', how: 'added' })).toBe('[data-item-id="abc"]')
-    expect(selectorFor({ kind: 'window', id: 'preview', how: 'added' })).toBe('.gw__item[data-id="preview"]')
+    expect(selectorFor({ kind: 'part', id: 'client', how: 'added' })).toBe('[data-part="client"]')
   })
 
   it('cannot be made to select something else by an id that has quotes in it', () => {

@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearBoard, loadBoard, openBoardForProject, saveBoard } from './boardStore.ts'
-import { BOARD_LAYOUT, docOf, isBoardUnsaved, openBoard, reduceBoard, type BoardItem } from './boardState.ts'
+import { docOf, isBoardUnsaved, openBoard, type BoardItem } from './boardState.ts'
+
+// The arrangement an older save holds, which is read and ignored.
+const BOARD_LAYOUT = [{ id: 'board', col: 0, row: 0, w: 24 }]
 
 const data = {
   items: [{ id: 'a', kind: 'note' as const, x: 100, y: 100, w: 200, h: 180, text: 'Hello', colour: 'yellow' as const, author: 'you' as const }],
@@ -46,15 +49,12 @@ describe('boardStore', () => {
     expect(docOf(await openBoardForProject('duckstack')).items).toEqual(data.items)
   })
 
-  it('opens with the default arrangement, whatever arrangement an older save holds', async () => {
-    const start = openBoard()
-    const moved = reduceBoard(start, { type: 'resize', id: 'board', value: 16 })
-    const doc = docOf(moved)
-    await saveBoard('duckstack', { items: doc.items, layout: doc.layout, tools: doc.tools, expanded: ['select'], hidden: ['select'] })
+  it('opens the board of an older save that holds an arrangement, and the arrangement is not part of the board', async () => {
+    window.localStorage.setItem('droplet-project-duckstack-board', JSON.stringify({ ...data, tools: ['select'], expanded: ['select'], hidden: ['select'], savedAt: 'x' }))
+    expect(await loadBoard('duckstack')).toMatchObject({ tools: ['select'], expanded: ['select'], hidden: ['select'] })
     const opened = docOf(await openBoardForProject('duckstack'))
-    expect(opened.layout).toEqual(docOf(openBoard()).layout)
-    expect(opened.expanded).toEqual([])
-    expect(opened.hidden).toEqual(docOf(openBoard()).hidden)
+    expect(Object.keys(opened)).toEqual(['items'])
+    expect(opened.items).toEqual(data.items)
   })
 
   it('reads a save that has no layout', async () => {
@@ -77,7 +77,7 @@ describe('boardStore with every kind of thing', () => {
   it('saves and loads all of them, and opens a board that is the same as the one saved', async () => {
     const state = openBoard(everything)
     const doc = docOf(state)
-    expect(await saveBoard('duckstack', { items: doc.items, layout: doc.layout, tools: doc.tools, expanded: doc.expanded, hidden: doc.hidden })).not.toBeNull()
+    expect(await saveBoard('duckstack', { items: doc.items })).not.toBeNull()
     const saved = (await loadBoard('duckstack'))!
     expect(saved.items).toHaveLength(6)
     // read back with its fields in another order, it is still the same board
@@ -120,7 +120,7 @@ describe('boardStore with hints and groups', () => {
     ]
     const state = openBoard(items)
     const doc = docOf(state)
-    await saveBoard('duckstack', { items: doc.items, layout: doc.layout, tools: doc.tools, expanded: doc.expanded, hidden: doc.hidden })
+    await saveBoard('duckstack', { items: doc.items })
     const loaded = (await loadBoard('duckstack'))!
     expect(loaded.items.find((item) => item.id === 'a')).toMatchObject({ hint: 'Who is it for?', group: 'customer_problem:1' })
     expect(loaded.items.find((item) => item.id === 'plain')).not.toHaveProperty('hint')
@@ -144,8 +144,8 @@ describe('a save from when the board had a summary', () => {
       JSON.stringify({
         items: doc.items,
         summary: { decided: ['A name'], open: [], next: [], by: 'droplet', edited: false, writtenAt: '2026-10-05T10:00:00' },
-        layout: [...doc.layout, { id: 'summary', col: 0, row: 22, w: 12 }],
-        tools: doc.tools,
+        layout: [...BOARD_LAYOUT, { id: 'summary', col: 0, row: 22, w: 12 }],
+        tools: ['select'],
         expanded: [],
         hidden: ['summary'],
         savedAt: 'x',

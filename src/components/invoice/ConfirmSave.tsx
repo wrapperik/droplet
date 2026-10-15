@@ -15,7 +15,7 @@ export type ConfirmItem = {
 type Props = {
   projectName: string
   items: ConfirmItem[]
-  // Something differs from what was last confirmed (the invoice, or how the workspace is arranged).
+  // Something differs from what was last confirmed.
   unsaved: boolean
   status: string
   // Called with the ids of the items the founder left ticked. Not called at all unless the founder presses the confirm button.
@@ -29,7 +29,6 @@ type Props = {
 
 // Nothing is remembered without the founder's say. Pressing Save does not save: it opens a note of exactly what would be
 // remembered, each item with a tick, and only the confirm button saves. Leaving the note, or pressing Escape or Cancel, saves nothing.
-// How the workspace is arranged is not a memory, so it is kept along with whatever is confirmed, and the note says so.
 export default function ConfirmSave({ projectName, items, unsaved, status, onConfirm, openSignal = 0, notesOn = false }: Props) {
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -100,7 +99,7 @@ export function ConfirmNote({ projectName, items, notesOn = false, onConfirm, on
         Save to {projectName}
       </h2>
       {items.length === 0 ? (
-        <p className="confirm__empty">There is nothing new to remember. Saving keeps how the workspace is arranged.</p>
+        <p className="confirm__empty">There is nothing new to remember.</p>
       ) : (
         <>
           <p className="confirm__lead">Droplet will remember what you tick. Nothing else is kept.</p>

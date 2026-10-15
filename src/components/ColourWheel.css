@@ -143,3 +143,19 @@
 .wheel__hex[aria-invalid='true'] {
   border-color: var(--status-outstanding);
 }
+
+/* Red, green and blue of the selected colour, side by side. */
+.wheel__rgb {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.wheel__field--channel {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.25rem;
+}
+
+.wheel__channel {
+  text-align: center;
+}

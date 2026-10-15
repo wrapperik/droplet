@@ -1,11 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { newContent } from './invoice.ts'
 import {
-  INVOICE_LAYOUT,
-  INVOICE_SPEC,
   canRedoInvoice,
   canUndoInvoice,
-  invoiceArrangementIsDefault,
   invoiceDocOf,
   isInvoiceUnsaved,
   openInvoiceWorkspace,
@@ -13,7 +10,6 @@ import {
   type InvoiceAction,
   type InvoiceState,
 } from './invoiceState.ts'
-import { shownWindows, toolbarTools } from './arrangement.ts'
 import type { SavedInvoice } from './memorySave.ts'
 
 const fresh = () => openInvoiceWorkspace(newContent('2026-10-04'))
@@ -21,26 +17,14 @@ const run = (state: InvoiceState, ...actions: InvoiceAction[]) => actions.reduce
 const content = (state: InvoiceState) => invoiceDocOf(state).content
 
 describe('opening', () => {
-  it('starts with every tool in the toolbar, the document beside the line items, and nothing to undo', () => {
+  it('starts with nothing to undo, and no arrangement: the frame is fixed', () => {
     const state = fresh()
-    expect(toolbarTools(invoiceDocOf(state))).toEqual(['invoices', 'business', 'client', 'terms', 'vat', 'total', 'ready'])
-    expect(shownWindows(INVOICE_SPEC, invoiceDocOf(state))).toEqual(['document', 'lines'])
-    expect(invoiceDocOf(state).layout).toEqual(INVOICE_LAYOUT)
-    expect(invoiceArrangementIsDefault(invoiceDocOf(state))).toBe(true)
+    expect(Object.keys(invoiceDocOf(state)).sort()).toEqual(['content', 'invoiceId'])
     expect(canUndoInvoice(state)).toBe(false)
   })
 
-  it('opens with the defaults, whatever arrangement an older save holds', () => {
-    const arrangement = { layout: INVOICE_LAYOUT, tools: ['total', 'vat'], expanded: ['client'], hidden: ['terms'] }
-    const doc = invoiceDocOf(openInvoiceWorkspace(newContent('2026-10-04'), arrangement))
-    expect(doc.tools).toEqual(invoiceDocOf(openInvoiceWorkspace(newContent('2026-10-04'))).tools)
-    expect(doc.expanded).toEqual([])
-    expect(doc.hidden).toEqual([])
-    expect(doc.layout).toEqual(INVOICE_LAYOUT)
-  })
-
   it('is the invoice it was opened for, which keeps its id, or a new one with an id of its own', () => {
-    expect(invoiceDocOf(openInvoiceWorkspace(newContent('2026-10-04'), null, 'i1')).invoiceId).toBe('i1')
+    expect(invoiceDocOf(openInvoiceWorkspace(newContent('2026-10-04'), 'i1')).invoiceId).toBe('i1')
     const a = invoiceDocOf(openInvoiceWorkspace(newContent('2026-10-04'))).invoiceId
     const b = invoiceDocOf(openInvoiceWorkspace(newContent('2026-10-04'))).invoiceId
     expect(a).not.toBe(b)
@@ -48,7 +32,7 @@ describe('opening', () => {
   })
 
   it('keeps the invoice id through every change', () => {
-    const state = run(openInvoiceWorkspace(newContent('2026-10-04'), null, 'i1'), { type: 'set_client', patch: { name: 'X' } }, { type: 'expand_tool', id: 'vat' }, { type: 'undo' })
+    const state = run(openInvoiceWorkspace(newContent('2026-10-04'), 'i1'), { type: 'set_client', patch: { name: 'X' } }, { type: 'undo' })
     expect(invoiceDocOf(state).invoiceId).toBe('i1')
   })
 })
@@ -128,32 +112,6 @@ describe('line items', () => {
   })
 })
 
-describe('the arrangement', () => {
-  it('drags a tool out to be a window and back, and resets', () => {
-    let state = run(fresh(), { type: 'expand_tool', id: 'client' })
-    expect(shownWindows(INVOICE_SPEC, invoiceDocOf(state))).toContain('client')
-    expect(toolbarTools(invoiceDocOf(state))).not.toContain('client')
-    expect(invoiceArrangementIsDefault(invoiceDocOf(state))).toBe(false)
-    state = run(state, { type: 'collapse_tool', id: 'client', before: 'business' })
-    expect(toolbarTools(invoiceDocOf(state)).slice(0, 3)).toEqual(['invoices', 'client', 'business'])
-    state = run(state, { type: 'expand_tool', id: 'vat' }, { type: 'reset_layout' })
-    expect(invoiceArrangementIsDefault(invoiceDocOf(state))).toBe(true)
-  })
-
-  it('resizes a window, but not a tool that is in the toolbar', () => {
-    const state = fresh()
-    expect(invoiceDocOf(run(state, { type: 'resize', id: 'document', value: 16 })).layout.find((p) => p.id === 'document')?.w).toBe(16)
-    expect(reduceInvoice(state, { type: 'resize', id: 'client', value: 12 })).toBe(state)
-  })
-
-  it('will not hide the document or the line items', () => {
-    const state = fresh()
-    expect(reduceInvoice(state, { type: 'hide', component: 'document' })).toBe(state)
-    expect(reduceInvoice(state, { type: 'hide', component: 'lines' })).toBe(state)
-    expect(toolbarTools(invoiceDocOf(run(state, { type: 'hide', component: 'vat' })))).not.toContain('vat')
-  })
-})
-
 describe('history', () => {
   it('undoes and redoes, and a batch is one step', () => {
     let state = run(fresh(), {
@@ -174,24 +132,16 @@ describe('history', () => {
 
 describe('isInvoiceUnsaved', () => {
   const saved = (content = newContent('2026-10-04')): SavedInvoice => ({ id: 'i1', content, revision: 1, updatedAt: '2026-10-04T10:00' })
-  const open = () => openInvoiceWorkspace(newContent('2026-10-04'), null, 'i1')
+  const open = () => openInvoiceWorkspace(newContent('2026-10-04'), 'i1')
 
   it('is unsaved when the invoice has never been confirmed, and saved when it matches what was', () => {
-    expect(isInvoiceUnsaved(invoiceDocOf(open()), undefined, null)).toBe(true)
-    expect(isInvoiceUnsaved(invoiceDocOf(open()), saved(), null)).toBe(false)
+    expect(isInvoiceUnsaved(invoiceDocOf(open()), undefined)).toBe(true)
+    expect(isInvoiceUnsaved(invoiceDocOf(open()), saved())).toBe(false)
   })
 
   it('notices a change to the invoice', () => {
-    expect(isInvoiceUnsaved(invoiceDocOf(run(open(), { type: 'set_client', patch: { name: 'X' } })), saved(), null)).toBe(true)
-    expect(isInvoiceUnsaved(invoiceDocOf(run(open(), { type: 'add_line' })), saved(), null)).toBe(true)
-  })
-
-  it('does not count how the workspace is arranged, since a saved arrangement is no longer applied', () => {
-    const moved = run(open(), { type: 'expand_tool', id: 'vat' })
-    expect(isInvoiceUnsaved(invoiceDocOf(moved), saved(), null)).toBe(false)
-    const arrangement = { layout: invoiceDocOf(moved).layout, tools: invoiceDocOf(moved).tools, expanded: ['vat'], hidden: [] }
-    expect(isInvoiceUnsaved(invoiceDocOf(moved), saved(), arrangement)).toBe(false)
-    expect(isInvoiceUnsaved(invoiceDocOf(open()), saved(), arrangement)).toBe(false)
+    expect(isInvoiceUnsaved(invoiceDocOf(run(open(), { type: 'set_client', patch: { name: 'X' } })), saved())).toBe(true)
+    expect(isInvoiceUnsaved(invoiceDocOf(run(open(), { type: 'add_line' })), saved())).toBe(true)
   })
 })
 

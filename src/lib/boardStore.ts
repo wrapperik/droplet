@@ -34,8 +34,8 @@ export function clearBoard(projectId: string): Promise<void> {
   return documentStorage().remove(projectId, 'board')
 }
 
-// The board workspace for a project: the saved board and arrangement if there is one, otherwise an empty board.
+// The board workspace for a project: the saved board if there is one, otherwise an empty board.
 export async function openBoardForProject(projectId: string): Promise<BoardState> {
   const saved = await loadBoard(projectId)
-  return openBoard(saved?.items ?? [], saved)
+  return openBoard(saved?.items ?? [])
 }

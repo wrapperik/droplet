@@ -21,7 +21,7 @@ export function arrivalDelays(count: number, reduced: boolean): number[] {
   return Array.from({ length: count }, (_, index) => Math.round(index * step))
 }
 
-// Where a thing is on screen. A colour, a line of the invoice, an item of the board or a window each carry an attribute that says which they are.
+// Where a thing is on screen. A colour, a line of the invoice, an item of the board or a part of the panel each carry an attribute that says which they are.
 export function selectorFor(target: FocusTarget): string {
   const id = String(target.id).replace(/["\\]/g, '')
   switch (target.kind) {
@@ -31,8 +31,8 @@ export function selectorFor(target: FocusTarget): string {
       return `.lines__row[data-line-id="${id}"]`
     case 'item':
       return `[data-item-id="${id}"]`
-    case 'window':
-      return `.gw__item[data-id="${id}"]`
+    case 'part':
+      return `[data-part="${id}"]`
     case 'field':
       return `[data-field="${id}"]`
   }
@@ -111,7 +111,7 @@ export function prepareArrival(targets: FocusTarget[], root: ParentNode = docume
     const element = find(target, root)
     if (!element) return
     if (target.how === 'moved') from.set(index, element.getBoundingClientRect())
-    // A removed item or line is shown going. Windows and colours have their own way of leaving.
+    // A removed item or line is shown going. Colours have their own way of leaving.
     if (target.how === 'removed' && (target.kind === 'item' || target.kind === 'line') && !reduced && canAnimate(element) && element.parentElement) {
       const ghost = element.cloneNode(true) as HTMLElement
       ghost.setAttribute('aria-hidden', 'true')
@@ -144,7 +144,7 @@ export function prepareArrival(targets: FocusTarget[], root: ParentNode = docume
         const element = find(target, root)
         if (!element) return
         if (!reduced && canAnimate(element)) {
-          // Colours and windows already arrive in their own way, so only items and lines emerge here.
+          // Colours already arrive in their own way, so only items and lines emerge here.
           if (target.how === 'added' && (target.kind === 'item' || target.kind === 'line')) emerge(element, delays[index])
           const was = from.get(index)
           if (target.how === 'moved' && was) glide(element, was, delays[index])
@@ -163,8 +163,7 @@ export function prepareArrival(targets: FocusTarget[], root: ParentNode = docume
 const isRow = (element: HTMLElement) => element.classList.contains('lines__row')
 
 // Show me, kept: each thing that changed gets a blue border that draws in and then stays (`data-shown`, styled in global.css), until the founder sends
-// another message or presses somewhere else on the screen (`clearMarks`). What it marks may not be on screen yet (a step of the guide coming in, a
-// window opening), so it looks again on each frame for up to a second. The first one found is brought into view. Says how many it found.
+// another message or presses somewhere else on the screen (`clearMarks`). What it marks may not be on screen yet (a step of the guide coming in), so it looks again on each frame for up to a second. The first one found is brought into view. Says how many it found.
 const marked = new Set<HTMLElement>()
 const MARK_WAIT_MS = 1000
 

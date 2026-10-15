@@ -1,14 +1,3 @@
-import {
-  arrangementIsDefault,
-  arrangementUnsaved,
-  isArrangementAction,
-  openArrangement,
-  reduceArrangement,
-  type Arrangement,
-  type ArrangementAction,
-  type ArrangementSave,
-  type ArrangementSpec,
-} from './arrangement.ts'
 import { BOARD_H, BOARD_W, clamp, groupDelta, keepInside, snap, snapRect, type Point, type Rect } from './boardGeometry.ts'
 import { expandWithMembers, membersOf } from './boardFrames.ts'
 import {
@@ -39,7 +28,6 @@ import {
   type TextSize,
 } from './boardTypes.ts'
 import { canRedo, canUndo, commit, createHistory, redo, undo, type History } from './history.ts'
-import type { Placement } from './gridLayout.ts'
 
 export * from './boardTypes.ts'
 
@@ -51,30 +39,7 @@ export * from './boardTypes.ts'
 
 export type Tool = 'select' | 'sticky' | 'shape' | 'text' | 'frame' | 'connector'
 
-// The components of the board workspace. The board itself is the one window. Tools are in the toolbar and are in hand for the next click
-// on the board, so they have no bigger form to be dragged out into (fixed).
-export const BOARD_COMPONENTS: ArrangementSpec['components'] = [
-  { id: 'select', label: 'Select', kind: 'toolbar', hideable: false },
-  { id: 'sticky', label: 'Sticky note', kind: 'toolbar', hideable: false },
-  { id: 'shape', label: 'Shape', kind: 'toolbar', hideable: false },
-  { id: 'text', label: 'Text', kind: 'toolbar', hideable: false },
-  { id: 'frame', label: 'Frame', kind: 'toolbar', hideable: false },
-  { id: 'connector', label: 'Arrow', kind: 'toolbar', hideable: false },
-  { id: 'templates', label: 'Templates', kind: 'toolbar', hideable: false },
-  { id: 'board', label: 'Board', kind: 'panel', hideable: false },
-]
-
-export const BOARD_WINDOW_SIZES: ArrangementSpec['windowSizes'] = {
-  board: { w: 24, heightPx: 720 },
-}
-
-export const BOARD_LAYOUT: Placement[] = [
-  { id: 'board', col: 0, row: 0, w: BOARD_WINDOW_SIZES.board.w },
-]
-
-export const BOARD_SPEC: ArrangementSpec = { components: BOARD_COMPONENTS, layout: BOARD_LAYOUT, windowSizes: BOARD_WINDOW_SIZES }
-
-export type BoardDoc = Arrangement & {
+export type BoardDoc = {
   // In the order they are drawn: frames, then arrows, then everything else, each from back to front.
   items: BoardItem[]
 }
@@ -110,7 +75,7 @@ export type BoardAction =
   | { type: 'replace_group'; group: string; items: BoardItem[] }
   // Moved by (dx, dy), as a group: snapped, and held back at the board edge. A frame takes what is inside it. What moved comes to the front.
   | { type: 'move'; ids: string[]; dx: number; dy: number }
-  // A thing's size, snapped, within its limits and the board edge. (`resize` is a window's width, from the arrangement.)
+  // A thing's size, snapped, within its limits and the board edge.
   | { type: 'resize_item'; id: string; w: number; h: number }
   // The words of a note, a shape or a text label, or the label of an arrow.
   | { type: 'set_text'; id: string; text: string }
@@ -135,7 +100,6 @@ export type BoardAction =
   | { type: 'set_note_colour'; colour: FounderColour }
   | { type: 'set_shape_kind'; shape: ShapeKind }
   | { type: 'set_connector_style'; style: ConnectorStyle }
-  | ArrangementAction
   | { type: 'undo' }
   | { type: 'redo' }
   // Several actions applied together and undone together.
@@ -198,16 +162,15 @@ function fitItems(items: BoardItem[], context: BoardItem[] = []): BoardItem[] {
   return layered(fitted)
 }
 
-// The workspace for a board, arranged as the project's saved arrangement if there is one.
-export function openBoard(items: BoardItem[] = [], arrangement?: ArrangementSave | null): BoardState {
-  const doc: BoardDoc = { items: fitItems(items), ...openArrangement(BOARD_SPEC, arrangement) }
+// The workspace for a board.
+export function openBoard(items: BoardItem[] = []): BoardState {
+  const doc: BoardDoc = { items: fitItems(items) }
   return { history: createHistory(doc), selection: [], tool: 'select', noteColour: 'yellow', shapeKind: 'rectangle', connectorStyle: 'straight' }
 }
 
 export const docOf = (state: BoardState): BoardDoc => state.history.present
 export const canUndoBoard = (state: BoardState) => canUndo(state.history)
 export const canRedoBoard = (state: BoardState) => canRedo(state.history)
-export const boardArrangementIsDefault = (doc: BoardDoc) => arrangementIsDefault(BOARD_SPEC, doc)
 
 export const itemById = (doc: BoardDoc, id: string) => doc.items.find((item) => item.id === id)
 export const selectedItems = (state: BoardState) => docOf(state).items.filter((item) => state.selection.includes(item.id))
@@ -229,9 +192,9 @@ export function sameItems(a: BoardItem[], b: BoardItem[]): boolean {
   return a.length === b.length && a.every((item, index) => stable(item) === stable(b[index]))
 }
 
-// Whether anything differs from what was saved: the board, or how the workspace is arranged. With nothing saved, it is unsaved.
-export function isBoardUnsaved(doc: BoardDoc, saved: { items: BoardItem[] } & ArrangementSave | null): boolean {
-  return !saved || !sameItems(doc.items, saved.items) || arrangementUnsaved(BOARD_SPEC, doc, saved)
+// Whether anything differs from what was saved. With nothing saved, it is unsaved.
+export function isBoardUnsaved(doc: BoardDoc, saved: { items: BoardItem[] } | null): boolean {
+  return !saved || !sameItems(doc.items, saved.items)
 }
 
 // ---- Actions ----
@@ -502,12 +465,6 @@ function step(w: Working, action: BoardAction): Working {
     case 'undo':
     case 'redo':
       return w
-
-    default: {
-      if (!isArrangementAction(action)) return w
-      const doc = reduceArrangement(BOARD_SPEC, w.doc, action)
-      return doc === w.doc ? w : { ...w, doc }
-    }
   }
 }
 

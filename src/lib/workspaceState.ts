@@ -1,29 +1,4 @@
 import { shiftHue } from './colour.ts'
-import {
-  PANEL_MIN_COLS,
-  arrangementIsDefault,
-  arrangementUnsaved,
-  clampPanelWidth,
-  isArrangementAction,
-  isExpanded as isExpandedIn,
-  isVisible as isVisibleIn,
-  isWindow as isWindowIn,
-  kindOf as kindOfIn,
-  mergeLayout,
-  normaliseExpanded as normaliseExpandedIn,
-  normaliseTools as normaliseToolsIn,
-  openArrangement,
-  panelIds,
-  reduceArrangement,
-  shownWindows as shownWindowsIn,
-  toolIds,
-  toolbarTools as toolbarToolsIn,
-  type Arrangement,
-  type ArrangementAction,
-  type ArrangementSpec,
-  type ComponentKind,
-} from './arrangement.ts'
-import type { Placement } from './gridLayout.ts'
 import { generatePalette, replaceableIds, type Harmony } from './harmony.ts'
 import { canRedo, canUndo, commit, createHistory, redo, undo, type History } from './history.ts'
 import { assignRole, withHex, type ColourRole, type PaletteBlock } from './palette.ts'
@@ -36,52 +11,11 @@ import type { PaletteSave } from './paletteSave.ts'
 export const MAX_BLOCKS = 8
 export const MIN_BLOCKS = 2 // a palette needs at least a pair, and the checks need a colour to read against
 
-export { PANEL_MIN_COLS, clampPanelWidth, mergeLayout }
-export type { ComponentKind }
-
-export const COMPONENTS: ArrangementSpec['components'] = [
-  { id: 'picker', label: 'Colour picker', kind: 'toolbar', hideable: true },
-  { id: 'role', label: 'Colour role', kind: 'toolbar', hideable: true },
-  { id: 'generate', label: 'Generate', kind: 'toolbar', hideable: true },
-  { id: 'canvas', label: 'Palette canvas', kind: 'panel', hideable: false },
-  { id: 'preview', label: 'Preview', kind: 'panel', hideable: true },
-]
-
-// How big each window starts, in columns, and roughly how tall it is in pixels.
-export const WINDOW_SIZES: ArrangementSpec['windowSizes'] = {
-  canvas: { w: 14, heightPx: 240 },
-  preview: { w: 10, heightPx: 420 },
-  picker: { w: 10, heightPx: 440 },
-  role: { w: 8, heightPx: 300 },
-  generate: { w: 8, heightPx: 340 },
-}
-
-// Where the windows start, and where "Reset layout" puts them: the palette canvas beside the document preview, sharing the
-// row fourteen columns to ten. Tools that are windows have a place too, kept for when they are dragged out. Rows are only
-// a preference, and each window rises as far as it can.
-export const DEFAULT_LAYOUT: Placement[] = [
-  { id: 'canvas', col: 0, row: 0, w: 14 },
-  { id: 'preview', col: 14, row: 0, w: 10 },
-  { id: 'picker', col: 0, row: 30, w: WINDOW_SIZES.picker.w },
-  { id: 'role', col: 10, row: 30, w: WINDOW_SIZES.role.w },
-  { id: 'generate', col: 16, row: 30, w: WINDOW_SIZES.generate.w },
-]
-
-// How the palette workspace is arranged: its tools, its windows and where they start.
-export const PALETTE_SPEC: ArrangementSpec = { components: COMPONENTS, layout: DEFAULT_LAYOUT, windowSizes: WINDOW_SIZES }
-
-export const PANELS = panelIds(PALETTE_SPEC)
-export const TOOLS = toolIds(PALETTE_SPEC)
-export const kindOf = (id: string) => kindOfIn(PALETTE_SPEC, id)
-
-// The order the tools start in, left to right.
-export const DEFAULT_TOOLS = [...TOOLS]
-export const normaliseTools = (order: string[] | undefined) => normaliseToolsIn(PALETTE_SPEC, order)
-export const normaliseExpanded = (ids: string[] | undefined) => normaliseExpandedIn(PALETTE_SPEC, ids)
-
-export type Doc = Arrangement & {
+export type Doc = {
   blocks: PaletteBlock[]
   businessName?: string
+  // One line on why a part of the screen is there, where the composer gave one (the palette's canvas, when it set the palette).
+  reasons: Record<string, string>
 }
 
 export type WorkspaceState = {
@@ -103,15 +37,14 @@ export type WorkspaceAction =
   | { type: 'toggle_star'; id: number; starred?: boolean }
   | { type: 'set_harmony'; harmony: Harmony }
   | { type: 'generate'; fromId?: number }
-  | ArrangementAction
   | { type: 'undo' }
   | { type: 'redo' }
   // Several actions applied together and undone together.
   | { type: 'batch'; actions: WorkspaceAction[] }
 
-// A workspace with these colours, arranged as the project's saved layout if there is one.
-export function openWorkspace(blocks: PaletteBlock[], saved?: PaletteSave | null): WorkspaceState {
-  const doc: Doc = { blocks, ...openArrangement(PALETTE_SPEC, saved) }
+// A workspace with these colours.
+export function openWorkspace(blocks: PaletteBlock[]): WorkspaceState {
+  const doc: Doc = { blocks, reasons: {} }
   return { history: createHistory(doc), selectedId: blocks[0].id, harmony: 'analogous', variation: 0 }
 }
 
@@ -120,18 +53,8 @@ export const selectedBlock = (state: WorkspaceState): PaletteBlock => {
   const { blocks } = docOf(state)
   return blocks.find((block) => block.id === state.selectedId) ?? blocks[0]
 }
-export const isVisible = (doc: Doc, id: string) => isVisibleIn(doc, id)
-export const isExpanded = (doc: Doc, id: string) => isExpandedIn(doc, id)
-// The tools that are in the toolbar, left to right.
-export const toolbarTools = (doc: Doc) => toolbarToolsIn(doc)
-// What is a window on the grid: the panels, and the tools that have been dragged out of the toolbar.
-export const isWindow = (doc: Doc, id: string) => isWindowIn(PALETTE_SPEC, doc, id)
-export const shownWindows = (doc: Doc) => shownWindowsIn(PALETTE_SPEC, doc)
 export const canUndoState = (state: WorkspaceState) => canUndo(state.history)
 export const canRedoState = (state: WorkspaceState) => canRedo(state.history)
-
-// Whether everything is where it starts: the same windows in the same places, and the tools in the toolbar in order.
-export const layoutIsDefault = (doc: Doc) => arrangementIsDefault(PALETTE_SPEC, doc)
 
 // Whether two palettes are the same, whatever order the fields of a colour were written in. What is read back from storage has its fields in
 // the order of the schema, not of the code that made them, so comparing them as text would call a palette that was saved changed.
@@ -141,7 +64,7 @@ export function sameBlocks(a: { id: number; hex: string; role?: string; locked?:
 }
 
 export function isUnsaved(doc: Doc, saved: PaletteSave | null): boolean {
-  return !saved || !sameBlocks(doc.blocks, saved.blocks) || arrangementUnsaved(PALETTE_SPEC, doc, saved)
+  return !saved || !sameBlocks(doc.blocks, saved.blocks)
 }
 
 type Working = { doc: Doc; selectedId: number; harmony: Harmony; variation: number }
@@ -249,12 +172,6 @@ function step(w: Working, action: WorkspaceAction): Working {
     case 'redo':
       return w
 
-    default: {
-      // Everything else is the arrangement: layout, tools, expanded tools, and what is hidden.
-      if (!isArrangementAction(action)) return w
-      const next = reduceArrangement(PALETTE_SPEC, w.doc, action)
-      return next === w.doc ? w : { ...w, doc: next }
-    }
   }
 }
 
