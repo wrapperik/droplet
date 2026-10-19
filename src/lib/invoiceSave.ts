@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { TEMPLATE_IDS } from './invoiceTemplates.ts'
 
 // What a saved invoice workspace looks like. Everything read back is validated, because storage can hold anything.
 const placementSchema = z.object({
@@ -39,6 +40,7 @@ export const invoiceContentSchema = z.object({
     terms: z.enum(['on_receipt', '7', '14', '30', 'custom']),
     customDueDate: text(10),
     notes: text(1000),
+    template: z.enum(TEMPLATE_IDS).optional(),
   }),
   business: businessSchema,
   client: clientSchema,

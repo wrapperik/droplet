@@ -24,6 +24,8 @@
    any width. The frame is the container the units measure against. Its colours come from the founder's palette, through the
    --paper-* properties set on it. */
 .paper {
+  --paper-heading: inherit;
+  --paper-body: inherit;
   --pt: 0.16807cqw; /* 100 / 595, the width of A4 in points */
   --hair: max(1px, calc(0.5 * var(--pt)));
   display: flex;
@@ -37,18 +39,29 @@
     inset 0 0 0 1px var(--overlay-10),
     var(--shadow-md);
   color: var(--paper-text);
+  font-family: var(--paper-body);
   font-size: calc(10 * var(--pt));
   line-height: 1.4;
 }
 
+/* The header: the title and the brand. In the Band template the title is a strip of the primary colour and the brand sits under it, on the page. The logo is drawn
+   straight on the page, with no tile behind it: it is aligned (its empty margins trimmed) before it gets here. */
 .paper__band {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: calc(16 * var(--pt));
-  padding: calc(26 * var(--pt)) calc(40 * var(--pt));
+  flex-direction: column;
+  gap: calc(22 * var(--pt));
+}
+
+.paper__kind {
+  padding: calc(20 * var(--pt)) calc(40 * var(--pt));
   background: var(--paper-primary);
   color: var(--paper-on-primary);
+  font-family: var(--paper-heading);
+  font-size: calc(22 * var(--pt));
+  font-weight: 700;
+  letter-spacing: calc(2 * var(--pt));
+  line-height: 1.1;
+  text-transform: uppercase;
 }
 
 .paper__brand {
@@ -56,49 +69,41 @@
   align-items: center;
   gap: calc(12 * var(--pt));
   min-width: 0;
+  padding: 0 calc(40 * var(--pt));
 }
 
-/* A tile in the page's own background, so a logo of any colour reads on the band. The PDF draws the same tile. */
 .paper__logo {
-  display: grid;
+  display: flex;
   flex: none;
-  place-items: center;
-  width: calc(66 * var(--pt));
-  height: calc(46 * var(--pt));
-  padding: calc(5 * var(--pt));
-  border-radius: calc(5 * var(--pt));
-  background: var(--paper-background);
+  align-items: center;
+  height: calc(44 * var(--pt));
 }
 
 .paper__logo img {
-  max-width: 100%;
-  max-height: 100%;
+  display: block;
+  max-width: calc(130 * var(--pt));
+  height: 100%;
   object-fit: contain;
 }
 
 /* The placeholder for a logo not brought back yet. It is on the page only: the PDF does not print it. */
 .paper__logo--outstanding {
+  justify-content: center;
+  width: calc(66 * var(--pt));
   border: calc(1 * var(--pt)) dashed currentColor;
-  background: transparent;
-  color: var(--paper-on-primary);
+  border-radius: calc(5 * var(--pt));
   font-size: calc(8 * var(--pt));
   font-weight: 700;
   letter-spacing: calc(1 * var(--pt));
-  opacity: 0.7;
+  opacity: 0.6;
   text-transform: uppercase;
 }
 
 .paper__business {
-  font-size: calc(20 * var(--pt));
+  font-family: var(--paper-heading);
+  font-size: calc(18 * var(--pt));
   font-weight: 700;
   line-height: 1.2;
-}
-
-.paper__kind {
-  font-size: calc(10 * var(--pt));
-  font-weight: 700;
-  letter-spacing: calc(1.2 * var(--pt));
-  text-transform: uppercase;
 }
 
 .paper__body {
@@ -242,6 +247,7 @@
   border-radius: calc(5 * var(--pt));
   background: var(--paper-primary);
   color: var(--paper-on-primary);
+  font-family: var(--paper-heading);
   font-size: calc(12 * var(--pt));
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -276,4 +282,400 @@
   font: inherit;
   font-weight: 600;
   text-decoration: underline;
+}
+
+/* ---- Templates ----
+   The rules above are the Band template. Each of the others changes how the same parts are laid out and drawn, in the same palette and typefaces. The soft tint and
+   the rule colour are mixed in code (--paper-soft, --paper-rule), so they print as they show. */
+
+/* Minimal: no fills. The brand on the left, a large light title on the right, fine rules, a large plain total. */
+.paper[data-template='minimal'] .paper__band {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: calc(40 * var(--pt));
+}
+
+.paper[data-template='minimal'] .paper__kind {
+  order: 2;
+  padding: 0 calc(40 * var(--pt)) 0 0;
+  background: none;
+  color: inherit;
+  font-size: calc(34 * var(--pt));
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.paper[data-template='minimal'] .paper__business {
+  font-size: calc(13 * var(--pt));
+}
+
+.paper[data-template='minimal'] .paper__table th,
+.paper[data-template='minimal'] .paper__table td {
+  border-bottom-color: var(--paper-rule);
+}
+
+.paper[data-template='minimal'] .paper__total {
+  padding: calc(10 * var(--pt)) 0;
+  border-top: var(--hair) solid var(--paper-rule);
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  font-size: calc(15 * var(--pt));
+  font-weight: 400;
+}
+
+/* Classic: centred, between two heavy rules, with rules and no fills in the table. */
+.paper[data-template='classic'] .paper__band {
+  align-items: center;
+  gap: calc(14 * var(--pt));
+  padding: calc(36 * var(--pt)) calc(40 * var(--pt)) 0;
+  text-align: center;
+}
+
+.paper[data-template='classic'] .paper__brand {
+  flex-direction: column;
+  padding: 0;
+}
+
+.paper[data-template='classic'] .paper__kind {
+  order: 2;
+  box-sizing: border-box;
+  width: 100%;
+  padding: calc(8 * var(--pt)) 0;
+  border-block: calc(1.5 * var(--pt)) solid currentcolor;
+  background: none;
+  color: inherit;
+  font-size: calc(15 * var(--pt));
+  letter-spacing: calc(5 * var(--pt));
+}
+
+.paper[data-template='classic'] .paper__table th {
+  padding-top: calc(7 * var(--pt));
+  border-top: calc(1.5 * var(--pt)) solid currentcolor;
+  border-bottom: var(--hair) solid currentcolor;
+}
+
+.paper[data-template='classic'] .paper__table td {
+  border-bottom: 0;
+}
+
+.paper[data-template='classic'] .paper__table tbody tr:last-child td {
+  border-bottom: calc(1.5 * var(--pt)) solid currentcolor;
+}
+
+.paper[data-template='classic'] .paper__total {
+  padding: calc(8 * var(--pt)) 0;
+  border-top: calc(1.5 * var(--pt)) solid currentcolor;
+  border-radius: 0;
+  background: none;
+  color: inherit;
+}
+
+/* Striped: a stripe of the primary colour down the left edge, a filled table heading, striped rows, and the payment details in a band at the foot. */
+.paper[data-template='striped'] {
+  border-left: calc(14 * var(--pt)) solid var(--paper-primary);
+}
+
+.paper[data-template='striped'] .paper__band {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: calc(34 * var(--pt));
+}
+
+.paper[data-template='striped'] .paper__kind {
+  order: 2;
+  padding: 0 calc(40 * var(--pt)) 0 0;
+  background: none;
+  color: inherit;
+  font-size: calc(28 * var(--pt));
+  letter-spacing: calc(3 * var(--pt));
+}
+
+.paper[data-template='striped'] .paper__business {
+  font-size: calc(14 * var(--pt));
+}
+
+.paper[data-template='striped'] .paper__table th,
+.paper[data-template='rounded'] .paper__table th {
+  padding: calc(7 * var(--pt)) calc(8 * var(--pt));
+  border-bottom: 0;
+  background: var(--paper-primary);
+  color: var(--paper-on-primary);
+}
+
+.paper[data-template='striped'] .paper__table td,
+.paper[data-template='rounded'] .paper__table td {
+  padding-inline: calc(8 * var(--pt));
+  border-bottom: 0;
+}
+
+.paper[data-template='striped'] .paper__table tbody tr:nth-child(even) td,
+.paper[data-template='rounded'] .paper__table tbody tr:nth-child(even) td {
+  background: var(--paper-soft);
+}
+
+.paper[data-template='striped'] .paper__total {
+  border-radius: 0;
+}
+
+/* Rounded: a block of the primary colour with one soft corner holds the title, the brand sits on the page beside it, and the table and total are pills. */
+.paper[data-template='rounded'] .paper__band {
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.paper[data-template='rounded'] .paper__kind {
+  box-sizing: border-box;
+  width: 60%;
+  padding: calc(34 * var(--pt)) calc(40 * var(--pt)) calc(40 * var(--pt));
+  border-bottom-right-radius: calc(90 * var(--pt));
+  font-size: calc(28 * var(--pt));
+}
+
+.paper[data-template='rounded'] .paper__brand {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: calc(6 * var(--pt));
+  padding-top: calc(34 * var(--pt));
+  text-align: right;
+}
+
+.paper[data-template='rounded'] .paper__business {
+  font-size: calc(13 * var(--pt));
+}
+
+.paper[data-template='rounded'] .paper__table th:first-child,
+.paper[data-template='rounded'] .paper__table tbody tr:nth-child(even) td:first-child {
+  border-top-left-radius: calc(14 * var(--pt));
+  border-bottom-left-radius: calc(14 * var(--pt));
+}
+
+.paper[data-template='rounded'] .paper__table th:last-child,
+.paper[data-template='rounded'] .paper__table tbody tr:nth-child(even) td:last-child {
+  border-top-right-radius: calc(14 * var(--pt));
+  border-bottom-right-radius: calc(14 * var(--pt));
+}
+
+.paper[data-template='rounded'] .paper__total {
+  border-radius: calc(16 * var(--pt));
+}
+
+/* Boxed: a heavy title, shaded headings, and a ruled grid for the items and the total. */
+.paper[data-template='boxed'] .paper__band {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: calc(40 * var(--pt));
+}
+
+.paper[data-template='boxed'] .paper__kind {
+  order: 2;
+  padding: 0 calc(40 * var(--pt)) 0 0;
+  background: none;
+  color: inherit;
+  font-size: calc(40 * var(--pt));
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1;
+  text-transform: none;
+}
+
+.paper[data-template='boxed'] .paper__business {
+  font-size: calc(14 * var(--pt));
+}
+
+.paper[data-template='boxed'] .paper__table th,
+.paper[data-template='boxed'] .paper__table td {
+  padding: calc(5 * var(--pt)) calc(7 * var(--pt));
+  border: var(--hair) solid var(--paper-rule);
+}
+
+.paper[data-template='boxed'] .paper__table th {
+  background: var(--paper-soft);
+}
+
+.paper[data-template='boxed'] .paper__table tr[data-incomplete] td {
+  border: max(1px, calc(0.75 * var(--pt))) dashed var(--paper-accent);
+}
+
+.paper[data-template='boxed'] .paper__label {
+  padding: calc(4 * var(--pt)) calc(7 * var(--pt));
+  border-bottom: var(--hair) solid var(--paper-rule);
+  background: var(--paper-soft);
+}
+
+.paper[data-template='boxed'] .paper__total {
+  padding: calc(8 * var(--pt)) calc(7 * var(--pt));
+  border: var(--hair) solid var(--paper-rule);
+  border-radius: 0;
+  background: var(--paper-soft);
+  color: inherit;
+}
+
+/* A band at the foot, for the payment details and the note. */
+.paper__foot {
+  display: flex;
+  align-items: flex-start;
+  gap: calc(28 * var(--pt));
+  padding: calc(20 * var(--pt)) calc(40 * var(--pt)) calc(26 * var(--pt));
+  background: var(--paper-primary);
+  color: var(--paper-on-primary);
+}
+
+.paper__foot .paper__payment,
+.paper__foot .paper__notes {
+  flex: 1;
+  min-width: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+/* ---- The choice of template, above the page ---- */
+.templates {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(4.25rem, 1fr));
+  gap: 0.5rem;
+}
+
+.templates__option {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.375rem;
+  padding: 0.375rem;
+  border: 1px solid var(--overlay-10);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.templates__option[aria-checked='true'] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+  font-weight: 600;
+}
+
+.templates__option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* A page in miniature, drawn in the founder's colours: the header, the rows and the total. */
+.templates__thumb {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  aspect-ratio: 210 / 260;
+  overflow: hidden;
+  padding: 0.25rem;
+  border-radius: 0.125rem;
+  background: var(--thumb-background);
+  box-shadow: inset 0 0 0 1px var(--overlay-10);
+}
+
+.templates__top {
+  height: 0.5rem;
+  border-radius: 0.0625rem;
+  background: var(--thumb-primary);
+}
+
+.templates__rows {
+  flex: 1;
+  background: repeating-linear-gradient(to bottom, var(--thumb-text) 0 1px, transparent 1px 0.3125rem);
+  opacity: 0.35;
+}
+
+.templates__total {
+  align-self: flex-end;
+  width: 55%;
+  height: 0.3125rem;
+  background: var(--thumb-primary);
+}
+
+.templates__thumb[data-template='band'] {
+  padding-top: 0;
+}
+
+.templates__thumb[data-template='band'] .templates__top {
+  margin-inline: -0.25rem;
+  height: 0.5rem;
+  border-radius: 0;
+}
+
+.templates__thumb[data-template='minimal'] .templates__top,
+.templates__thumb[data-template='boxed'] .templates__top {
+  width: 40%;
+  height: 0.1875rem;
+  margin-left: auto;
+  background: var(--thumb-text);
+}
+
+.templates__thumb[data-template='boxed'] .templates__top {
+  height: 0.375rem;
+}
+
+.templates__thumb[data-template='minimal'] .templates__total {
+  height: 0.125rem;
+  background: var(--thumb-text);
+}
+
+.templates__thumb[data-template='classic'] .templates__top {
+  width: 60%;
+  height: 0.25rem;
+  margin-inline: auto;
+  border-block: 1px solid var(--thumb-text);
+  border-radius: 0;
+  background: none;
+}
+
+.templates__thumb[data-template='classic'] .templates__total {
+  height: 0.125rem;
+  background: var(--thumb-text);
+}
+
+.templates__thumb[data-template='striped'] {
+  border-left: 0.25rem solid var(--thumb-primary);
+}
+
+.templates__thumb[data-template='striped'] .templates__top {
+  width: 40%;
+  height: 0.25rem;
+  margin-left: auto;
+  background: var(--thumb-text);
+}
+
+.templates__thumb[data-template='striped'] .templates__rows {
+  background: repeating-linear-gradient(to bottom, var(--thumb-primary) 0 0.1875rem, transparent 0.1875rem 0.375rem);
+  opacity: 0.4;
+}
+
+.templates__thumb[data-template='striped'] .templates__total {
+  margin-inline: -0.25rem;
+  margin-bottom: -0.25rem;
+  width: auto;
+  height: 0.5rem;
+  align-self: stretch;
+}
+
+.templates__thumb[data-template='rounded'] .templates__top {
+  width: 60%;
+  height: 0.875rem;
+  margin: -0.25rem 0 0 -0.25rem;
+  border-radius: 0 0 0.75rem 0;
+}
+
+.templates__thumb[data-template='rounded'] .templates__total {
+  border-radius: 1rem;
+}
+
+.templates__thumb[data-template='boxed'] .templates__total {
+  background: var(--thumb-text);
+  opacity: 0.35;
 }

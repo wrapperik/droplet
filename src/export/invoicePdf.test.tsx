@@ -1,9 +1,11 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import { starterBlocks } from '../compose/fallback.ts'
+import { TEMPLATES } from '../lib/invoiceTemplates.ts'
 import { newContent, type InvoiceContent } from '../lib/invoice.ts'
 import { resolveRoles } from '../lib/palette.ts'
-import { buildInvoicePdf } from './invoicePdf.tsx'
+import { fontPairById } from '../lib/brandType.ts'
+import { buildInvoicePdf, facesFor } from './invoicePdf.tsx'
 
 const roles = resolveRoles(starterBlocks())
 
@@ -59,4 +61,32 @@ describe('buildInvoicePdf', () => {
     const blob = await buildInvoicePdf(newContent('2026-10-04'), roles, PNG)
     expect(new TextDecoder().decode((await blob.arrayBuffer()).slice(0, 5))).toBe('%PDF-')
   }, 30_000)
+
+  it.each(TEMPLATES.map((template) => template.id))('makes a PDF in the %s template, with a logo and without, and a long one', async (id) => {
+    const content = complete()
+    content.details = { ...content.details, template: id }
+    for (const logo of [null, PNG]) {
+      const blob = await buildInvoicePdf(content, roles, logo)
+      expect(new TextDecoder().decode((await blob.arrayBuffer()).slice(0, 5))).toBe('%PDF-')
+    }
+    content.lines = Array.from({ length: 40 }, (_, index) => ({ id: index + 1, description: `Item number ${index + 1}`, quantity: 1, unitCents: 10000 }))
+    const long = new TextDecoder('latin1').decode(await (await buildInvoicePdf(content, roles)).arrayBuffer())
+    expect(long.match(/\/Type \/Page\b/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
+  }, 60_000)
+
+  it('draws in Helvetica without a brand pair, and in the pair\'s families with one', () => {
+    expect(facesFor().body.regular.fontFamily).toBe('Helvetica')
+    expect(facesFor().heading.bold.fontFamily).toBe('Helvetica-Bold')
+    const faces = facesFor(fontPairById('editorial'))
+    expect(faces.heading.bold).toEqual({ fontFamily: 'Playfair Display', fontWeight: 700 })
+    expect(faces.body.regular).toEqual({ fontFamily: 'Inter', fontWeight: 400 })
+  })
+
+  it('has a file to embed for every typeface the brand guide offers', async () => {
+    const { FONT_PAIRS } = await import('../lib/brandType.ts')
+    for (const pair of FONT_PAIRS) {
+      expect(facesFor(pair).heading.regular.fontFamily).toBe(pair.heading)
+      expect(facesFor(pair).body.regular.fontFamily).toBe(pair.body)
+    }
+  })
 })

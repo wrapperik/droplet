@@ -1,3 +1,4 @@
+import type { InvoiceTemplateId } from './invoiceTemplates.ts'
 import { VAT_RATE_BP, vatOf } from './money.ts'
 
 // What an invoice is, and the sums on it. Everything with one right answer is worked out here in code, in whole cents,
@@ -49,6 +50,8 @@ export type InvoiceDetails = {
   terms: TermsId
   customDueDate: string
   notes: string
+  // The look of the page and the PDF. An invoice from before templates has none, which is the first one.
+  template?: InvoiceTemplateId
 }
 
 export type InvoiceContent = {

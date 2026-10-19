@@ -75,7 +75,7 @@ const PART_ICONS: Record<GuideStepId, Icon> = { business: BuildingsIcon, vat: Sa
 // their invoices, so none is typed twice, but only what the founder confirms: Save opens a note of what would be remembered, and nothing is kept unless it is
 // confirmed. Leaving an invoice with unsaved changes asks first. The composer works on the same invoice through the same reducer, so what it fills in shows at once.
 export default function InvoiceWorkspace({ mode, projectId, projectName, state, dispatch, onReplace, progress, onProgress, onFinished, saveSignal, onConfirmed, logoVersion, onOpenHandoff, headerSlots }: Props) {
-  const { memory, logo, doc, content, roles, saved, unsaved, hasChanges, saveStatus, business, client, number, items, persist, confirm, readiness } = useInvoiceMemory(projectId, state, onConfirmed, logoVersion)
+  const { memory, logo, storedLogo, fonts, doc, content, roles, saved, unsaved, hasChanges, saveStatus, business, client, number, items, persist, confirm, readiness } = useInvoiceMemory(projectId, state, onConfirmed, logoVersion)
   const guided = mode === 'guide'
   const { step } = progress
   const index = stepIndex(step)
@@ -199,7 +199,7 @@ export default function InvoiceWorkspace({ mode, projectId, projectName, state, 
 
   const preview = (
     <div className="workspace__card">
-      <InvoiceDocument content={content} roles={roles} reason="The invoice as it will print on A4, in the colours you confirmed for the brand. It changes as you fill in each part." logo={logo} onOpenHandoff={onOpenHandoff} />
+      <InvoiceDocument content={content} roles={roles} reason="The invoice as it will print on A4, in the colours you confirmed for the brand, in the template you choose. It changes as you fill in each part." logo={logo} fonts={fonts} onOpenHandoff={onOpenHandoff} onTemplate={(template) => dispatch({ type: 'set_details', patch: { template } })} />
     </div>
   )
 
@@ -253,7 +253,7 @@ export default function InvoiceWorkspace({ mode, projectId, projectName, state, 
         exportButton={
           <ExportButton
             onExport={async () => {
-              const exported = await exportInvoice(content, roles, logo)
+              const exported = await exportInvoice(content, roles, storedLogo, fonts)
               // An invoice that was confirmed is marked as exported, so it is not picked up as a draft again.
               if (exported && saved && sameContent(content, saved.content)) persist(markExported(memory, doc.invoiceId, new Date().toISOString()))
               return exported

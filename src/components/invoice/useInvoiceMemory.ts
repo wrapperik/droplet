@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { fontPairById, type FontPair } from '../../lib/brandType.ts'
 import type { InvoiceContent } from '../../lib/invoice.ts'
 import { checkInvoice } from '../../lib/invoiceReadiness.ts'
 import { resolveRoles } from '../../lib/palette.ts'
@@ -6,6 +7,7 @@ import { starterBlocks } from '../../compose/fallback.ts'
 import { loadPalette } from '../../lib/projectStore.ts'
 import { newId } from '../../lib/ids.ts'
 import { useLoaded } from '../../hooks/useLoaded.ts'
+import { useAlignedLogo } from '../../hooks/useAlignedLogo.ts'
 import { useProjectLogo } from '../../hooks/useProjectLogo.ts'
 import { loadMemory, saveMemory } from '../../lib/memoryStore.ts'
 import type { ProjectMemory } from '../../lib/memorySave.ts'
@@ -21,9 +23,18 @@ export function useInvoiceMemory(projectId: string, state: InvoiceState, onConfi
   // What the project remembers and the confirmed palette are read from storage, which takes a moment. Until they have arrived the status says nothing
   // and saving waits, so nothing is judged against what has not been read yet.
   const { value: memory, loaded, set: setMemory } = useLoaded<ProjectMemory>(projectId, () => loadMemory(projectId), emptyMemory())
-  const { value: paletteBlocks } = useLoaded(projectId, async () => (await loadPalette(projectId))?.blocks ?? starterBlocks(), starterBlocks())
+  const { value: brand } = useLoaded(
+    projectId,
+    async () => {
+      const saved = await loadPalette(projectId)
+      return { blocks: saved?.blocks ?? starterBlocks(), fonts: fontPairById(saved?.fonts) }
+    },
+    { blocks: starterBlocks(), fonts: undefined as FontPair | undefined },
+  )
+  const paletteBlocks = brand.blocks
   // The logo brought back from another tool: undefined until read, null if there is none. It is drawn on the page and in the PDF, and goes nowhere else.
-  const logo = useProjectLogo(projectId, logoVersion)
+  const stored = useProjectLogo(projectId, logoVersion)
+  const logo = useAlignedLogo(stored)
   const [saveFailed, setSaveFailed] = useState(false)
 
   const doc = invoiceDocOf(state)
@@ -82,5 +93,5 @@ export function useInvoiceMemory(projectId: string, state: InvoiceState, onConfi
   // What the invoice still needs, in code, from what is on it.
   const readiness = useMemo(() => checkInvoice(content, { usedNumbers: numbersInUse(memory, doc.invoiceId) }), [content, memory, doc.invoiceId])
 
-  return { memory, loaded, logo, doc, content, roles, saved, unsaved, hasChanges, saveStatus, business, client, number, items, persist, confirm, readiness }
+  return { memory, loaded, logo, storedLogo: stored, fonts: brand.fonts, doc, content, roles, saved, unsaved, hasChanges, saveStatus, business, client, number, items, persist, confirm, readiness }
 }

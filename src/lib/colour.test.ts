@@ -4,6 +4,7 @@ import {
   contrastRatio,
   hexToRgb,
   hsvToRgb,
+  mixHex,
   normaliseHex,
   rgbToHex,
   readableTextColour,
@@ -85,5 +86,18 @@ describe('shiftHue', () => {
     ['#808080', 90, '#808080'],
   ])('shifts hue of %s by %i degrees to %s', (hex, shift, expected) => {
     expect(shiftHue(hex, shift)).toBe(expected)
+  })
+})
+
+describe('mixHex', () => {
+  it('lays one colour over another at a share', () => {
+    expect(mixHex('#FFFFFF', '#000000', 0)).toBe('#FFFFFF')
+    expect(mixHex('#FFFFFF', '#000000', 1)).toBe('#000000')
+    expect(mixHex('#FFFFFF', '#000000', 0.5)).toBe('#808080')
+  })
+
+  it('keeps the share between none and all of it', () => {
+    expect(mixHex('#FFFFFF', '#000000', 2)).toBe('#000000')
+    expect(mixHex('#FFFFFF', '#000000', -1)).toBe('#FFFFFF')
   })
 })
