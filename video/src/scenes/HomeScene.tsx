@@ -4,7 +4,7 @@ import BoardWorkspace from "../../../src/components/board/BoardWorkspace.tsx";
 import IntentBar from "../../../src/components/IntentBar.tsx";
 import "../../../src/components/ChatGreeting.css";
 import { beat, beatsIn } from "../timing.ts";
-import { PROJECT_ID, PROJECT_NAME, USER_NAME } from "../seed.ts";
+import { PROJECT_ID, PROJECT_NAME, USER_NAME, setLogoAdded } from "../seed.ts";
 import DockChat from "../ui/DockChat.tsx";
 import HomeFrame from "../ui/HomeFrame.tsx";
 import { arrive, typedAt } from "../ui/motion.ts";
@@ -34,6 +34,7 @@ function StartBar({ typed, menuOpen }: { typed: string; menuOpen: boolean }) {
 // becomes the brainstorm board, which the brand part then fills in.
 export default function HomeScene() {
   const frame = useCurrentFrame();
+  setLogoAdded(false);
   const b = beatsIn(frame);
   const docked = b >= 11;
   const typed = typedAt(frame, BRAINSTORM_MESSAGE, beat(1), beat(5.5));

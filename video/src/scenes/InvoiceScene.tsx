@@ -1,10 +1,11 @@
 import { useCurrentFrame } from "remotion";
 import type { InvoiceContent } from "../../../src/lib/invoice.ts";
+import { TEMPLATE_IDS, type InvoiceTemplateId } from "../../../src/lib/invoiceTemplates.ts";
 import type { GuideStepId } from "../../../src/lib/invoiceGuide.ts";
 import { openInvoiceWorkspace } from "../../../src/lib/invoiceState.ts";
 import type { ThreadMessage } from "../../../src/components/ChatThread.tsx";
 import { beat, beatsIn } from "../timing.ts";
-import { CLIENT, FINAL_LINES, INVOICE_ID, invoiceBase } from "../seed.ts";
+import { CLIENT, FINAL_LINES, INVOICE_ID, invoiceBase, setLogoAdded } from "../seed.ts";
 import DockChat from "../ui/DockChat.tsx";
 import HomeFrame from "../ui/HomeFrame.tsx";
 import InvoiceStage from "../ui/InvoiceStage.tsx";
@@ -21,6 +22,15 @@ const THREAD: ThreadMessage[] = [
   },
 ];
 
+// The looks the founder tries at the start, in beats, by their place in the picker. The last is kept.
+const TEMPLATE_CLICKS: { at: number; template: InvoiceTemplateId }[] = [
+  { at: 1.4, template: "classic" },
+  { at: 2.9, template: "rounded" },
+  { at: 4.4, template: "striped" },
+];
+
+const templateAt = (b: number): InvoiceTemplateId => TEMPLATE_CLICKS.filter((click) => b >= click.at).pop()?.template ?? "band";
+
 // What is on the invoice at a moment of the scene. The lines arrive one by one, and the client's address, which
 // the invoice needs, is missing until it is typed in.
 const invoiceAt = (frame: number): InvoiceContent => {
@@ -28,7 +38,7 @@ const invoiceAt = (frame: number): InvoiceContent => {
   const b = beatsIn(frame);
   const lines = FINAL_LINES.filter((_, index) => (index === 0 ? true : index === 1 ? b >= 9.6 : b >= 10.8));
   const address = typedAt(frame, CLIENT.address, beat(15.8), beat(18.6));
-  return { ...base, lines, client: { ...base.client, address } };
+  return { ...base, details: { ...base.details, template: templateAt(b) }, lines, client: { ...base.client, address } };
 };
 
 // The lines are added to the page while the client part is showing, so the client is what the words on screen are about.
@@ -36,6 +46,7 @@ const stepAt = (b: number): GuideStepId => (b < 6 ? "business" : b < 12 ? "clien
 
 export default function InvoiceScene() {
   const frame = useCurrentFrame();
+  setLogoAdded(true);
   const b = beatsIn(frame);
   const state = openInvoiceWorkspace(invoiceAt(frame), INVOICE_ID);
 
@@ -54,6 +65,7 @@ export default function InvoiceScene() {
         overlay={
           <Pointer
             stops={[
+              ...TEMPLATE_CLICKS.map((click) => ({ at: beat(click.at), selector: `.templates__option:nth-child(${TEMPLATE_IDS.indexOf(click.template) + 1})`, click: true })),
               { at: beat(14.6), selector: ".ready__fix", click: true },
               { at: beat(19.4), selector: '.taskbar__item[data-id="review"] .taskbar__button', click: true },
               { at: beat(21.6), selector: ".workspace__button--fixed", click: true },

@@ -23,14 +23,19 @@ npm run dev
 opens the Studio. `DropletLaunch` is the whole video, and each part opens on its own as `Scene-<part>`.
 
 ```bash
-npx remotion render src/index.ts DropletLaunch out/droplet-launch.mp4 --codec=h264 --crf=18
+npm run render
 ```
 
-renders a 1920 by 1080 MP4 at 30 fps into `out/`, in about ten minutes.
+renders `out/droplet-launch.mp4` (1920 by 1080, 30 fps) in about ten minutes. It renders in chunks of 300 frames, renders a
+chunk again if it stalls, joins them and lays the track under them (`scripts/render.mjs`).
 
 It renders with Google Chrome when it is installed (see `remotion.config.ts`). Remotion's own bundled Chrome stops on one of
 its internal checks when the app changes layout between frames. Google Chrome is used with one tab at a time: with several, it
-now and then returns a frame as a tiling of one corner of the picture.
+now and then returns a frame as a tiling of one corner of the picture. In one long session it also now and then stalls on a
+frame, which is why the render is done in chunks.
+
+The Kindred Gifting logo (`public/kindred-logo.png`) is an Adobe Stock monogram, recoloured to the palette's text colour. Like
+the track, it is licensed and git-ignored, so put it there before rendering.
 
 ## How it is put together
 

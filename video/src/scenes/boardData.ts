@@ -30,7 +30,7 @@ const BOARD_NOTES: { at: number; item: BoardItem }[] = [
   { at: 2.7, item: note("n4", "For small businesses and their clients", "lilac", 2870, 1060) },
   { at: 3.4, item: note("n5", "Ordered by Thursday, delivered by Friday", "peach", 1580, 1480) },
   { at: 4.1, item: note("n6", "Calm, not loud", "yellow", 2010, 1480) },
-  { at: 5.0, item: note("n7", "Calm blues read as trusted. Try a deep navy with one bright blue.", "pink", 2440, 1480) },
+  { at: 5.0, item: note("n7", "Soft pink and cream feel warm and handmade. A pastel yellow adds a little sunshine.", "pink", 2440, 1480) },
 ];
 
 const FRAME: BoardItem = { id: "f1", kind: "frame", title: "How Kindred Gifting should feel", colour: "white", x: 1500, y: 960, w: 1800, h: 900 };

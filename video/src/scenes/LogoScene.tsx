@@ -3,7 +3,7 @@ import ChatThread, { type ThreadMessage } from "../../../src/components/ChatThre
 import IntentBar from "../../../src/components/IntentBar.tsx";
 import { specColours } from "../../../src/lib/logoHandoff.ts";
 import { beat, beatsIn } from "../timing.ts";
-import { FINAL_BLOCKS, PROJECT_NAME } from "../seed.ts";
+import { FINAL_BLOCKS, PROJECT_NAME, setLogoAdded } from "../seed.ts";
 import HomeFrame from "../ui/HomeFrame.tsx";
 import { typedAt } from "../ui/motion.ts";
 import Pointer from "../ui/Pointer.tsx";
@@ -43,6 +43,7 @@ const messagesAt = (b: number): ThreadMessage[] => (b < SENT ? [] : b < ANSWERED
 
 export default function LogoScene() {
   const frame = useCurrentFrame();
+  setLogoAdded(false);
   const b = beatsIn(frame);
   const typed = b < SENT ? typedAt(frame, ASK, beat(0.6), beat(2.9)) + (Math.floor(b * 2) % 2 === 0 ? "|" : "") : "";
 

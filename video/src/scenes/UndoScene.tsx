@@ -3,7 +3,7 @@ import { reduceInvoice, openInvoiceWorkspace, type InvoiceState } from "../../..
 import type { Receipt } from "../../../src/compose/receipt.ts";
 import type { ThreadMessage } from "../../../src/components/ChatThread.tsx";
 import { beat, beatsIn } from "../timing.ts";
-import { INVOICE_ID, invoiceFinal } from "../seed.ts";
+import { INVOICE_ID, invoiceFinal, setLogoAdded } from "../seed.ts";
 import DockChat from "../ui/DockChat.tsx";
 import HomeFrame from "../ui/HomeFrame.tsx";
 import InvoiceStage from "../ui/InvoiceStage.tsx";
@@ -46,6 +46,7 @@ const messagesAt = (b: number): ThreadMessage[] => {
 
 export default function UndoScene() {
   const frame = useCurrentFrame();
+  setLogoAdded(true);
   const b = beatsIn(frame);
 
   return (
