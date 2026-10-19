@@ -199,7 +199,7 @@ export default function InvoiceWorkspace({ mode, projectId, projectName, state, 
 
   const preview = (
     <div className="workspace__card">
-      <InvoiceDocument content={content} roles={roles} reason="The invoice as it will print on A4, in the colours you confirmed for the brand. It changes as you fill in each part." logo={logo} onOpenHandoff={onOpenHandoff} />
+      <InvoiceDocument content={content} roles={roles} reason="The invoice as it will print on A4, in the colours you confirmed for the brand, in the template you choose. It changes as you fill in each part." logo={logo} onOpenHandoff={onOpenHandoff} onTemplate={(template) => dispatch({ type: 'set_details', patch: { template } })} />
     </div>
   )
 

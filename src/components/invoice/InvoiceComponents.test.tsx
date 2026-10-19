@@ -66,6 +66,44 @@ describe('InvoiceDocument', () => {
   })
 })
 
+describe('the templates', () => {
+  it('draws the first look when none was chosen, and the chosen one when there is one', () => {
+    const { container, rerender } = render(<InvoiceDocument content={complete()} roles={roles} reason="Why." />)
+    expect(container.querySelector('.paper')).toHaveAttribute('data-template', 'band')
+    const content = complete()
+    content.details = { ...content.details, template: 'classic' }
+    rerender(<InvoiceDocument content={content} roles={roles} reason="Why." />)
+    expect(container.querySelector('.paper')).toHaveAttribute('data-template', 'classic')
+  })
+
+  it('offers no choice unless it can be acted on', () => {
+    render(<InvoiceDocument content={complete()} roles={roles} reason="Why." />)
+    expect(screen.queryByRole('radiogroup', { name: 'Template' })).not.toBeInTheDocument()
+  })
+
+  it('offers every template, marks the one in use and reports a choice', async () => {
+    const onTemplate = vi.fn()
+    const content = complete()
+    content.details = { ...content.details, template: 'minimal' }
+    render(<InvoiceDocument content={content} roles={roles} reason="Why." onTemplate={onTemplate} />)
+    const group = screen.getByRole('radiogroup', { name: 'Template' })
+    expect(within(group).getAllByRole('radio')).toHaveLength(6)
+    expect(within(group).getByRole('radio', { name: 'Minimal' })).toBeChecked()
+    await userEvent.click(within(group).getByRole('radio', { name: 'Boxed' }))
+    expect(onTemplate).toHaveBeenCalledWith('boxed')
+  })
+
+  it('puts the payment details in a band at the foot for a template that has one, and under the totals for the others', () => {
+    const content = complete()
+    content.business = { ...content.business, accountNumber: '62000000000', bankName: 'FNB' }
+    const { container, rerender } = render(<InvoiceDocument content={{ ...content, details: { ...content.details, template: 'striped' } }} roles={roles} reason="Why." />)
+    expect(container.querySelector('.paper__foot .paper__payment')).toBeInTheDocument()
+    rerender(<InvoiceDocument content={{ ...content, details: { ...content.details, template: 'band' } }} roles={roles} reason="Why." />)
+    expect(container.querySelector('.paper__foot')).toBeNull()
+    expect(container.querySelector('.paper__body .paper__payment')).toBeInTheDocument()
+  })
+})
+
 describe('the logo on the invoice page', () => {
   const logo = { dataUrl: 'data:image/png;base64,iVBORw0KGgo=' }
 

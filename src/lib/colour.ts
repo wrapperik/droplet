@@ -131,3 +131,11 @@ export function shiftHue(hex: string, degrees: number): string {
   const { h, s, v } = rgbToHsv(hexToRgb(hex))
   return rgbToHex(hsvToRgb({ h: (h + degrees + 360) % 360, s, v }))
 }
+
+// `top` laid over `base` at the given share (0 to 1), as a solid colour. Used for the soft stripes on an invoice, where a transparent fill cannot be printed.
+export function mixHex(base: string, top: string, share: number): string {
+  const a = hexToRgb(base)
+  const b = hexToRgb(top)
+  const amount = clamp(share, 0, 1)
+  return rgbToHex({ r: a.r + (b.r - a.r) * amount, g: a.g + (b.g - a.g) * amount, b: a.b + (b.b - a.b) * amount })
+}
