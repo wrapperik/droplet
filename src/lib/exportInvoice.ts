@@ -1,6 +1,7 @@
+import type { FontPair } from './brandType.ts'
 import type { InvoiceContent } from './invoice.ts'
 import type { LogoSave } from './logoSave.ts'
-import { pngForPdf } from './logoRaster.ts'
+import { alignedPng } from './logoRaster.ts'
 import type { ResolvedRoles } from './palette.ts'
 
 // What the downloaded file is called: "Invoice INV-0007 Pretoria Print Works.pdf", with anything a file name cannot hold taken out.
@@ -14,7 +15,7 @@ export function invoiceFileName(content: InvoiceContent): string {
 
 // Makes the invoice PDF and hands it to the browser as a download. The PDF library is large, so it is fetched only now. The logo, if the project has
 // one, goes on as a PNG (an SVG is drawn to one first); if that cannot be done the invoice is made without it, with the business name.
-export async function exportInvoice(content: InvoiceContent, roles: ResolvedRoles, logo?: LogoSave | null): Promise<boolean> {
+export async function exportInvoice(content: InvoiceContent, roles: ResolvedRoles, logo?: LogoSave | null, fonts?: FontPair): Promise<boolean> {
   const { downloadInvoice } = await import('../export/invoicePdf.tsx')
-  return downloadInvoice(content, roles, invoiceFileName(content), await pngForPdf(logo))
+  return downloadInvoice(content, roles, invoiceFileName(content), await alignedPng(logo), fonts)
 }

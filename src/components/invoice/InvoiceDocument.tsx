@@ -1,4 +1,11 @@
 import type { CSSProperties } from 'react'
+import '@fontsource-variable/dm-sans'
+import '@fontsource-variable/inter'
+import '@fontsource-variable/playfair-display'
+import '@fontsource-variable/fraunces'
+import '@fontsource-variable/space-grotesk'
+import '@fontsource-variable/lora'
+import type { FontPair } from '../../lib/brandType.ts'
 import { mixHex, readableTextColour } from '../../lib/colour.ts'
 import type { InvoiceContent } from '../../lib/invoice.ts'
 import { TEMPLATES, templateOf, type InvoiceTemplateId } from '../../lib/invoiceTemplates.ts'
@@ -16,6 +23,8 @@ type Props = {
   logo?: { dataUrl: string } | null
   // Opens the logo handoff card, from the note under the page. Without it the note says where to find it.
   onOpenHandoff?: () => void
+  // The typeface pair chosen in the brand guide: the heading face for the title and the business name, the body face for the rest. None chosen uses the app's own.
+  fonts?: FontPair
   // Chooses the look of the page. Without it the page is shown in its template with no choice offered.
   onTemplate?: (template: InvoiceTemplateId) => void
 }
@@ -25,7 +34,7 @@ const Part = ({ text }: { text: Text }) => (text.placeholder ? <span className="
 // The invoice as a page, in the founder's brand, laid out as it will print (A4, the PDF's own proportions: see the CSS). It is made from the same words as the PDF
 // (`invoiceView`). A part that is not filled in yet shows a faded placeholder, so the page looks like an invoice from the first
 // moment and says what is still to come. The colours are set as custom properties and used only inside the page.
-export default function InvoiceDocument({ content, roles, reason, logo, onOpenHandoff, onTemplate }: Props) {
+export default function InvoiceDocument({ content, roles, reason, logo, fonts, onOpenHandoff, onTemplate }: Props) {
   return (
     <section className="paper-frame" aria-label="Invoice">
       <header className="paper-frame__header">
@@ -33,7 +42,7 @@ export default function InvoiceDocument({ content, roles, reason, logo, onOpenHa
         <ReasonTip reason={reason} />
       </header>
       {onTemplate && <TemplatePicker current={templateOf(content.details).id} roles={roles} onChoose={onTemplate} />}
-      <InvoicePaper content={content} roles={roles} logo={logoSlotOf(logo)} />
+      <InvoicePaper content={content} roles={roles} logo={logoSlotOf(logo)} fonts={fonts} />
       <p className="paper-note">Shown as it will print on A4.</p>
       {/* An outstanding logo flags the invoice and never blocks it: the business name is the brand until the logo is added, on the page and in the PDF. */}
       {logo === null && (
@@ -74,7 +83,7 @@ function TemplatePicker({ current, roles, onChoose }: { current: InvoiceTemplate
 
 // The page alone, with no window round it, for a smaller copy such as the finished invoice in the chat. Its sizes are shares of the width of its
 // container, so whatever holds it must be one (`container-type: inline-size`).
-export function InvoicePaper({ content, roles, logo }: Pick<Props, 'content' | 'roles'> & { logo?: LogoSlot | null }) {
+export function InvoicePaper({ content, roles, logo, fonts }: Pick<Props, 'content' | 'roles' | 'fonts'> & { logo?: LogoSlot | null }) {
   const view = invoiceView(content, logo ?? null)
   const template = templateOf(content.details)
   const colours = {
@@ -83,6 +92,7 @@ export function InvoicePaper({ content, roles, logo }: Pick<Props, 'content' | '
     '--paper-primary': roles.primary.hex,
     '--paper-on-primary': readableTextColour(roles.primary.hex),
     '--paper-accent': roles.accent.hex,
+    ...(fonts ? { '--paper-heading': fonts.headingStack, '--paper-body': fonts.bodyStack } : {}),
     '--paper-soft': mixHex(roles.background.hex, roles.primary.hex, 0.12),
     '--paper-rule': mixHex(roles.background.hex, roles.text.hex, 0.35),
   } as CSSProperties
@@ -105,6 +115,7 @@ export function InvoicePaper({ content, roles, logo }: Pick<Props, 'content' | '
   return (
     <article className="paper" data-template={template.id} style={colours} aria-label={`${view.title} ${view.number.text}`}>
       <header className="paper__band">
+        <span className="paper__kind">{view.title}</span>
         <span className="paper__brand">
           {view.logo?.kind === 'added' && (
             <span className="paper__logo">
@@ -120,7 +131,6 @@ export function InvoicePaper({ content, roles, logo }: Pick<Props, 'content' | '
             <Part text={view.from[0]} />
           </span>
         </span>
-        <span className="paper__kind">{view.title}</span>
       </header>
 
       <div className="paper__body">

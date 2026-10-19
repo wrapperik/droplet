@@ -4,7 +4,8 @@ import { starterBlocks } from '../compose/fallback.ts'
 import { TEMPLATES } from '../lib/invoiceTemplates.ts'
 import { newContent, type InvoiceContent } from '../lib/invoice.ts'
 import { resolveRoles } from '../lib/palette.ts'
-import { buildInvoicePdf } from './invoicePdf.tsx'
+import { fontPairById } from '../lib/brandType.ts'
+import { buildInvoicePdf, facesFor } from './invoicePdf.tsx'
 
 const roles = resolveRoles(starterBlocks())
 
@@ -72,4 +73,20 @@ describe('buildInvoicePdf', () => {
     const long = new TextDecoder('latin1').decode(await (await buildInvoicePdf(content, roles)).arrayBuffer())
     expect(long.match(/\/Type \/Page\b/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
   }, 60_000)
+
+  it('draws in Helvetica without a brand pair, and in the pair\'s families with one', () => {
+    expect(facesFor().body.regular.fontFamily).toBe('Helvetica')
+    expect(facesFor().heading.bold.fontFamily).toBe('Helvetica-Bold')
+    const faces = facesFor(fontPairById('editorial'))
+    expect(faces.heading.bold).toEqual({ fontFamily: 'Playfair Display', fontWeight: 700 })
+    expect(faces.body.regular).toEqual({ fontFamily: 'Inter', fontWeight: 400 })
+  })
+
+  it('has a file to embed for every typeface the brand guide offers', async () => {
+    const { FONT_PAIRS } = await import('../lib/brandType.ts')
+    for (const pair of FONT_PAIRS) {
+      expect(facesFor(pair).heading.regular.fontFamily).toBe(pair.heading)
+      expect(facesFor(pair).body.regular.fontFamily).toBe(pair.body)
+    }
+  })
 })

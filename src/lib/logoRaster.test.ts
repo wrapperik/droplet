@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { LogoSave } from './logoSave.ts'
-import { pngForPdf, RASTER_MAX_SIDE, rasterSize } from './logoRaster.ts'
+import { alignedPng, contentBounds, pngForPdf, RASTER_MAX_SIDE, rasterSize } from './logoRaster.ts'
 
 const png: LogoSave = { kind: 'png', name: 'a.png', size: 4, dataUrl: 'data:image/png;base64,AAAA', savedAt: '2026-10-15T09:00:00.000Z' }
 const svg: LogoSave = { kind: 'svg', name: 'a.svg', size: 4, dataUrl: 'data:image/svg+xml;base64,AAAA', savedAt: '2026-10-15T09:00:00.000Z' }
@@ -68,5 +68,50 @@ describe('pngForPdf', () => {
     restore.splice(0).forEach((undo) => undo())
     standIn({ loads: true, natural: [10, 10], url: 'data:,' })
     expect(await pngForPdf(svg)).toBeNull()
+  })
+})
+
+describe('contentBounds', () => {
+  // A width by height image of one colour, with the given pixels set.
+  const image = (width: number, height: number, fill: number[], marks: [number, number, number[]][] = []) => {
+    const data = new Uint8ClampedArray(width * height * 4)
+    for (let i = 0; i < width * height; i++) data.set(fill, i * 4)
+    for (const [x, y, colour] of marks) data.set(colour, (y * width + x) * 4)
+    return { data, width, height }
+  }
+
+  it('finds the box round what is drawn on a transparent image', () => {
+    const pixels = image(10, 8, [0, 0, 0, 0], [[2, 3, [0, 0, 0, 255]], [6, 5, [0, 0, 0, 255]]])
+    expect(contentBounds(pixels)).toEqual({ left: 2, top: 3, right: 7, bottom: 6 })
+  })
+
+  it('treats the colour of the corner as empty when the image has a solid background', () => {
+    const pixels = image(6, 6, [255, 255, 255, 255], [[1, 1, [10, 20, 30, 255]], [3, 4, [10, 20, 30, 255]]])
+    expect(contentBounds(pixels)).toEqual({ left: 1, top: 1, right: 4, bottom: 5 })
+  })
+
+  it('gives nothing for an image with nothing drawn, or no size', () => {
+    expect(contentBounds(image(4, 4, [0, 0, 0, 0]))).toBeNull()
+    expect(contentBounds({ data: [], width: 0, height: 0 })).toBeNull()
+  })
+
+  it('gives nothing for one flat colour, which is a background and not a mark', () => {
+    expect(contentBounds(image(3, 3, [0, 0, 0, 255]))).toBeNull()
+  })
+})
+
+describe('alignedPng', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('has nothing for no logo, and the logo as it is where there is no canvas to trim it on', async () => {
+    class FailingImage {
+      onerror: (() => void) | null = null
+      set src(_value: string) {
+        queueMicrotask(() => this.onerror?.())
+      }
+    }
+    vi.stubGlobal('Image', FailingImage)
+    expect(await alignedPng(null)).toBeNull()
+    expect(await alignedPng(png)).toBe(png.dataUrl)
   })
 })

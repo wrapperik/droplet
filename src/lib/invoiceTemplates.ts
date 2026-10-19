@@ -17,11 +17,11 @@ export type InvoiceTemplate = {
 }
 
 export const TEMPLATES: InvoiceTemplate[] = [
-  { id: 'band', name: 'Band', blurb: 'A coloured band across the top, with the total in a bar.', footerBand: false },
+  { id: 'band', name: 'Band', blurb: 'A strip of your colour carries the title, with the total in a bar.', footerBand: false },
   { id: 'minimal', name: 'Minimal', blurb: 'A large title and fine rules, with no fills. The lightest on ink.', footerBand: false },
-  { id: 'classic', name: 'Classic', blurb: 'Bold rules round the items, with payment details in a band at the foot.', footerBand: true },
-  { id: 'striped', name: 'Striped', blurb: 'A filled table heading, striped rows and a band at the foot.', footerBand: true },
-  { id: 'rounded', name: 'Rounded', blurb: 'A soft curved header, and a rounded heading on the table.', footerBand: false },
+  { id: 'classic', name: 'Classic', blurb: 'A centred heading between two heavy rules, with rules and no fills.', footerBand: false },
+  { id: 'striped', name: 'Striped', blurb: 'A stripe down the edge, striped rows, and payment details in a band at the foot.', footerBand: true },
+  { id: 'rounded', name: 'Rounded', blurb: 'A block with a soft corner holds the title. The table and total are pills.', footerBand: false },
   { id: 'boxed', name: 'Boxed', blurb: 'A heavy title, shaded headings and a ruled grid for the items.', footerBand: false },
 ]
 
