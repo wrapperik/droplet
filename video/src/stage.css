@@ -1,0 +1,48 @@
+/*
+ * Rules for drawing the app's own screens inside a video, where every frame is rendered on its own.
+ * Nothing here restyles a component: it only stops time-based motion, so a frame always shows the same thing.
+ */
+
+/* Motion in the video is driven by the frame number. CSS transitions and animations run on the clock, which
+   a frame-by-frame render cannot follow, so they are switched off. The glow behind the start screen is the
+   one exception: its drift is paused and moved on by the frame (see --glow-seconds). This covers dialogs the
+   app draws outside the page's root, such as the logo card, which is why it is not scoped. */
+*:not(.chat-glow__orb),
+*:not(.chat-glow__orb)::before,
+*:not(.chat-glow__orb)::after {
+  transition: none !important;
+  animation: none !important;
+  caret-color: transparent;
+}
+
+.chat-glow__orb {
+  animation-play-state: paused !important;
+  animation-delay: calc(var(--glow-seconds, 0) * -1s) !important;
+  transition: none !important;
+}
+
+/* A keyboard focus ring would show on whatever the app focuses first. A video has no keyboard. */
+:focus-visible {
+  outline: none !important;
+}
+
+/* The app fills its browser window. Here the window is the frame's box, not the video's height. */
+.vid-window .home {
+  height: 100%;
+}
+
+/* What is typed so far is drawn as the field's placeholder, so it can be driven by the frame. It reads as typed text. */
+.vid-typed .intent__input::placeholder {
+  color: var(--text);
+  opacity: 1;
+}
+
+/* No scrollbars in a video. A classic scrollbar that comes and goes also changes the width of what it scrolls, which
+   made the colour wheel change size from one frame to the next. */
+* {
+  scrollbar-width: none !important;
+}
+
+*::-webkit-scrollbar {
+  display: none !important;
+}
