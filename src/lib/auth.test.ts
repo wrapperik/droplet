@@ -66,7 +66,7 @@ describe('the sign-in for this device alone', () => {
 })
 
 // A stand-in for the Supabase client: what it answers is what a test sets, and what it was asked is kept.
-function fakeClient(answers: Partial<{ signUp: unknown; signIn: unknown; oauth: unknown; session: unknown; update: unknown }> = {}) {
+function fakeClient(answers: Partial<{ signUp: unknown; signIn: unknown; oauth: unknown; anonymous: unknown; session: unknown; update: unknown }> = {}) {
   const asked: { method: string; input?: unknown }[] = []
   let listener: ((event: string, session: unknown) => void) | null = null
   const unsubscribe = vi.fn()
@@ -90,6 +90,10 @@ function fakeClient(answers: Partial<{ signUp: unknown; signIn: unknown; oauth: 
         asked.push({ method: 'oauth', input })
         return (answers.oauth ?? { error: null }) as never
       },
+      signInAnonymously: async (input: unknown) => {
+        asked.push({ method: 'anonymous', input })
+        return (answers.anonymous ?? { data: { user: { id: 'g1' }, session: { x: 1 } }, error: null }) as never
+      },
       signOut: async (input?: unknown) => {
         asked.push({ method: 'signOut', input })
         return { error: null }
@@ -102,6 +106,25 @@ function fakeClient(answers: Partial<{ signUp: unknown; signIn: unknown; oauth: 
   } as unknown as SupabaseAuthClient
   return { client, asked, emit: (event: string, session: unknown) => listener?.(event, session), unsubscribe }
 }
+
+describe('the guest sign-in', () => {
+  it('opens a new anonymous account called UX Assessor, and is always signed in on this device alone', async () => {
+    const { client, asked } = fakeClient()
+    expect(await createSupabaseAuthBackend(client).signInAsGuest()).toEqual({ ok: true })
+    expect(asked).toEqual([{ method: 'anonymous', input: { options: { data: { display_name: 'UX Assessor' } } } }])
+    expect(await localAuthBackend.signInAsGuest()).toEqual({ ok: true })
+  })
+
+  it('says in plain words when guests are not switched on, or the network is down', async () => {
+    const off = fakeClient({ anonymous: { data: { user: null, session: null }, error: { message: 'Anonymous sign-ins are disabled' } } })
+    expect(await createSupabaseAuthBackend(off.client).signInAsGuest()).toEqual({ ok: false, message: 'Guest access is not switched on yet.' })
+    const broken = fakeClient().client
+    broken.auth.signInAnonymously = async () => {
+      throw new Error('Failed to fetch')
+    }
+    expect(await createSupabaseAuthBackend(broken).signInAsGuest()).toMatchObject({ ok: false, message: expect.stringMatching(/Could not reach the server/) })
+  })
+})
 
 describe('the sign-in with Supabase', () => {
   it('knows who is signed in from the session, by the name they gave', async () => {

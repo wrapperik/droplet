@@ -9,7 +9,7 @@ import { setAuthBackend, useAuth } from '../store/auth.ts'
 import SignIn from './SignIn.tsx'
 
 const calls: { method: string; input?: unknown }[] = []
-let results: { signIn?: AuthResult; signUp?: AuthResult; google?: AuthResult } = {}
+let results: { signIn?: AuthResult; signUp?: AuthResult; google?: AuthResult; guest?: AuthResult } = {}
 let current: AuthUser | null = null
 
 const backend = (): AuthBackend => ({
@@ -28,6 +28,10 @@ const backend = (): AuthBackend => ({
   signInWithGoogle: async () => {
     calls.push({ method: 'google' })
     return results.google ?? { ok: true }
+  },
+  signInAsGuest: async () => {
+    calls.push({ method: 'guest' })
+    return results.guest ?? { ok: true }
   },
   signOut: async () => {},
   completeOnboarding: async () => true,
@@ -158,6 +162,15 @@ describe('the sign-in screen', () => {
     renderSignIn()
     await user.click(screen.getByRole('button', { name: 'Continue with Google' }))
     await waitFor(() => expect(calls).toEqual([{ method: 'google' }]))
+  })
+
+  it('has a button for UX assessors that needs no details, on both the sign-in and the make-an-account screens', async () => {
+    const user = userEvent.setup()
+    renderSignIn()
+    expect(screen.getByRole('button', { name: 'For UX Assessors' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Make an account' }))
+    await user.click(screen.getByRole('button', { name: 'For UX Assessors' }))
+    await waitFor(() => expect(calls).toEqual([{ method: 'guest' }]))
   })
 
   it('clears a message when the founder switches between signing in and making an account', async () => {

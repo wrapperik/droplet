@@ -22,6 +22,8 @@ type AuthState = {
   signUp: (input: { name: string; email: string; password: string }) => Promise<void>
   signIn: (input: { email: string; password: string }) => Promise<void>
   signInWithGoogle: () => Promise<void>
+  // Opens a brand new account for this visit, with nothing to type.
+  signInAsGuest: () => Promise<void>
   signOut: () => Promise<void>
   // The founder has been through the introduction. Never holds them up: if it could not be saved they carry on, and see it again next time.
   completeOnboarding: () => Promise<void>
@@ -119,6 +121,13 @@ export const useAuth = create<AuthState>((set, get) => {
       if (get().busy) return
       set({ busy: true, error: '', notice: '' })
       const result = await authBackend().signInWithGoogle()
+      set({ busy: false, ...(result.ok ? {} : { error: result.message }) })
+    },
+
+    signInAsGuest: async () => {
+      if (get().busy) return
+      set({ busy: true, error: '', notice: '' })
+      const result = await authBackend().signInAsGuest()
       set({ busy: false, ...(result.ok ? {} : { error: result.message }) })
     },
 

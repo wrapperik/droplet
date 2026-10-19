@@ -15,15 +15,14 @@ export default function SignIn() {
   const start = useAuth((state) => state.start)
   // The session is looked for here too, since this is where a founder can arrive straight from Google or from the link in an email.
   useEffect(() => start(), [start])
-  const { busy, error, notice, signIn, signUp, signInWithGoogle, clearMessages } = useAuth()
+  const { busy, error, notice, signIn, signUp, signInWithGoogle, signInAsGuest, clearMessages } = useAuth()
   // A link with ?mode=sign-up opens on making an account.
   const [params] = useSearchParams()
   const [mode, setMode] = useState<Mode>(() => (params.get('mode') === 'sign-up' ? 'sign-up' : 'sign-in'))
-  // Pressed Continue with Google: the button says so until Google opens (or an error brings the founder back to this screen).
-  const [toGoogle, setToGoogle] = useState(false)
-  useEffect(() => {
-    if (!busy) setToGoogle(false)
-  }, [busy])
+  // Which of the two other ways in was pressed: the button says so while it works (or until an error brings the founder back to this screen).
+  const [pressed, setPressed] = useState<'google' | 'guest' | null>(null)
+  const toGoogle = busy && pressed === 'google'
+  const toGuest = busy && pressed === 'guest'
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -41,6 +40,11 @@ export default function SignIn() {
     if (busy) return
     if (mode === 'sign-up') void signUp({ name, email, password })
     else void signIn({ email, password })
+  }
+
+  const enterAsGuest = async () => {
+    setPressed('guest')
+    await signInAsGuest()
   }
 
   const making = mode === 'sign-up'
@@ -101,7 +105,7 @@ export default function SignIn() {
           </p>
 
           <button type="submit" className="signin__primary" disabled={busy} aria-busy={busy}>
-            {busy && !toGoogle ? 'One moment' : making ? 'Make my account' : 'Sign in to Droplet'}
+            {busy && !toGoogle && !toGuest ? 'One moment' : making ? 'Make my account' : 'Sign in to Droplet'}
           </button>
         </form>
 
@@ -113,14 +117,22 @@ export default function SignIn() {
           type="button"
           className="signin__google"
           disabled={busy}
-          aria-busy={busy && toGoogle}
+          aria-busy={toGoogle}
           onClick={() => {
-            setToGoogle(true)
+            setPressed('google')
             void signInWithGoogle()
           }}
         >
-          {busy && toGoogle ? 'Opening Google' : 'Continue with Google'}
+          {toGoogle ? 'Opening Google' : 'Continue with Google'}
         </button>
+
+        {/* For the UX assessors, who should not have to make an account to look round: a new, empty account for this visit. */}
+        <div className="signin__guest">
+          <button type="button" className="signin__assessor" disabled={busy} aria-busy={toGuest} onClick={() => void enterAsGuest()}>
+            {toGuest ? 'Opening a new account' : 'For UX Assessors'}
+          </button>
+          <span className="signin__hint">No sign-up. Opens a new, empty account for this visit.</span>
+        </div>
       </div>
     </main>
   )

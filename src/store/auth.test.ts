@@ -7,7 +7,7 @@ import { setAuthBackend, useAuth } from './auth.ts'
 const megan: AuthUser = { id: 'u1', email: 'megan@example.com', name: 'Megan', onboarded: true }
 
 // A backend a test controls: who is signed in, what it answers, and who is listening.
-function fakeBackend(options: { user?: AuthUser | null; kind?: 'local' | 'supabase'; signUp?: AuthResult; signIn?: AuthResult; google?: AuthResult; onboardingSaved?: boolean; deleteAccount?: AuthResult } = {}) {
+function fakeBackend(options: { user?: AuthUser | null; kind?: 'local' | 'supabase'; signUp?: AuthResult; signIn?: AuthResult; google?: AuthResult; guest?: AuthResult; onboardingSaved?: boolean; deleteAccount?: AuthResult } = {}) {
   const storage = slowMemoryStorage(1).driver
   const listeners = new Set<(user: AuthUser | null) => void>()
   let current: AuthUser | null = options.user ?? null
@@ -31,6 +31,10 @@ function fakeBackend(options: { user?: AuthUser | null; kind?: 'local' | 'supaba
     signInWithGoogle: async () => {
       calls.push('google')
       return options.google ?? { ok: true }
+    },
+    signInAsGuest: async () => {
+      calls.push('guest')
+      return options.guest ?? { ok: true }
     },
     signOut: async () => {
       calls.push('signOut')
@@ -168,6 +172,17 @@ describe('signing in', () => {
     await useAuth.getState().signInWithGoogle()
     expect(calls).toEqual(['google'])
     expect(useAuth.getState().error).toMatch(/not switched on/)
+  })
+})
+
+describe('entering as a guest', () => {
+  it('asks the backend for a new account, once, and says what went wrong if it cannot', async () => {
+    const { backend, calls } = fakeBackend({ guest: { ok: false, message: 'Guest access is not switched on yet.' } })
+    setAuthBackend(backend)
+    await Promise.all([useAuth.getState().signInAsGuest(), useAuth.getState().signInAsGuest()])
+    expect(calls).toEqual(['guest'])
+    expect(useAuth.getState().error).toBe('Guest access is not switched on yet.')
+    expect(useAuth.getState().busy).toBe(false)
   })
 })
 

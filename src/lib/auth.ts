@@ -24,6 +24,8 @@ export interface AuthBackend {
   signUp(input: { name: string; email: string; password: string }): Promise<AuthResult>
   signIn(input: { email: string; password: string }): Promise<AuthResult>
   signInWithGoogle(): Promise<AuthResult>
+  // A brand new account with no details, for someone looking round (the UX assessors). The session is the only way back to it.
+  signInAsGuest(): Promise<AuthResult>
   signOut(): Promise<void>
   // Remembers, in the account, that the founder has been through the introduction. False if it could not be saved.
   completeOnboarding(): Promise<boolean>
@@ -59,6 +61,7 @@ export function friendlyAuthError(message: string): string {
   if (text.includes('password should be') || text.includes('weak password')) return `Use at least ${MIN_PASSWORD} characters for your password.`
   if (text.includes('unable to validate email') || text.includes('invalid email')) return 'That does not look like an email address.'
   if (text.includes('failed to fetch') || text.includes('network') || text.includes('load failed')) return 'Could not reach the server. Check your connection and try again.'
+  if (text.includes('anonymous sign-ins are disabled')) return 'Guest access is not switched on yet.'
   if (text.includes('provider is not enabled') || text.includes('unsupported provider')) return 'Signing in with Google is not switched on yet.'
   return 'Something went wrong. Try again in a moment.'
 }
@@ -110,6 +113,9 @@ export function displayNameOf(metadata: Record<string, unknown> | undefined, ema
 export const ONBOARDED_KEY = 'onboarded'
 export const hasOnboarded = (metadata: Record<string, unknown> | undefined) => metadata?.[ONBOARDED_KEY] === true
 
+// What a guest is called. A guest has no email address, which is how the rest of the app knows it is one.
+export const GUEST_NAME = 'UX Assessor'
+
 // ---- This device alone ----
 
 export const localAuthBackend: AuthBackend = {
@@ -128,6 +134,9 @@ export const localAuthBackend: AuthBackend = {
     return { ok: true }
   },
   async signInWithGoogle() {
+    return { ok: true }
+  },
+  async signInAsGuest() {
     return { ok: true }
   },
   async signOut() {},
@@ -153,6 +162,7 @@ export type SupabaseAuthClient = DocumentsClient & {
     signUp(input: { email: string; password: string; options: { data: { display_name: string }; emailRedirectTo: string } }): Promise<SupabaseAuthResponse>
     signInWithPassword(input: { email: string; password: string }): Promise<SupabaseAuthResponse>
     signInWithOAuth(input: { provider: 'google'; options: { redirectTo: string } }): Promise<{ error: { message: string } | null }>
+    signInAnonymously(input: { options: { data: { display_name: string } } }): Promise<SupabaseAuthResponse>
     signOut(options?: { scope?: 'global' | 'local' | 'others' }): Promise<{ error: { message: string } | null }>
     updateUser(input: { data: Record<string, unknown> }): Promise<{ error: { message: string } | null }>
   }
@@ -207,6 +217,14 @@ export function createSupabaseAuthBackend(client: SupabaseAuthClient, config: De
       try {
         // On success the browser leaves for Google and comes back to /home, where the session is picked up.
         const { error } = await client.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: backTo() } })
+        return error ? { ok: false, message: friendlyAuthError(error.message) } : { ok: true }
+      } catch (error) {
+        return { ok: false, message: friendlyAuthError(error instanceof Error ? error.message : '') }
+      }
+    },
+    async signInAsGuest() {
+      try {
+        const { error } = await client.auth.signInAnonymously({ options: { data: { display_name: GUEST_NAME } } })
         return error ? { ok: false, message: friendlyAuthError(error.message) } : { ok: true }
       } catch (error) {
         return { ok: false, message: friendlyAuthError(error instanceof Error ? error.message : '') }

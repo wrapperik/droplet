@@ -15,6 +15,7 @@ const backend = (user: AuthUser | null, delayMs = 0): AuthBackend => ({
   signIn: async () => ({ ok: true }),
   signUp: async () => ({ ok: true }),
   signInWithGoogle: async () => ({ ok: true }),
+  signInAsGuest: async () => ({ ok: true }),
   signOut: async () => {},
   completeOnboarding: async () => true,
   deleteAccount: async () => ({ ok: true as const }),

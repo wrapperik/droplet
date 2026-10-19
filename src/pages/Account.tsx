@@ -50,7 +50,10 @@ export default function Account() {
   if (!user) return null
   // On this device alone there is no account: what is kept is kept in this browser, and there is no one to sign out.
   const onDevice = authBackend().kind === 'local'
-  const phrase = onDevice ? DELETE_WORD : user.email
+  // A guest has no email address, so there is none to type, and no way back in once they sign out.
+  const guest = !onDevice && user.email === ''
+  const typeWord = onDevice || guest
+  const phrase = typeWord ? DELETE_WORD : user.email
   const matches = typed.trim().toLowerCase() === phrase.toLowerCase() && phrase !== ''
 
   const confirmDelete = async () => {
@@ -85,7 +88,7 @@ export default function Account() {
             </span>
             <div className="account-card__who">
               <p className="account-card__name">{user.name}</p>
-              <p className="account-card__detail">{onDevice ? 'This device only' : user.email}</p>
+              <p className="account-card__detail">{onDevice ? 'This device only' : guest ? 'Guest account for this visit' : user.email}</p>
             </div>
           </section>
 
@@ -118,7 +121,7 @@ export default function Account() {
               <section className="account-row" aria-labelledby="account-out">
                 <div className="account-row__text">
                   <h2 id="account-out">Sign out</h2>
-                  <p>You can sign back in with the same email at any time.</p>
+                  <p>{guest ? 'A guest account cannot be signed back in to. Export what you want to keep first.' : 'You can sign back in with the same email at any time.'}</p>
                 </div>
                 <button type="button" className="account-row__button" onClick={() => void leave()}>
                   <Logout2Icon size={16} aria-hidden="true" />
@@ -187,7 +190,7 @@ export default function Account() {
 
                 <div className="account-delete__field">
                   <label htmlFor={ids.input}>
-                    {onDevice ? (
+                    {typeWord ? (
                       <>
                         Type <strong>{DELETE_WORD}</strong> to confirm
                       </>
