@@ -60,10 +60,13 @@ function Row({ line, index, count, problems, amount, dispatch }: RowProps) {
         />
       </label>
       <label className="lines__cell lines__cell--quantity">
-        <span className="visually-hidden">Quantity</span>
+        <span className="lines__label">
+          Qty
+        </span>
         <input
           className="lines__input lines__input--number"
           inputMode="decimal"
+          aria-label="Quantity"
           value={quantityText}
           aria-invalid={quantityInvalid || missing('quantity') || undefined}
           onChange={(event) => {
@@ -80,10 +83,13 @@ function Row({ line, index, count, problems, amount, dispatch }: RowProps) {
         />
       </label>
       <label className="lines__cell lines__cell--price">
-        <span className="visually-hidden">Price each, in rand</span>
+        <span className="lines__label">
+          Price
+        </span>
         <input
           className="lines__input lines__input--number"
           inputMode="decimal"
+          aria-label="Price each, in rand"
           value={priceText}
           placeholder="0.00"
           aria-invalid={priceInvalid || missing('price') || undefined}
@@ -100,9 +106,14 @@ function Row({ line, index, count, problems, amount, dispatch }: RowProps) {
           onBlur={() => setPriceDraft(null)}
         />
       </label>
-      <output className="lines__amount" aria-label={`Amount for line ${index + 1}`}>
-        {amount === null ? '–' : formatRand(amount)}
-      </output>
+      <div className="lines__total">
+        <span className="lines__label" aria-hidden="true">
+          Amount
+        </span>
+        <output className="lines__amount" aria-label={`Amount for line ${index + 1}`}>
+          {amount === null ? '–' : formatRand(amount)}
+        </output>
+      </div>
       <div className="lines__actions">
         <AskDroplet compact suggestions={line.description.trim() === '' ? [] : lineSuggestions(index + 1, line.description)} label={`Ask Droplet about line ${index + 1}`} />
         <button type="button" className="lines__icon" aria-pressed={Boolean(line.starred)} onClick={() => dispatch({ type: 'update_line', id: line.id, patch: { starred: !line.starred } })} aria-label={`Keep line ${index + 1} in mind`}>
@@ -133,12 +144,6 @@ export default function LineItemsEditor({ lines, vatRegistered, dispatch }: Prop
 
   return (
     <>
-      <div className="lines__head" aria-hidden="true">
-        <span>Description</span>
-        <span>Qty</span>
-        <span>Price</span>
-        <span>Amount</span>
-      </div>
       <ol className="lines" aria-describedby={flagged.length > 0 ? hintId : undefined}>
         {lines.map((line, index) => (
           <Row

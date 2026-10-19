@@ -4,8 +4,20 @@
     {
       "name": "droplet-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 5173
+    },
+    {
+      "name": "droplet-local",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "VITE_SUPABASE_URL= VITE_SUPABASE_ANON_KEY= npx vite --port 5181"
+      ],
+      "port": 5181
     }
   ]
 }
