@@ -16,9 +16,16 @@ describe('when the founder asks for research', () => {
     'What are the latest trends in corporate gifting?',
     'Find out about alternatives to Canva',
     'what are the going rates for a logo designer',
+    'Is Rework free to use in South Africa?',
+    'Is the name Rework taken?',
+    'Is anyone else called Rework?',
+    'Can you check if Kindred Gifting is registered?',
+    'Look it up',
+    'Search online for gift box suppliers',
+    'Do a name check for Rework',
   ])('is recognised: %s', (text) => expect(wantsResearch(text)).toBe(true))
 
-  it.each(['How should I price a gift box?', 'Make the palette warmer', 'Bill Karoo Candles for 12 boxes', 'Hello', 'I want to compete on service'])('is not: %s', (text) =>
+  it.each(['How should I price a gift box?', 'Make the palette warmer', 'Bill Karoo Candles for 12 boxes', 'Hello', 'I want to compete on service', 'Help me name my business', 'Is the invoice ready?', 'Check the contrast of the palette'])('is not: %s', (text) =>
     expect(wantsResearch(text)).toBe(false),
   )
 })

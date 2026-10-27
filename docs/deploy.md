@@ -141,16 +141,18 @@ Nothing needs deploying to work on the app: in development the app asks the dev 
 
 A founder can attach up to three files (pictures, PDFs, text files) to a message, which the `compose` function sends to Gemini. The request body limit of the function is now 12 MB, so redeploy it (`npm run deploy:compose`) before using attachments on the live site. No migration is needed, and the files are never stored. If the deployed function refuses a large PDF, lower `MAX_PDF_BYTES` and `MAX_TOTAL_BYTES` in `src/compose/attachments.ts`.
 
-## Using DeepSeek instead of Gemini (temporary)
+## DeepSeek, with Gemini as the fallback
 
-`AI_PROVIDER=deepseek` with `DEEPSEEK_API_KEY` (and optionally `DEEPSEEK_MODEL`, default `deepseek-flash`, DeepSeek-V4.1-Flash, with thinking switched off for speed unless `DEEPSEEK_THINKING=enabled`) makes DeepSeek answer every message, in the dev server (`.env`) and in the deployed function (as secrets). Gemini is used again when `AI_PROVIDER` is unset or `gemini`. While it is on, there is no web search and no Advanced, and a picture is read (sent as an image block) while a PDF is a best guess (sent as a file block; if the API refuses it, it is sent again without and the model says it could not read it). A text file always works. On the deployed function:
+Droplet runs on DeepSeek (see the README for why). `AI_PROVIDER=deepseek` with `DEEPSEEK_API_KEY` (and optionally `DEEPSEEK_MODEL`, default `deepseek-flash`, DeepSeek-V4.1-Flash, with thinking switched off for speed unless `DEEPSEEK_THINKING=enabled`) makes DeepSeek answer every message, in the dev server (`.env`) and in the deployed function (as secrets). Keep `GEMINI_API_KEY` set as well: any request DeepSeek cannot answer (a timeout, no balance, a refused key, a server error, a refusal) then goes to Gemini's Quick model (`GEMINI_BASE_MODEL`), and if `DEEPSEEK_API_KEY` is missing Gemini answers everything. The function's log says when Gemini stepped in, and why, without what the founder wrote. Without a Gemini key a DeepSeek failure is shown to the founder as before.
+
+While DeepSeek is on there is no Advanced; research is still searched with Tavily (below). A picture is read (sent as an image block) while a PDF is a best guess (sent as a file block; if the API refuses it, it is sent again without and the model says it could not read it). A text file always works. On the deployed function:
 
 ```bash
-npx supabase secrets set AI_PROVIDER=deepseek DEEPSEEK_API_KEY=your-deepseek-key
+npx supabase secrets set AI_PROVIDER=deepseek DEEPSEEK_API_KEY=your-deepseek-key GEMINI_API_KEY=your-gemini-key
 npm run deploy:compose
 ```
 
-To go back: `npx supabase secrets unset AI_PROVIDER` (and redeploy is not needed, the function reads its secrets when it starts).
+To use Gemini alone: `npx supabase secrets unset AI_PROVIDER` (no redeploy is needed: the function reads its secrets when it starts).
 
 ## Web search for research
 

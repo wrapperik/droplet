@@ -123,10 +123,10 @@ describe('the DeepSeek caller', () => {
     if (kind !== 'bad_request') expect((failure as ComposeError).message).not.toContain('SECRET')
   })
 
-  it('says an account with no balance needs topping up, or switching back', async () => {
+  it('says an account with no balance needs topping up, or a Gemini key to answer meanwhile', async () => {
     const { impl } = fakeFetch([json({}, 402)])
     const failure = (await createDeepSeekCaller({ apiKey: 'k', fetchImpl: impl })(request).catch((error: unknown) => error)) as ComposeError
-    expect(failure.message).toMatch(/no balance left.*AI_PROVIDER back to gemini/)
+    expect(failure.message).toMatch(/no balance left.*set GEMINI_API_KEY so Gemini answers meanwhile/)
   })
 
   it('reports a timeout and a network failure', async () => {

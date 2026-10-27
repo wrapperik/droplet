@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { blockSchema, checkBlocks, describeBlocks, type ChatBlock } from './blocks.ts'
+import { blockSchema, checkBlocks, checkDraft, describeBlocks, type ChatBlock } from './blocks.ts'
 
 const brief = { type: 'brief' as const, does: 'Curated corporate gift boxes from local makers', feel: ['warm', 'trusted'], usedFor: 'Invoices and Instagram' }
 
@@ -36,5 +36,34 @@ describe('a logo brief block', () => {
   it('is described in words for the history, without any colour', () => {
     const blocks: ChatBlock[] = [brief]
     expect(describeBlocks(blocks, undefined)).toBe('[Logo brief: Curated corporate gift boxes from local makers; feel: warm, trusted; used for: Invoices and Instagram]')
+  })
+})
+
+describe('a draft block', () => {
+  const text = "Hi Tanya, hope you're well. Just checking the invoice landed with you. Thanks, Rework"
+
+  it('takes a message to send, with a label', () => {
+    expect(blockSchema.safeParse({ type: 'draft', label: 'WhatsApp to Tanya', text }).success).toBe(true)
+    expect(blockSchema.safeParse({ type: 'draft', text: '' }).success).toBe(false)
+  })
+
+  it('passes a clean message', () => {
+    expect(checkDraft(text)).toEqual([])
+    expect(checkDraft('Hi Tanya,\n\nThe invoice is attached.\n\nThanks,\nRework')).toEqual([])
+  })
+
+  it.each([
+    ['dashes around it', `--- ${text} ---`],
+    ['a separator line', `Hi Tanya\n---\nThanks`],
+    ['a word about AI', `${text} (AI-generated)`],
+    ['a placeholder', 'Hi [Client name], your invoice for [amount] is due.'],
+    ['quotation marks around it', `"${text}"`],
+  ])('sends back a message with %s', (_what, draft) => {
+    expect(checkDraft(draft).length).toBeGreaterThan(0)
+    expect(checkBlocks([{ type: 'draft', text: draft }])[0]).toMatch(/^blocks\.0\.text: /)
+  })
+
+  it('is described for the composer by its label and words', () => {
+    expect(describeBlocks([{ type: 'draft', label: 'WhatsApp to Tanya', text }], undefined)).toBe(`[Draft "WhatsApp to Tanya": ${text}]`)
   })
 })

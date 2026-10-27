@@ -40,7 +40,7 @@ function readBody(req: IncomingMessage): Promise<unknown> {
 }
 
 export function composePlugin(env: Record<string, string>): Plugin {
-  const { provider, call, search, baseModel, advancedModel, limitPerHour, advancedPerDay } = callerFromEnv(env)
+  const { provider, fallback, call, search, baseModel, advancedModel, limitPerHour, advancedPerDay } = callerFromEnv(env)
   const limiter = createRateLimiter(limitPerHour, HOUR_MS)
   // On this machine a founder's Advanced answers are counted in memory, so restarting the dev server starts the day again.
   const advanced = createAdvancedAllowance(advancedPerDay)
@@ -50,7 +50,7 @@ export function composePlugin(env: Record<string, string>): Plugin {
     configureServer(server) {
       server.config.logger.info(
         call && provider === 'deepseek'
-          ? `  compose: AI_PROVIDER=deepseek, so every message is answered by ${baseModel} (no web search; pictures are read, a PDF is a best guess)`
+          ? `  compose: AI_PROVIDER=deepseek, so every message is answered by ${baseModel} (pictures are read, a PDF is a best guess)${fallback ? ', with Gemini answering when DeepSeek cannot' : ' (no GEMINI_API_KEY, so nothing answers when DeepSeek cannot)'}`
           : call
           ? `  compose: Quick uses ${baseModel}; Advanced uses ${advancedModel} with web search, ${advancedPerDay} answers a day${advancedModel === baseModel ? '' : ', and Quick answers when Advanced is busy'}`
           : `  compose: no ${provider === 'deepseek' ? 'DEEPSEEK_API_KEY' : 'GEMINI_API_KEY'} set, so /api/compose will say so (see .env.example)`,

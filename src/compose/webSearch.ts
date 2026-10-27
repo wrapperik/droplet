@@ -24,7 +24,7 @@ export type WebSearched = WebResults | { refused: string }
 // What the server needs of a search service: a query in, a few results out. Throws if the service cannot be reached.
 export type WebSearcher = (query: string) => Promise<WebResult[]>
 
-const RESEARCH = /\b(research|researching|competitors?|competitive|competition|competing|market (?:research|analysis|size|landscape)|industry (?:analysis|trends?)|benchmark(?:ing)?|look (?:it |this |that )?up|look into|find out (?:about|what|who|how|if)|what(?:'s| is| are) (?:the )?(?:latest|current)|latest trends?|alternatives to|similar (?:businesses|companies|products)|who else (?:sells|does|offers)|going rates?)\b/i
+const RESEARCH = /\b(research|researching|competitors?|competitive|competition|competing|market (?:research|analysis|size|landscape)|industry (?:analysis|trends?)|benchmark(?:ing)?|look (?:it |this |that |them )?up|look into|find out (?:about|what|who|how|if|whether)|what(?:'s| is| are) (?:the )?(?:latest|current)|latest trends?|alternatives to|similar (?:businesses|companies|products)|who else (?:sells|does|offers|uses)|going rates?|search (?:for|online|the web|the internet|google)|google (?:it|that|this)|check (?:online|the web|if|whether)|(?:already )?(?:taken|registered|trademarked|in use)\b.{0,40}\?|(?:is|are) (?:the name |the names )?.{1,40} (?:taken|available|free to use|registered|trademarked|in use)|(?:anyone|anybody|another business|other businesses|someone) (?:else )?(?:called|named|using)|name (?:check|search|availability))\b/i
 
 // Whether the founder asked for research, in their own words.
 export const wantsResearch = (text: string) => RESEARCH.test(text)
@@ -102,7 +102,8 @@ export const PLANNER_SYSTEM = `You write web searches for a small business owner
 - Be specific. For competitors, search for the kind of business and the place ("small web development studios Pretoria", "custom software packages for small businesses South Africa pricing"). For prices, search for what is charged ("freelance web developer rates South Africa 2026"). For trends, name the industry and the place.
 - Default to South Africa when no place is given, and use South African words and rand where it helps.
 - Each search is at most ${MAX_PLANNED_CHARS} characters, plain words, no quotation marks and no operators.
-- Never include a person's name, a client's name, an email address, a phone number, an address or a bank detail. Do not include the business's own name unless they asked you to look up that specific business.
+- Never include a person's name, a client's name, an email address, a phone number, an address or a bank detail. Do not include the business's own name unless they asked you to look up that specific business, or to check whether a name is free.
+- To check whether a name is free, search for the name itself: as a registered company in South Africa (CIPC), as a trade mark, and as a business trading under it ("Rework consulting South Africa", "Rework CIPC company registration").
 - Make the searches different from each other (for example one about competitors, one about prices, one about the market), not three versions of the same one.`
 
 // What the planner is given: the request, what the business does, and the last few messages. Only what the searches need, with angle brackets taken out so none of it

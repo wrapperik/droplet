@@ -10,7 +10,7 @@ Final-year project by Rikus Pretorius (Bachelor of Creative Technologies, Open W
 
 ## What it does
 
-- **Chat first.** The founder describes what they need. Gemini replies with a validated turn (a message plus actions from a fixed vocabulary), never with markup or positions.
+- **Chat first.** The founder describes what they need. The model replies with a validated turn (a message plus actions from a fixed vocabulary), never with markup or positions.
 - **Three workspaces:** a business-idea board, a brand palette with live contrast checks, and an invoice with totals and VAT worked out in code, exported as a PDF.
 - **Guide mode and Workspace mode** for the invoice: one step at a time, or every tool at once.
 - **Project memory:** business details, clients, the name and offer, and facts about the business, saved only when the founder confirms.
@@ -31,19 +31,28 @@ Final-year project by Rikus Pretorius (Bachelor of Creative Technologies, Open W
 | Layer | Choice |
 |---|---|
 | Frontend | React 19, TypeScript, Vite, Zustand, Framer Motion |
-| Validation | Zod (also generates the Gemini response schema) |
+| Validation | Zod (also generates the model's response schema) |
 | Backend | Supabase: Postgres with RLS, Auth, Edge Functions |
-| AI | Google Gemini (Flash Lite for Quick, Flash with Google Search for Advanced), called only from the `compose` Edge Function |
+| AI | DeepSeek (V4.1 Flash), with Google Gemini (Flash Lite) as an automatic fallback, called only from the `compose` Edge Function |
 | PDF | @react-pdf/renderer |
 | Hosting | Vercel |
 
-The DV300 milestone sheet lists MERN. The pitch chose Supabase instead of MongoDB, Express and Node: Postgres with row-level security keeps each founder's data theirs with one ownership check, and Edge Functions keep the Gemini key server-side.
+The DV300 milestone sheet lists MERN. The pitch chose Supabase instead of MongoDB, Express and Node: Postgres with row-level security keeps each founder's data theirs with one ownership check, and Edge Functions keep the model keys server-side.
+
+### DeepSeek instead of Gemini
+
+The proposal named Google Gemini as the model. The built app uses the DeepSeek API instead, for two reasons:
+
+- **Lower cost.** DeepSeek costs less per request than Gemini.
+- **Better performance.** I have access to DeepSeek's bigger models, which perform better for Droplet's composition work.
+
+Gemini is still wired in as a fallback. When `GEMINI_API_KEY` is set beside `DEEPSEEK_API_KEY`, any request DeepSeek cannot answer (a timeout, no balance, a refused key, a server error) goes to Gemini's Quick model, and its reply is checked by the same Zod schema and rules. Nothing else changes for the founder. Advanced, the stronger Gemini model with Google Search, is not offered while DeepSeek is on; research is searched with Tavily on the server instead. Setting `AI_PROVIDER` back to `gemini` runs on Gemini alone. Details: [docs/deploy.md](docs/deploy.md).
 
 ## Setup
 
 ```bash
 npm install
-cp .env.example .env   # GEMINI_API_KEY, and VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY for accounts
+cp .env.example .env   # AI_PROVIDER=deepseek, DEEPSEEK_API_KEY and GEMINI_API_KEY (the fallback), and VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY for accounts
 npm run dev
 ```
 
@@ -58,7 +67,7 @@ Without the two Supabase values the app runs on this device alone, signed in as 
 | `npm run typecheck` | Typecheck only |
 | `npm run lint` | oxlint |
 | `npm test` | Vitest, single run |
-| `npm run eval:compose` | Run the fixed test requests against the pinned Gemini model |
+| `npm run eval:compose` | Run the fixed test requests against the configured model |
 | `npm run build:edge` | Bundle the Edge Functions into `supabase/functions/` |
 | `npm run deploy:compose` | Build and deploy the `compose` function |
 

@@ -413,3 +413,18 @@ describe('the side panel: one exchange at a time', () => {
     expect(screen.getAllByRole('button', { name: 'Copy reply' }).length).toBeGreaterThan(0)
   })
 })
+
+describe('a draft in the chat', () => {
+  it('is in a box of its own, and Copy puts only the message on the clipboard', async () => {
+    const user = userEvent.setup()
+    const writeText = vi.fn(async () => undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    const text = 'Hi Tanya,\n\nJust checking the invoice landed with you.\n\nThanks, Rework'
+    const messages: ThreadMessage[] = [{ id: 1, from: 'droplet', text: 'Here is a WhatsApp you can send.', blocks: [{ type: 'draft', label: 'WhatsApp to Tanya', text }] }]
+    render(<ChatThread messages={messages} />)
+    const box = screen.getByRole('figure', { name: 'WhatsApp to Tanya' })
+    expect(box).toHaveTextContent('Just checking the invoice landed with you.')
+    await user.click(within(box).getByRole('button', { name: 'Copy the message' }))
+    expect(writeText).toHaveBeenCalledWith(text)
+  })
+})

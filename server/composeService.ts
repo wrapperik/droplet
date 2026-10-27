@@ -42,7 +42,7 @@ const STATUS: Record<ComposeError['kind'], number> = {
 }
 
 const MESSAGES: Record<ComposeError['kind'], string> = {
-  no_key: 'No API key is set for the model. Add GEMINI_API_KEY (or, with AI_PROVIDER=deepseek, DEEPSEEK_API_KEY) to .env.local and restart the dev server.',
+  no_key: 'No API key is set for the model. Add GEMINI_API_KEY (or, with AI_PROVIDER=deepseek, DEEPSEEK_API_KEY, with GEMINI_API_KEY as its fallback) to .env.local and restart the dev server.',
   bad_key: 'The model\'s API key was refused. Check GEMINI_API_KEY (or DEEPSEEK_API_KEY) in .env.local.',
   bad_model: 'The model was not found. Check the model name in .env.local (GEMINI_BASE_MODEL, or DEEPSEEK_MODEL with AI_PROVIDER=deepseek).',
   bad_request: 'The model rejected the request.',

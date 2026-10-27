@@ -1,6 +1,7 @@
 import { createGeminiCaller, DEFAULT_ADVANCED_MODEL, DEFAULT_BASE_MODEL, DEFAULT_BASE_THINKING } from '../src/compose/gemini.ts'
 import { createDeepSeekCaller, DEFAULT_DEEPSEEK_MODEL, type DeepSeekThinking } from '../src/compose/deepseek.ts'
 import type { ModelCaller } from '../src/compose/compose.ts'
+import { withFallback } from '../src/compose/providerFallback.ts'
 import { createTavilySearch, type WebSearcher } from '../src/compose/webSearch.ts'
 
 // The models and limits, from the environment variables both servers read (the dev server from .env, the Supabase Edge Function from its secrets). The
@@ -10,11 +11,14 @@ export type ComposeEnv = Record<string, string | undefined>
 
 export const DEFAULT_ADVANCED_PER_DAY = 10
 
-// Which service answers: Gemini (the default), or DeepSeek as a stand-in (AI_PROVIDER=deepseek, with DEEPSEEK_API_KEY). Only one is used at a time.
+// Which service answers: Gemini (the default), or DeepSeek (AI_PROVIDER=deepseek, with DEEPSEEK_API_KEY). With DeepSeek, Gemini is the fallback when a
+// GEMINI_API_KEY is set as well: a request DeepSeek cannot answer goes to Gemini's Quick model, and so does every request if DeepSeek has no key.
 export type Provider = 'gemini' | 'deepseek'
 
 export type ConfiguredCaller = {
   provider: Provider
+  // The provider that answers when the first cannot. Only Gemini, behind DeepSeek.
+  fallback?: Provider
   // Null when no API key is set for the provider in use.
   call: ModelCaller | null
   // Quick: every message unless the founder chooses Advanced.
@@ -36,14 +40,20 @@ export function callerFromEnv(env: ComposeEnv): ConfiguredCaller {
   const provider: Provider = text(env.AI_PROVIDER)?.toLowerCase() === 'deepseek' ? 'deepseek' : 'gemini'
   const limitPerHour = Number(env.COMPOSE_LIMIT_PER_HOUR) || 60
   if (provider === 'deepseek') {
-    // A stand-in: one model, no search, so no Advanced (its allowance is 0 and the menu does not offer it). Quick and Advanced are both this model.
+    // One model, so no Advanced (its allowance is 0 and the menu does not offer it). Quick and Advanced are both this model. Research is searched with
+    // Tavily, as with Gemini.
     const apiKey = text(env.DEEPSEEK_API_KEY)
     const model = text(env.DEEPSEEK_MODEL) ?? DEFAULT_DEEPSEEK_MODEL
     // DEEPSEEK_THINKING=enabled lets it think first (slower, more careful), with DEEPSEEK_REASONING_EFFORT of low, high or max.
     const thinking: DeepSeekThinking | undefined = text(env.DEEPSEEK_THINKING)?.toLowerCase() === 'enabled' ? 'enabled' : undefined
     const effort = text(env.DEEPSEEK_REASONING_EFFORT)?.toLowerCase()
     const reasoningEffort = effort === 'low' || effort === 'high' || effort === 'max' ? effort : undefined
-    return { provider, call: apiKey ? createDeepSeekCaller({ apiKey, model, ...(thinking ? { thinking } : {}), ...(reasoningEffort ? { reasoningEffort } : {}) }) : null, baseModel: model, advancedModel: model, limitPerHour, search, advancedPerDay: 0 }
+    const deepseek = apiKey ? createDeepSeekCaller({ apiKey, model, ...(thinking ? { thinking } : {}), ...(reasoningEffort ? { reasoningEffort } : {}) }) : null
+    // Gemini behind it, on its Quick model, when there is a key for it.
+    const geminiKey = text(env.GEMINI_API_KEY)
+    const gemini = geminiKey ? createGeminiCaller({ apiKey: geminiKey, baseModel: text(env.GEMINI_BASE_MODEL) ?? DEFAULT_BASE_MODEL, baseThinking: text(env.GEMINI_BASE_THINKING) ?? DEFAULT_BASE_THINKING }) : null
+    const call = deepseek && gemini ? withFallback({ name: 'DeepSeek', call: deepseek }, { name: 'Gemini', call: gemini }) : (deepseek ?? gemini)
+    return { provider, ...(gemini ? { fallback: 'gemini' as const } : {}), call, baseModel: model, advancedModel: model, limitPerHour, search, advancedPerDay: 0 }
   }
   const apiKey = text(env.GEMINI_API_KEY)
   const baseModel = text(env.GEMINI_BASE_MODEL) ?? DEFAULT_BASE_MODEL

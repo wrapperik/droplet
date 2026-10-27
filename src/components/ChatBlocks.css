@@ -5,6 +5,39 @@
   margin-top: 0.75rem;
 }
 
+/* ---- Draft ---- */
+/* The message as it will be sent: its own box, its own line breaks, and selectable on its own. */
+.blocks__draft {
+  margin: 0;
+  border: 1px solid var(--overlay-10);
+  border-radius: var(--radius-md);
+  background: var(--overlay-06);
+}
+
+.blocks__draft-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.5rem 0.5rem 0.875rem;
+  border-bottom: 1px solid var(--overlay-10);
+}
+
+.blocks__draft-label {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.blocks__draft-text {
+  padding: 0.75rem 0.875rem 0.875rem;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
 /* ---- Table ---- */
 .blocks__table-wrap {
   max-width: 100%;

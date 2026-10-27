@@ -386,7 +386,10 @@
   scroll-padding-top: 0;
 }
 
+/* At least the height of the panel, and as tall as its messages need. It must not shrink: in the thread's flex column, min-height replaces the
+   content's own minimum, so a long exchange would be squeezed to the panel's height and its messages would spill over the next one. */
 .thread__page {
+  flex: none;
   min-height: 100%;
   padding: 0.5rem 0 2.5rem;
   scroll-snap-align: start;

@@ -245,17 +245,18 @@ describe('what the prompts say about searching and about being useful', () => {
 describe('what Quick is told, and what it is not', () => {
   const views = [undefined, 'brand', 'invoice', 'board'] as const
 
-  it.each(views)('Quick (%s) is not told how to search: it is told it cannot, to say an answer may be out of date, and not to offer a lookup', (view) => {
+  it.each(views)('Quick (%s) is not told how to search: it is told it cannot itself, to say an answer may be out of date, and to offer the app\'s lookup', (view) => {
     const quick = systemPromptFor(view, 'base')
     expect(quick).not.toMatch(/<web_search> says whether you can search Google this time/)
     expect(quick).not.toMatch(/Do not paste links or list sources/)
     expect(quick).toMatch(/You cannot search the web yourself in this mode/)
     // the one exception is research, where the app searches and gives the results
-    expect(quick).toMatch(/when the founder asks you to research something, the app searches for you and includes <web_results>/)
+    expect(quick).toMatch(/when they ask you to research something, look something up or check something \(such as whether a name is taken\), the app searches the web and includes <web_results>/)
     expect(quick).toMatch(/may be out of date/)
     // there is no Advanced switch in the menu, so Quick never points to one
     expect(quick).not.toMatch(/Advanced/)
-    expect(quick).toMatch(/never offer to/)
+    // it offers to look things up, since the app searches when the founder asks
+    expect(quick).toMatch(/Never say you cannot look it up: offer to, and put "Look it up" among your replies/)
     expect(quick).toMatch(/Never claim to have looked something up that is not in <web_results>/)
   })
 

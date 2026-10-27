@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { callerFromEnv } from './composeEnv.ts'
 
 describe('the models and limits, from the environment', () => {
@@ -52,9 +52,75 @@ describe('choosing the provider', () => {
     expect(configured.limitPerHour).toBe(30)
   })
 
-  it('has no caller without its own key: a Gemini key does not stand in for a DeepSeek one', () => {
-    expect(callerFromEnv({ AI_PROVIDER: 'deepseek', GEMINI_API_KEY: 'g' }).call).toBeNull()
+  it('has no caller with no key for either, and a DeepSeek key alone does not turn DeepSeek on', () => {
+    expect(callerFromEnv({ AI_PROVIDER: 'deepseek' }).call).toBeNull()
     expect(callerFromEnv({ DEEPSEEK_API_KEY: 'd' }).call).toBeNull()
+  })
+
+  it('names Gemini as the fallback only when there is a Gemini key', () => {
+    expect(callerFromEnv({ AI_PROVIDER: 'deepseek', DEEPSEEK_API_KEY: 'd', GEMINI_API_KEY: 'g' }).fallback).toBe('gemini')
+    expect(callerFromEnv({ AI_PROVIDER: 'deepseek', DEEPSEEK_API_KEY: 'd' }).fallback).toBeUndefined()
+    expect(callerFromEnv({ GEMINI_API_KEY: 'g' }).fallback).toBeUndefined()
+  })
+})
+
+describe('Gemini behind DeepSeek', () => {
+  const geminiReply = { candidates: [{ content: { parts: [{ text: '{"from":"gemini"}' }] }, finishReason: 'STOP' }] }
+  const deepseekReply = { choices: [{ message: { content: '{"from":"deepseek"}' }, finish_reason: 'stop' }] }
+  const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+  const textOf = (reply: unknown) => (typeof reply === 'string' ? reply : (reply as { text: string }).text)
+  const ask = { system: 's', user: 'u', schema: {} }
+
+  // Every request goes to the stub, by address: DeepSeek's as given, Gemini's always answering.
+  const network = (deepseek: () => Response | Promise<Response>) => {
+    const fetchStub = vi.fn(async (url: string | URL | Request) => (String(url).includes('deepseek') ? deepseek() : json(200, geminiReply)))
+    vi.stubGlobal('fetch', fetchStub)
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    return fetchStub
+  }
+  const hosts = (fetchStub: ReturnType<typeof network>) => fetchStub.mock.calls.map(([url]) => new URL(String(url)).host)
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('leaves Gemini alone while DeepSeek answers', async () => {
+    const fetchStub = network(() => json(200, deepseekReply))
+    const { call } = callerFromEnv({ AI_PROVIDER: 'deepseek', DEEPSEEK_API_KEY: 'd', GEMINI_API_KEY: 'g' })
+    expect(textOf(await call!(ask))).toBe('{"from":"deepseek"}')
+    expect(hosts(fetchStub)).toEqual(['api.deepseek.com'])
+  })
+
+  it.each([
+    ['has no balance', 402],
+    ['refuses the key', 401],
+    ['has a server error', 500],
+  ])('answers with Gemini when DeepSeek %s', async (_why, status) => {
+    const fetchStub = network(() => json(status, { error: { message: 'no' } }))
+    const { call } = callerFromEnv({ AI_PROVIDER: 'deepseek', DEEPSEEK_API_KEY: 'd', GEMINI_API_KEY: 'g' })
+    expect(textOf(await call!(ask))).toBe('{"from":"gemini"}')
+    expect(hosts(fetchStub)).toEqual(['api.deepseek.com', 'generativelanguage.googleapis.com'])
+  })
+
+  it('answers with Gemini when DeepSeek cannot be reached', async () => {
+    network(() => Promise.reject(new TypeError('network down')))
+    const { call } = callerFromEnv({ AI_PROVIDER: 'deepseek', DEEPSEEK_API_KEY: 'd', GEMINI_API_KEY: 'g' })
+    expect(textOf(await call!(ask))).toBe('{"from":"gemini"}')
+  })
+
+  it('answers everything with Gemini when DeepSeek has no key', async () => {
+    const fetchStub = network(() => json(200, deepseekReply))
+    const { call } = callerFromEnv({ AI_PROVIDER: 'deepseek', GEMINI_API_KEY: 'g' })
+    expect(textOf(await call!(ask))).toBe('{"from":"gemini"}')
+    expect(hosts(fetchStub)).toEqual(['generativelanguage.googleapis.com'])
+  })
+
+  it('says DeepSeek failed when there is no Gemini key to fall back on', async () => {
+    network(() => json(500, {}))
+    const { call } = callerFromEnv({ AI_PROVIDER: 'deepseek', DEEPSEEK_API_KEY: 'd' })
+    await expect(call!(ask)).rejects.toMatchObject({ kind: 'unavailable' })
   })
 })
 

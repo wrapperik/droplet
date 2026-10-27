@@ -1,11 +1,11 @@
 import type { InlineFile } from './attachments.ts'
 import { ComposeError, type ModelCaller, type ModelReply, type Usage } from './compose.ts'
 
-// A second model provider, for when Gemini cannot be used (its free key has no billing, a quota is spent): DeepSeek, over its OpenAI-style chat API. It is
-// chosen by AI_PROVIDER=deepseek (see composeEnv.ts) and meant as a stand-in. The key is passed in and sent only in a header; it is never put in a URL, a body
-// or an error message. This file only ever runs on a server.
+// DeepSeek, over its OpenAI-style chat API: the provider Droplet runs on, chosen by AI_PROVIDER=deepseek (see composeEnv.ts), with Gemini behind it as the
+// fallback when a GEMINI_API_KEY is set. The key is passed in and sent only in a header; it is never put in a URL, a body or an error message. This file only
+// ever runs on a server.
 //
-// What it does and does not do: it does not search the web. DeepSeek-V4.1-Flash reads pictures, sent as `image_url` blocks with a base64 data address (JPEG, PNG,
+// What it does and does not do: it does not search the web itself (research is searched with Tavily, on the server). DeepSeek-V4.1-Flash reads pictures, sent as `image_url` blocks with a base64 data address (JPEG, PNG,
 // GIF, WebP, from the API's own documentation). A PDF is sent as a `file` block with its base64 data, which is a guess from that documentation (it describes the
 // block for images and does not say PDFs are accepted). If the API refuses a request that has files in it (a 400), it is sent once more without them, and the
 // model is told it could not see them, so it says so instead of guessing. A text file is part of the prompt and always works.
@@ -119,7 +119,7 @@ export function createDeepSeekCaller(options: DeepSeekOptions): ModelCaller {
       const detail = (body.error?.message ?? '').slice(0, 200)
       if (response.status === 401) throw new ComposeError('bad_key', 'The DeepSeek API key was refused.')
       // 402 is "insufficient balance": the account has no credit left. It is a quota in the sense that matters: nothing works until it is topped up.
-      if (response.status === 402) throw new ComposeError('quota', 'The DeepSeek account has no balance left. Top it up, or switch AI_PROVIDER back to gemini.')
+      if (response.status === 402) throw new ComposeError('quota', 'The DeepSeek account has no balance left. Top it up, or set GEMINI_API_KEY so Gemini answers meanwhile.')
       if (response.status === 404) throw new ComposeError('bad_model', `The model "${model}" was not found.`)
       if (response.status === 429) throw new ComposeError('rate_limited', 'The model is receiving too many requests.')
       if (response.status >= 500) throw new ComposeError('unavailable', 'The model is not available right now.')

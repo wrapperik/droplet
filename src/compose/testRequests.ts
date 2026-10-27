@@ -17,7 +17,7 @@ export type Expectation = {
   // The reply searched the web, or did not. Checked only in Advanced (EVAL_MODE=advanced), the only mode that can search.
   searches?: boolean
   // The reply shows a table or a checklist, or does not. Left out where either is fine.
-  blocks?: 'table' | 'checklist' | 'brief' | 'none'
+  blocks?: 'table' | 'checklist' | 'brief' | 'draft' | 'none'
   // The first action must be one of these types.
   firstAction?: string[]
   // The reply proposes these facts (and no fact the founder did not say), each quoting their words.
@@ -526,6 +526,12 @@ export const TEST_REQUESTS: TestRequest[] = [
     why: 'A workspace that is not built: it must say so, offer to talk it through, and not pretend',
     request: { intent: 'Can you open the client email workspace?', project: brandedProject },
     expect: { task: ['correspondence', 'chat'], acts: false, opens: false },
+  },
+  {
+    id: 'client-whatsapp-draft',
+    why: 'A message to send: it goes in a draft block, exactly as it will be sent, with no markers and nothing saying AI wrote it',
+    request: { intent: 'Write a WhatsApp to Tanya reminding her the invoice is two days overdue', project: brandedProject },
+    expect: { task: ['correspondence', 'chat'], acts: false, opens: false, blocks: 'draft' },
   },
   {
     id: 'search-cipc',

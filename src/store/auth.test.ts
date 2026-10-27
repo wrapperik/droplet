@@ -176,6 +176,38 @@ describe('signing in', () => {
 })
 
 describe('entering as a guest', () => {
+  // A guest is a real account with no email address: the session is kept by the browser, and what they save is kept in the account like anyone's.
+  const assessor: AuthUser = { id: 'guest-1', email: '', name: 'UX Assessor', onboarded: true }
+
+  it('keeps the guest\'s chats and what they asked Droplet to remember in their account, through a reload, until they sign out', async () => {
+    const { backend, storage, emit } = fakeBackend()
+    setAuthBackend(backend)
+    start()
+    await vi.waitFor(() => expect(useAuth.getState().status).toBe('signedOut'))
+    await useAuth.getState().signInAsGuest()
+    emit(assessor)
+    await vi.waitFor(() => expect(useAuth.getState().user?.id).toBe('guest-1'))
+    // what they save goes to the account's storage, as any founder's does
+    expect(documentStorage()).toBe(storage)
+    const chats = [{ id: 'c1', title: 'Naming Rework', messages: [] }]
+    const memory = { facts: { 'business.name': { value: 'Rework' } } }
+    expect(await documentStorage().write('p1', 'chats', chats)).toBe(true)
+    expect(await documentStorage().write('p1', 'memory', memory)).toBe(true)
+
+    // a reload: the browser still holds the guest's session, so the same account and everything in it come back
+    stop?.()
+    useAuth.setState({ status: 'loading', user: null })
+    start()
+    await vi.waitFor(() => expect(useAuth.getState().user?.id).toBe('guest-1'))
+    expect(await documentStorage().read('p1', 'chats')).toEqual(chats)
+    expect(await documentStorage().read('p1', 'memory')).toEqual(memory)
+
+    // signing out ends it: nothing of the guest's is read from this browser afterwards
+    await useAuth.getState().signOut()
+    expect(useAuth.getState().status).toBe('signedOut')
+    expect(documentStorage()).toBe(localDocumentStorage)
+  })
+
   it('asks the backend for a new account, once, and says what went wrong if it cannot', async () => {
     const { backend, calls } = fakeBackend({ guest: { ok: false, message: 'Guest access is not switched on yet.' } })
     setAuthBackend(backend)

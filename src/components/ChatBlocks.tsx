@@ -1,6 +1,7 @@
 import { CheckIcon } from '@solar-icons/react/linear'
-import type { ChatBlock, ChecklistBlock, TableBlock } from '../compose/blocks.ts'
+import type { ChatBlock, ChecklistBlock, DraftBlock, TableBlock } from '../compose/blocks.ts'
 import type { SpecColour } from '../lib/logoHandoff.ts'
+import CopyText from './CopyText.tsx'
 import LogoBrief from './LogoBrief.tsx'
 import { STEP_WORKSPACE, type JourneyStep } from '../compose/journey.ts'
 import { InlineText } from './RichText.tsx'
@@ -34,6 +35,8 @@ export default function ChatBlocks({ blocks, checks, done, busy, onToggle, onOpe
       {blocks.map((block, at) =>
         block.type === 'table' ? (
           <Table key={at} block={block} />
+        ) : block.type === 'draft' ? (
+          <Draft key={at} block={block} />
         ) : block.type === 'brief' ? (
           <LogoBrief
             key={at}
@@ -50,6 +53,22 @@ export default function ChatBlocks({ blocks, checks, done, busy, onToggle, onOpe
         ),
       )}
     </div>
+  )
+}
+
+// Something the founder will send, in a box of its own with a Copy button. Only the message is copied: the label is outside the box and is not part of it.
+function Draft({ block }: { block: DraftBlock }) {
+  const label = block.label ?? 'Draft message'
+  return (
+    <figure className="blocks__draft" aria-label={label}>
+      <figcaption className="blocks__draft-head">
+        <span className="blocks__draft-label">{label}</span>
+        <CopyText text={block.text} label="the message">
+          Copy
+        </CopyText>
+      </figcaption>
+      <div className="blocks__draft-text">{block.text}</div>
+    </figure>
   )
 }
 
