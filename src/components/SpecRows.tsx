@@ -7,6 +7,8 @@ export type SpecRowView = {
   value: string
   // Colours to draw as swatches beside the words, each with its hex code.
   swatches?: { hex: string; label: string }[]
+  // Several things in one row, listed one a line.
+  items?: string[]
 }
 
 // A list of things to copy, one per row, with the label on the left and a copy button on the right. Used by the logo brief in the chat and the
@@ -28,7 +30,14 @@ export default function SpecRows({ rows, label }: { rows: SpecRowView[]; label: 
                 ))}
               </ul>
             )}
-            {!(row.swatches && row.swatches.length > 0) && <span>{row.value}</span>}
+            {row.items && row.items.length > 0 && (
+              <ul className="spec-rows__items" role="list">
+                {row.items.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            )}
+            {!(row.swatches && row.swatches.length > 0) && !(row.items && row.items.length > 0) && <span>{row.value}</span>}
           </dd>
           <CopyText text={row.value} label={row.label.toLowerCase()} />
         </div>

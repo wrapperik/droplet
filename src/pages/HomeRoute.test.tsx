@@ -101,6 +101,15 @@ describe('HomeRoute', () => {
     expect(await screen.findByText('Projects: Kindred Gifting')).toBeInTheDocument()
   })
 
+  it('offers a way out when the projects cannot be loaded, so the founder is never stuck there', async () => {
+    const user = userEvent.setup()
+    store.listProjects.mockResolvedValue(null)
+    renderRoute()
+    await screen.findByRole('alert')
+    await user.click(screen.getByRole('button', { name: 'Sign out' }))
+    expect(await screen.findByText('Sign in here')).toBeInTheDocument()
+  })
+
   it('says it could not load if the first project could not be made either', async () => {
     store.listProjects.mockResolvedValue([])
     store.createProject.mockResolvedValue(null)

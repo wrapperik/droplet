@@ -57,10 +57,13 @@ type Props = {
   onProgress: (progress: GuideProgress) => void
   // The invoice is finished in Guide mode: confirmed, saved and ready. Home closes it and shows the result in the chat.
   onFinished: (result: InvoiceResult) => void
-  // Asks for the note of what would be remembered to be opened (each change of the number is one ask), as the chat does when the founder is about to leave.
-  // And told when the founder has confirmed.
-  saveSignal?: number
+  // Asks for the note of what would be remembered to be opened, as the dialog about unsaved work does when the founder is about to leave. Home
+  // clears the request once it is handled. And told when the founder has confirmed.
+  saveRequest?: boolean
+  onSaveRequestHandled?: () => void
   onConfirmed?: () => void
+  // The note of what would be remembered closed without being confirmed.
+  onSaveCancelled?: () => void
   // Changes when the logo is added or removed on the handoff card, so the page and the PDF read it again. And opens that card.
   logoVersion?: number
   onOpenHandoff?: () => void
@@ -74,8 +77,8 @@ const PART_ICONS: Record<GuideStepId, Icon> = { business: BuildingsIcon, vat: Sa
 // the same names in the same order: on the task bar, ticked from the same check the export uses. The project remembers the founder's business, their clients and
 // their invoices, so none is typed twice, but only what the founder confirms: Save opens a note of what would be remembered, and nothing is kept unless it is
 // confirmed. Leaving an invoice with unsaved changes asks first. The composer works on the same invoice through the same reducer, so what it fills in shows at once.
-export default function InvoiceWorkspace({ mode, projectId, projectName, state, dispatch, onReplace, progress, onProgress, onFinished, saveSignal, onConfirmed, logoVersion, onOpenHandoff, headerSlots }: Props) {
-  const { memory, logo, storedLogo, fonts, doc, content, roles, saved, unsaved, hasChanges, saveStatus, business, client, number, items, persist, confirm, readiness } = useInvoiceMemory(projectId, state, onConfirmed, logoVersion)
+export default function InvoiceWorkspace({ mode, projectId, projectName, state, dispatch, onReplace, progress, onProgress, onFinished, saveRequest, onSaveRequestHandled, onConfirmed, onSaveCancelled, logoVersion, onOpenHandoff, headerSlots }: Props) {
+  const { memory, loaded, logo, storedLogo, fonts, doc, content, roles, saved, unsaved, hasChanges, saveStatus, business, client, number, items, persist, confirm, readiness } = useInvoiceMemory(projectId, state, onConfirmed, logoVersion)
   const guided = mode === 'guide'
   const { step } = progress
   const index = stepIndex(step)
@@ -249,7 +252,7 @@ export default function InvoiceWorkspace({ mode, projectId, projectName, state, 
         unsaved={unsaved}
         onSave={() => {}}
         startExtra={<InvoicesMenu currentId={doc.invoiceId} current={content} saved={memory.invoices} onOpen={openInvoice} onNew={newInvoice} onCopy={copyInvoice} onForget={(id) => persist(forgetInvoice(memory, id))} />}
-        saveControl={<ConfirmSave projectName={projectName} items={items} unsaved={unsaved} status={saveStatus} onConfirm={(ids) => void confirm(ids)} openSignal={saveSignal} notesOn={settingOn(memory, 'notes')} />}
+        saveControl={<ConfirmSave projectName={projectName} items={items} unsaved={unsaved} status={saveStatus} onConfirm={(ids) => void confirm(ids)} openRequest={saveRequest} onOpenHandled={onSaveRequestHandled} ready={loaded} notesOn={settingOn(memory, 'notes')} onCancel={onSaveCancelled} />}
         exportButton={
           <ExportButton
             onExport={async () => {

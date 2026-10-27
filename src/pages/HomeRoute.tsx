@@ -87,6 +87,10 @@ export default function HomeRoute() {
         >
           Try again
         </button>
+        {/* If trying again keeps failing, the founder can still get out, and sign in again or as someone else. */}
+        <button type="button" onClick={() => void leave()}>
+          Sign out
+        </button>
       </main>
     )
   }

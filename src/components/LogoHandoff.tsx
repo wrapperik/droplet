@@ -124,7 +124,7 @@ function Card({ projectId, onClose, onChanged, onOpenBrand }: Props) {
 
         <div className="logo-handoff__body">
           <p className="logo-handoff__why">
-            Droplet does not make logos or images. A free design tool can, and below is everything it needs from your project. When you have the file, add it here and the logo is marked as made.
+            Droplet does not make logos or images. Take the details below to a free design tool, then add the file here.
           </p>
 
           <section className="logo-handoff__section" aria-labelledby={`${titleId}-spec`}>
@@ -143,7 +143,6 @@ function Card({ projectId, onClose, onChanged, onOpenBrand }: Props) {
                 )}
               </p>
             )}
-            {spec?.fontsFrom === 'suggested' && <p className="logo-handoff__muted">Droplet has no font tool yet, so these fonts are a suggestion. Check that the tool has them.</p>}
           </section>
 
           <section className="logo-handoff__section" aria-labelledby={`${titleId}-tools`}>
@@ -162,7 +161,7 @@ function Card({ projectId, onClose, onChanged, onOpenBrand }: Props) {
                 </li>
               ))}
             </ul>
-            <p className="logo-handoff__muted">They open in a new tab, since their sign-in does not work inside Droplet. Come back here when you have the file.</p>
+            <p className="logo-handoff__muted">They open in a new tab. Come back here with the file.</p>
           </section>
 
           <section className="logo-handoff__section" aria-labelledby={`${titleId}-import`}>

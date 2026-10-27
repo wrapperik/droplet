@@ -13,12 +13,12 @@ export const LOGO_TOOLS = [
   { id: 'adobe', name: 'Adobe Express', url: 'https://www.adobe.com/express/create/logo', note: 'Free plan, logo maker with templates.' },
 ] as const
 
-// The files to ask the tool for, and the reason for each.
+// The files to ask the tool for: what each is, in a few words for the spec, and the reason for it.
 export const LOGO_FORMATS = [
-  { id: 'png', label: 'Transparent PNG', detail: 'At least 2000 pixels wide, with no background, so it sits on any colour. A free plan may not allow transparency: a white background is fine to start with.' },
-  { id: 'svg', label: 'SVG, if the tool offers it', detail: 'Stays sharp at any size. Often a paid option; skip it if it is.' },
-  { id: 'variants', label: 'A light and a dark version', detail: 'Dark lettering for light backgrounds, light lettering for dark ones.' },
-  { id: 'square', label: 'A square version', detail: 'At least 800 by 800 pixels, for profile pictures and avatars.' },
+  { id: 'png', label: 'Transparent PNG', short: 'Transparent PNG, at least 2000 px wide', detail: 'At least 2000 pixels wide, with no background, so it sits on any colour. A free plan may not allow transparency: a white background is fine to start with.' },
+  { id: 'svg', label: 'SVG, if the tool offers it', short: 'SVG, if the tool offers it free', detail: 'Stays sharp at any size. Often a paid option; skip it if it is.' },
+  { id: 'variants', label: 'A light and a dark version', short: 'A light and a dark version', detail: 'Dark lettering for light backgrounds, light lettering for dark ones.' },
+  { id: 'square', label: 'A square version', short: 'A square version, at least 800 by 800 px', detail: 'At least 800 by 800 pixels, for profile pictures and avatars.' },
 ] as const
 
 // Fonts to start from when the founder has not chosen any. Droplet has no font tool yet, so these are suggestions and are labelled as such: pairs
@@ -73,15 +73,16 @@ export type BriefWords = { does: string; feel: string[]; usedFor: string }
 
 export const colourLine = (colour: SpecColour) => (colour.roleLabel ? `${colour.roleLabel} ${colour.hex}` : colour.hex)
 
-// One line of a spec panel or brief that can be copied on its own.
-export type SpecRow = { id: string; label: string; value: string }
+// One line of a spec panel or brief that can be copied on its own. A row of several things lists them as `items`; its value is them, one a line.
+export type SpecRow = { id: string; label: string; value: string; items?: string[] }
 
-// The rows of the spec panel, each copyable: colours, fonts, then the files to ask for.
+// The rows of the spec panel, each copyable: colours, fonts, then the files to ask for, together in one row.
 export function specRows(spec: LogoSpec): SpecRow[] {
+  const files = spec.formats.map((format) => format.short)
   return [
     { id: 'colours', label: 'Colours', value: spec.colours.length === 0 ? 'No palette is saved yet.' : spec.colours.map(colourLine).join(', ') },
     { id: 'fonts', label: spec.fontsFrom === 'chosen' ? 'Fonts' : 'Fonts (suggested)', value: spec.fonts.join(' and ') },
-    ...spec.formats.map((format) => ({ id: format.id, label: format.label, value: `${format.label}. ${format.detail}` })),
+    { id: 'files', label: 'Files', value: files.join('\n'), items: files },
   ]
 }
 
@@ -104,7 +105,7 @@ export function briefText(input: { name: string; words: BriefWords; spec: LogoSp
 // The spec on its own, for the handoff card's Copy all.
 export function specText(input: { name: string; spec: LogoSpec }): string {
   const rows = specRows(input.spec)
-  return [`Logo spec${input.name.trim() === '' ? '' : ` for ${input.name.trim()}`}`, ...rows.map((row) => `${row.label}: ${row.value}`)].join('\n')
+  return [`Logo spec${input.name.trim() === '' ? '' : ` for ${input.name.trim()}`}`, ...rows.map((row) => (row.items ? [`${row.label}:`, ...row.items.map((item) => `- ${item}`)].join('\n') : `${row.label}: ${row.value}`))].join('\n')
 }
 
 const HEX_IN_TEXT = /#[0-9a-f]{3,8}\b/i

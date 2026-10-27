@@ -8,7 +8,8 @@ import { loadChats, saveChats } from '../lib/chatStore.ts'
 import { currentFacts, emptyMemory, withFact, withIdea, withSetting } from '../lib/projectMemory.ts'
 import { loadMemory, saveMemory } from '../lib/memoryStore.ts'
 import { loadNotes } from '../lib/notesStore.ts'
-import { loadPalette } from '../lib/projectStore.ts'
+import { loadPalette, savePalette } from '../lib/projectStore.ts'
+import { starterBlocks } from '../compose/fallback.ts'
 import { setDocumentStorage, type DocumentStorage } from '../lib/storage.ts'
 import { slowMemoryStorage } from '../test/slowStorage.ts'
 import { useWorkMode } from '../store/workMode.ts'
@@ -338,7 +339,7 @@ describe('the start of the conversation', () => {
 describe('going back to the full chat', () => {
   const back = () => screen.getByRole('button', { name: 'Back to the full chat' })
   const toolbar = taskBar
-  const prompt = () => screen.getByText(/You have unsaved changes in/)
+  const prompt = () => screen.getByRole('alertdialog', { name: 'Save before you go?' })
 
   it('has no such button until a workspace is open', async () => {
     const user = userEvent.setup()
@@ -357,21 +358,37 @@ describe('going back to the full chat', () => {
     expect(screen.queryByText(/unsaved changes/)).not.toBeInTheDocument()
   })
 
-  it('asks first, in the thread, when the palette has changes, and saves it from a button there before it closes', async () => {
+  it('asks first, in a dialog in the middle of the screen, when the palette has changes, and saves it from a button there before it closes', async () => {
     const user = userEvent.setup()
     renderHome()
     await pickTask(user, /Build the brand/)
     await user.click(screen.getByRole('button', { name: /^Remove colour 1,/ }))
     await user.click(back())
-    expect(prompt()).toHaveTextContent('the brand palette')
+    expect(prompt()).toHaveTextContent('You have unsaved changes in the brand palette. If you close the workspace now, they are lost.')
+    // the dialog is not part of the conversation
+    expect(within(screen.getByRole('complementary', { name: 'Conversation' })).queryByText(/unsaved changes/)).not.toBeInTheDocument()
     // nothing has been closed or saved yet
     expect(toolbar()).toBeInTheDocument()
     expect(await loadPalette('duckstack')).toBeNull()
-    await user.click(screen.getByRole('button', { name: 'Save the palette' }))
+    await user.click(within(prompt()).getByRole('button', { name: 'Save the palette' }))
     expect(await loadPalette('duckstack')).not.toBeNull()
     await waitFor(() => expect(toolbar()).not.toBeInTheDocument())
-    expect(screen.getByText(/I saved the palette\. Everything is saved/)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Leave without saving' })).not.toBeInTheDocument()
+    expect(screen.getByText('Saved the palette. Everything is saved.')).toBeInTheDocument()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+
+  it('keeps the saved typeface pair and voice words when the palette is saved from the dialog', async () => {
+    const user = userEvent.setup()
+    await savePalette('duckstack', { blocks: starterBlocks(), fonts: 'modern', voice: ['warm'] })
+    renderHome()
+    await pickTask(user, /Build the brand/)
+    await user.click(await screen.findByRole('button', { name: /^Remove colour 1,/ }))
+    await user.click(back())
+    await user.click(within(prompt()).getByRole('button', { name: 'Save the palette' }))
+    await waitFor(() => expect(toolbar()).not.toBeInTheDocument())
+    const saved = await loadPalette('duckstack')
+    expect(saved?.fonts).toBe('modern')
+    expect(saved?.voice).toEqual(['warm'])
   })
 
   it('closes without saving when asked to, and keeps nothing', async () => {
@@ -383,7 +400,7 @@ describe('going back to the full chat', () => {
     await user.click(screen.getByRole('button', { name: 'Leave without saving' }))
     await waitFor(() => expect(toolbar()).not.toBeInTheDocument())
     expect(await loadPalette('duckstack')).toBeNull()
-    expect(screen.getByText('I closed the workspace without saving.')).toBeInTheDocument()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   })
 
   it('stays in the workspace when asked to keep working', async () => {
@@ -394,11 +411,28 @@ describe('going back to the full chat', () => {
     await user.click(back())
     await user.click(screen.getByRole('button', { name: 'Keep working' }))
     expect(toolbar()).toBeInTheDocument()
-    expect(screen.getByText('Okay, I left the workspace as it is.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
     // and can be asked again
     await user.click(back())
-    expect(screen.getAllByText(/You have unsaved changes in/)).toHaveLength(1)
+    expect(prompt()).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save the palette' })).toBeInTheDocument()
+  })
+
+  it('keeps working on Escape', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await pickTask(user, /Build the brand/)
+    await user.click(screen.getByRole('button', { name: /^Remove colour 1,/ }))
+    await user.click(back())
+    expect(prompt()).toHaveFocus()
+    // Tab goes to the first button, and stays inside the dialog
+    await user.tab()
+    expect(within(prompt()).getByRole('button', { name: 'Save the palette' })).toHaveFocus()
+    await user.tab({ shift: true })
+    expect(within(prompt()).getByRole('button', { name: 'Leave without saving' })).toHaveFocus()
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    expect(toolbar()).toBeInTheDocument()
   })
 
   it('does not ask twice while a question is still open', async () => {
@@ -407,8 +441,7 @@ describe('going back to the full chat', () => {
     await pickTask(user, /Build the brand/)
     await user.click(screen.getByRole('button', { name: /^Remove colour 1,/ }))
     await user.click(back())
-    await user.click(back())
-    expect(screen.getAllByText(/You have unsaved changes in/)).toHaveLength(1)
+    expect(screen.getAllByRole('alertdialog')).toHaveLength(1)
   })
 
   it('opens the invoice note of what would be remembered from the button, and closes only once the founder has confirmed it', async () => {
@@ -419,13 +452,14 @@ describe('going back to the full chat', () => {
     await user.click(back())
     expect(prompt()).toHaveTextContent('the invoice')
     await user.click(screen.getByRole('button', { name: 'Review and save the invoice' }))
-    // the note opens and nothing is kept until it is confirmed
-    const note = screen.getByRole('dialog', { name: 'Save to DuckStack' })
+    // the dialog steps aside, the note opens and nothing is kept until it is confirmed
+    const note = await screen.findByRole('dialog', { name: 'Save to DuckStack' })
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
     expect(toolbar()).toBeInTheDocument()
     expect(window.localStorage.getItem('droplet-project-duckstack-memory')).toBeNull()
     await user.click(within(note).getByRole('button', { name: 'Confirm and save' }))
     await waitFor(() => expect(toolbar()).not.toBeInTheDocument())
-    expect(screen.getByText(/I saved the invoice\. Everything is saved/)).toBeInTheDocument()
+    expect(screen.getByText('Saved the invoice. Everything is saved.')).toBeInTheDocument()
     expect(window.localStorage.getItem('droplet-project-duckstack-memory')).not.toBeNull()
   })
 
@@ -436,9 +470,10 @@ describe('going back to the full chat', () => {
     await user.type(await clientName(user), 'Pretoria Print Works')
     await user.click(back())
     await user.click(screen.getByRole('button', { name: 'Review and save the invoice' }))
-    await user.click(within(screen.getByRole('dialog', { name: 'Save to DuckStack' })).getByRole('button', { name: 'Cancel' }))
+    await user.click(within(await screen.findByRole('dialog', { name: 'Save to DuckStack' })).getByRole('button', { name: 'Cancel' }))
     expect(toolbar()).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Leave without saving' })).toBeInTheDocument()
+    // the question comes back, so there is always a way on
+    expect(await screen.findByRole('button', { name: 'Leave without saving' })).toBeInTheDocument()
     expect(window.localStorage.getItem('droplet-project-duckstack-memory')).toBeNull()
   })
 
@@ -828,17 +863,53 @@ describe('the board for shaping the business idea', () => {
     expect(screen.queryByRole('button', { name: /Reset layout/ })).not.toBeInTheDocument()
   })
 
-  it('keeps the board while another workspace is shown, and brings it back as it was', async () => {
+  it('asks to save the board before another workspace is opened from the menu, and brings it back as it was', async () => {
     const user = userEvent.setup()
     renderHome()
     await pickTask(user, /Shape the business idea/)
     await addNote(user)
     await user.keyboard('Gift boxes{Escape}')
     await pickTask(user, /Build the brand/)
+    const dialog = screen.getByRole('alertdialog', { name: 'Save before you go?' })
+    expect(dialog).toHaveTextContent('You have unsaved changes in the board. If you open the brand palette now, they are lost.')
+    // nothing has moved yet
+    expect(screen.getByRole('region', { name: 'Board' })).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Save the board' }))
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Board' })).not.toBeInTheDocument())
+    expect(await screen.findByRole('toolbar', { name: 'Palette toolbar' })).toBeInTheDocument()
+    expect((await loadBoard('duckstack'))?.items).toHaveLength(1)
     await pickTask(user, /Shape the business idea/)
     expect(await screen.findByRole('region', { name: 'Board' })).toBeInTheDocument()
     expect(screen.getByText('Gift boxes')).toBeInTheDocument()
+  })
+
+  it('stays on the board when the founder keeps working, and lets the board go when they leave it without saving', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await pickTask(user, /Shape the business idea/)
+    await addNote(user)
+    await user.keyboard('Gift boxes{Escape}')
+    await pickTask(user, /Make an invoice/)
+    await user.click(screen.getByRole('button', { name: 'Keep working' }))
+    expect(screen.getByRole('region', { name: 'Board' })).toBeInTheDocument()
+    await pickTask(user, /Make an invoice/)
+    await user.click(screen.getByRole('button', { name: 'Leave without saving' }))
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Board' })).not.toBeInTheDocument())
+    expect(await clientName(user)).toBeInTheDocument()
+    expect(await loadBoard('duckstack')).toBeNull()
+    // the board opens again from what was saved, which is nothing
+    await pickTask(user, /Shape the business idea/)
+    expect(await screen.findByRole('region', { name: 'Board' })).toBeInTheDocument()
+    expect(screen.queryByText('Gift boxes')).not.toBeInTheDocument()
+  })
+
+  it('does not ask when the board has nothing unsaved', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await pickTask(user, /Shape the business idea/)
+    await pickTask(user, /Build the brand/)
+    expect(await screen.findByRole('toolbar', { name: 'Palette toolbar' })).toBeInTheDocument()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   })
 
   it('puts a template on the board from the toolbar, which is saved with it and comes back as it was', async () => {
@@ -895,7 +966,7 @@ describe('the board for shaping the business idea', () => {
     expect(screen.queryByText(/unsaved changes/)).not.toBeInTheDocument()
   })
 
-  it('asks first, in the thread, when there are notes that are not saved, and saves the board from the button there', async () => {
+  it('asks first, in the dialog, when there are notes that are not saved, and saves the board from the button there', async () => {
     const user = userEvent.setup()
     renderHome()
     await pickTask(user, /Shape the business idea/)
@@ -908,7 +979,7 @@ describe('the board for shaping the business idea', () => {
     await user.click(screen.getByRole('button', { name: 'Save the board' }))
     expect((await loadBoard('duckstack'))?.items).toHaveLength(1)
     await waitFor(() => expect(toolbar()).not.toBeInTheDocument())
-    expect(screen.getByText(/I saved the board\. Everything is saved/)).toBeInTheDocument()
+    expect(screen.getByText('Saved the board. Everything is saved.')).toBeInTheDocument()
   })
 
   it('closes without saving when asked to', async () => {
@@ -926,11 +997,14 @@ describe('the board for shaping the business idea', () => {
   it('asks about the board and the palette together when both have changes', async () => {
     const user = userEvent.setup()
     renderHome()
+    // the palette is opened untouched, so going to the board asks nothing; the board is changed, and a reply takes the founder back to the palette
     await pickTask(user, /Build the brand/)
-    await user.click(screen.getByRole('button', { name: /^Remove colour 1,/ }))
     await pickTask(user, /Shape the business idea/)
     await addNote(user)
     await user.keyboard('Both{Escape}')
+    answers = [reply('chat', 'Back to the palette.', [{ type: 'switch_to', workspace: 'brand' }])]
+    await say(user, 'Back to the palette')
+    await user.click(await screen.findByRole('button', { name: /^Remove colour 1,/ }))
     await user.click(screen.getByRole('button', { name: 'Back to the full chat' }))
     expect(screen.getByText(/the brand palette and the board/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Save the board' }))
@@ -1761,7 +1835,7 @@ describe('opening, switching and closing workspaces', () => {
     expect(screen.queryByText(/unsaved changes/)).not.toBeInTheDocument()
   })
 
-  it('asks in the thread first when there is unsaved work, after the reply, and closes nothing until the founder says', async () => {
+  it('asks in the dialog first when there is unsaved work, after the reply, and closes nothing until the founder says', async () => {
     const user = userEvent.setup()
     answers = [reply('chat', 'Taking you back to the full chat.', [{ type: 'close_workspace' }])]
     renderHome()
@@ -1772,13 +1846,12 @@ describe('opening, switching and closing workspaces', () => {
     expect(screen.getByText('Taking you back to the full chat.')).toBeInTheDocument()
     expect(toolbar()).toBeInTheDocument()
     expect(await loadPalette('duckstack')).toBeNull()
-    // the same buttons as Back to the full chat, usable once the request is done
+    // the same buttons as Back to the full chat
     await user.click(screen.getByRole('button', { name: 'Keep working' }))
     expect(toolbar()).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Back to the full chat' }))
     await user.click(await screen.findByRole('button', { name: 'Leave without saving' }))
     await waitFor(() => expect(toolbar()).not.toBeInTheDocument())
-    expect(screen.getByText('I closed the workspace without saving.')).toBeInTheDocument()
   })
 
   it('refuses close_workspace when nothing is open', async () => {
@@ -2647,5 +2720,92 @@ describe('the side panel conversation', () => {
     const rail = screen.getByRole('navigation', { name: 'Exchanges in this conversation' })
     expect(within(rail).getAllByRole('button')).toHaveLength(2)
     expect(within(rail).getByRole('button', { name: 'Go to exchange 1: First question' })).toBeInTheDocument()
+  })
+})
+
+describe('no dead ends', () => {
+  it('says the chat is already new when New chat is pressed before anything has been said', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await user.click(screen.getByRole('button', { name: 'New chat' }))
+    expect(screen.getByRole('status')).toHaveTextContent('This is already a new chat. Write a message to start it.')
+  })
+
+  it('starts a new chat, without the note, once something has been said', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    answers = [reply('chat', 'Hello.')]
+    await say(user, 'Hi')
+    await screen.findByText('Hello.')
+    await user.click(screen.getByRole('button', { name: 'New chat' }))
+    expect(screen.queryByText('Hello.')).not.toBeInTheDocument()
+    expect(screen.queryByText(/already a new chat/)).not.toBeInTheDocument()
+  })
+
+  it('opens the logo card from Get a logo in the workspaces menu', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await pickTask(user, /Get a logo/)
+    expect(await screen.findByRole('dialog', { name: 'Get a logo' })).toBeInTheDocument()
+  })
+
+  it('asks Droplet for help from Write to a client in the workspaces menu', async () => {
+    const user = userEvent.setup()
+    answers = [reply('correspondence', 'Who is the email for?')]
+    renderHome()
+    await pickTask(user, /Write to a client/)
+    expect(await screen.findByText('Who is the email for?')).toBeInTheDocument()
+    expect((asked[0] as unknown as { intent: string }).intent).toBe('Help me write to a client.')
+  })
+
+  it('asks before another project replaces a workspace with unsaved changes, and stays on keep working', async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await pickTask(user, /Build the brand/)
+    await user.click(screen.getByRole('button', { name: /^Remove colour 1,/ }))
+    await user.click(screen.getByRole('button', { name: 'Project: DuckStack' }))
+    await user.click(screen.getByRole('menuitemradio', { name: /Colour Palette/ }))
+    const dialog = screen.getByRole('alertdialog', { name: 'Save before you go?' })
+    expect(dialog).toHaveTextContent('If you switch project now, they are lost.')
+    await user.click(within(dialog).getByRole('button', { name: 'Keep working' }))
+    expect(screen.getByRole('button', { name: 'Project: DuckStack' })).toBeInTheDocument()
+    // and saves, then switches
+    await user.click(screen.getByRole('button', { name: 'Project: DuckStack' }))
+    await user.click(screen.getByRole('menuitemradio', { name: /Colour Palette/ }))
+    await user.click(screen.getByRole('button', { name: 'Save the palette' }))
+    expect(await screen.findByRole('button', { name: 'Project: Colour Palette' })).toBeInTheDocument()
+    expect(await loadPalette('duckstack')).not.toBeNull()
+  })
+
+  it('asks before signing out with unsaved changes, and signs out once the founder leaves them', async () => {
+    const user = userEvent.setup()
+    const onSignOut = vi.fn()
+    render(
+      <MemoryRouter>
+        <Home onSignOut={onSignOut} />
+      </MemoryRouter>,
+    )
+    await pickTask(user, /Build the brand/)
+    await user.click(screen.getByRole('button', { name: /^Remove colour 1,/ }))
+    await user.click(screen.getByRole('button', { name: 'Account, Megan' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Sign out' }))
+    expect(screen.getByRole('alertdialog', { name: 'Save before you go?' })).toHaveTextContent('If you sign out now, they are lost.')
+    expect(onSignOut).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Leave without saving' }))
+    await waitFor(() => expect(onSignOut).toHaveBeenCalledTimes(1))
+  })
+
+  it('signs out at once when nothing is unsaved', async () => {
+    const user = userEvent.setup()
+    const onSignOut = vi.fn()
+    render(
+      <MemoryRouter>
+        <Home onSignOut={onSignOut} />
+      </MemoryRouter>,
+    )
+    await user.click(screen.getByRole('button', { name: /Megan/ }))
+    await user.click(screen.getByRole('menuitem', { name: 'Sign out' }))
+    await waitFor(() => expect(onSignOut).toHaveBeenCalledTimes(1))
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   })
 })

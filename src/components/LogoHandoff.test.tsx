@@ -46,8 +46,10 @@ describe('the logo handoff card', () => {
     expect(screen.getByText('Background #F4F8FB')).toBeInTheDocument()
     expect(screen.getByText('Primary #0B4F8A')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Copy colours' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Copy transparent png' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Copy a square version' })).toBeInTheDocument()
+    // the files to ask for are one row, listed, with one copy button
+    expect(screen.getByRole('button', { name: 'Copy files' })).toBeInTheDocument()
+    expect(screen.getByText('Transparent PNG, at least 2000 px wide')).toBeInTheDocument()
+    expect(screen.getByText('A square version, at least 800 by 800 px')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Copy the whole spec' })).toBeInTheDocument()
   })
 

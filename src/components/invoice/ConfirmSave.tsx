@@ -1,4 +1,4 @@
-import { useCallback, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { CheckIcon, DisketteIcon } from '@solar-icons/react/linear'
 import { useDismiss } from '../../hooks/useDismiss.ts'
@@ -20,27 +20,42 @@ type Props = {
   status: string
   // Called with the ids of the items the founder left ticked. Not called at all unless the founder presses the confirm button.
   onConfirm: (ids: string[]) => void
-  // A number that goes up each time something outside asks for the note to be opened (such as a button in the chat). It opens only
-  // if there is something to save, and saves nothing by itself: the founder still confirms.
-  openSignal?: number
+  // Something outside (the dialog about unsaved work) asks for the note to be opened. It is taken up once, when this is on screen, which may be
+  // after it has just mounted, and `onOpenHandled` says so. It opens only if there is something to save, and saves nothing by itself: the
+  // founder still confirms.
+  openRequest?: boolean
+  onOpenHandled?: () => void
+  // What is saved has been read, so `unsaved` can be trusted. A request waits for it.
+  ready?: boolean
   // Droplet keeps notes on the project and will update them when this is saved. Left out when the founder has switched the notes off.
   notesOn?: boolean
+  // The note closed without the founder confirming it, or was asked to open with nothing to save. So a question waiting on it can come back.
+  onCancel?: () => void
 }
 
 // Nothing is remembered without the founder's say. Pressing Save does not save: it opens a note of exactly what would be
 // remembered, each item with a tick, and only the confirm button saves. Leaving the note, or pressing Escape or Cancel, saves nothing.
-export default function ConfirmSave({ projectName, items, unsaved, status, onConfirm, openSignal = 0, notesOn = false }: Props) {
+export default function ConfirmSave({ projectName, items, unsaved, status, onConfirm, openRequest = false, onOpenHandled, ready = true, notesOn = false, onCancel }: Props) {
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
-  const close = useCallback(() => setOpen(false), [])
+  // Set when the confirm button is pressed, so the close that follows it is not taken for a cancel.
+  const confirmedRef = useRef(false)
+  const close = useCallback(() => {
+    setOpen(false)
+    if (!confirmedRef.current) onCancel?.()
+    confirmedRef.current = false
+  }, [onCancel])
   useDismiss(open, close, wrapRef)
 
-  // Opens when asked to from outside, once for each ask.
-  const [seenSignal, setSeenSignal] = useState(openSignal)
-  if (openSignal !== seenSignal) {
-    setSeenSignal(openSignal)
+  // Opens when asked to from outside. With nothing to save it cannot open, and says so, so nothing is left waiting on it.
+  useEffect(() => {
+    if (!openRequest || !ready) return
+    onOpenHandled?.()
     if (unsaved) setOpen(true)
-  }
+    else onCancel?.()
+    // Only a new request is taken up, once what is saved has been read: what is unsaved is judged at that moment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openRequest, ready])
 
   const toggle = () => setOpen((value) => !value)
 
@@ -61,7 +76,16 @@ export default function ConfirmSave({ projectName, items, unsaved, status, onCon
         <span className="workspace__label">{unsaved ? 'Save' : 'Saved'}</span>
       </button>
 
-      <AnimatePresence>{open && <ConfirmNote projectName={projectName} items={items} notesOn={notesOn} onConfirm={onConfirm} onCancel={close} />}</AnimatePresence>
+      <AnimatePresence>{open && <ConfirmNote
+            projectName={projectName}
+            items={items}
+            notesOn={notesOn}
+            onConfirm={(ids) => {
+              confirmedRef.current = true
+              onConfirm(ids)
+            }}
+            onCancel={close}
+          />}</AnimatePresence>
     </div>
   )
 }

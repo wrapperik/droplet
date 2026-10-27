@@ -45,6 +45,15 @@
   gap: 0.375rem;
 }
 
+/* Several things in one row, one a line, without bullets. */
+.spec-rows__items {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 /* A hairline keeps a pale colour visible on a pale surface. */
 .spec-rows__chip {
   width: 1rem;

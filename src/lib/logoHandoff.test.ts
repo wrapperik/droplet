@@ -43,8 +43,10 @@ describe('the spec rows and the brief text', () => {
   it('list the colours with their hex codes and then every file to ask for', () => {
     const rows = specRows(logoSpec({ palette }))
     expect(rows[0]).toMatchObject({ id: 'colours', value: 'Text #0E1A2B, Background #F4F8FB, #1F8FE0' })
-    expect(rows.slice(2).map((row) => row.id)).toEqual(LOGO_FORMATS.map((format) => format.id))
-    expect(rows.map((row) => row.value).join(' ')).toMatch(/Transparent PNG/)
+    // the files are one row, each listed
+    expect(rows.map((row) => row.id)).toEqual(['colours', 'fonts', 'files'])
+    expect(rows[2].items).toEqual(LOGO_FORMATS.map((format) => format.short))
+    expect(rows[2].value).toMatch(/^Transparent PNG/)
   })
 
   it('put the hex codes of the saved palette in the brief, never the words\'', () => {
@@ -62,7 +64,9 @@ describe('the spec rows and the brief text', () => {
   })
 
   it('make the spec text for the whole card', () => {
-    expect(specText({ name: 'Kindred Gifting', spec: logoSpec({ palette }) })).toMatch(/^Logo spec for Kindred Gifting\nColours: Text #0E1A2B/)
+    const text = specText({ name: 'Kindred Gifting', spec: logoSpec({ palette }) })
+    expect(text).toMatch(/^Logo spec for Kindred Gifting\nColours: Text #0E1A2B/)
+    expect(text).toContain('Files:\n- Transparent PNG, at least 2000 px wide\n- SVG')
   })
 })
 

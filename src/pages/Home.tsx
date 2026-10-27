@@ -8,7 +8,7 @@ import ChatGreeting from '../components/ChatGreeting.tsx'
 import type { ChatEntry } from '../components/ChatList.tsx'
 import type { BoardHandle } from '../components/board/BoardCanvas.tsx'
 import BoardWorkspace from '../components/board/BoardWorkspace.tsx'
-import ChatThread, { type ThreadAction, type ThreadMessage } from '../components/ChatThread.tsx'
+import ChatThread, { type ThreadMessage } from '../components/ChatThread.tsx'
 import IntentBar from '../components/IntentBar.tsx'
 import Library from '../components/Library.tsx'
 import InvoiceWorkspace from '../components/invoice/InvoiceWorkspace.tsx'
@@ -30,6 +30,7 @@ import { clearMarks, markTargets, prepareArrival, type Arrival } from '../lib/ar
 import type { ProposalView } from '../components/FactChips.tsx'
 import ProjectBrief from '../components/ProjectBrief.tsx'
 import Toast, { type ToastMessage } from '../components/Toast.tsx'
+import SaveDialog, { type SaveDialogAction } from '../components/SaveDialog.tsx'
 import { factLabel, factText, type FactKey } from '../lib/facts.ts'
 import { describeBlocks, type ChatBlock } from '../compose/blocks.ts'
 import type { Grounding } from '../compose/grounding.ts'
@@ -112,6 +113,34 @@ type HomeProps = {
 
 // The task a workspace is for, so a memory of a chat about the same task is picked first.
 const TASK_OF_VIEW: Record<View, Task> = { brand: 'brand', invoice: 'invoice', board: 'ideation' }
+
+// The question about unsaved work, asked in a dialog in the middle of the screen before anything would be lost: what is still unsaved, what the
+// founder was about to do (in words, such as "close the workspace"), what happens once it is all saved or they leave it, and how the last step went.
+// While the invoice's own note of what would be remembered is open, the dialog steps aside (`reviewing`) and comes back if the note is closed unconfirmed.
+type LeaveAsk = {
+  brand: boolean
+  invoice: boolean
+  board: boolean
+  going: string
+  then: () => void | Promise<void>
+  // What leaving without saving does to the unsaved work before `then`, when `then` alone would not let it go.
+  discard?: () => void
+  note?: string
+  reviewing?: boolean
+  saving?: boolean
+}
+
+// Which open workspaces a leave check looks at.
+const ALL_WORKSPACES = { brand: true, invoice: true, board: true }
+
+// Where each task in the workspaces menu takes the founder, in words for the question about unsaved work.
+const TASK_PLACE: Record<TaskId, string> = {
+  ideation: 'the board',
+  brand: 'the brand palette',
+  logo: 'the logo card',
+  invoice: 'the invoice',
+  correspondence: 'a client email',
+}
 
 // What a reply changed, kept for this session so Undo this can take it back and Show me can find it again.
 type LiveReceipt = { workspace: ReceiptWorkspace; after: unknown; targets: FocusTarget[]; undoable: boolean }
@@ -261,10 +290,15 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
     setBrand((current) => (JSON.stringify(current) === JSON.stringify(read) ? current : read))
     setExportable((current) => (current?.number === found?.number ? current : found))
   }, [readProject])
-  // Asks the invoice workspace to open its note of what would be remembered, for the "save before you go" question in the chat.
-  const [invoiceSaveSignal, setInvoiceSaveSignal] = useState(0)
-  // The question about unsaved work that is open in the thread, if there is one: which message, and what is still unsaved.
-  const leaveRef = useRef<{ id: number; brand: boolean; invoice: boolean; board: boolean } | null>(null)
+  // Asks the invoice workspace to open its note of what would be remembered, for the "save before you go" dialog. Cleared once it is taken up.
+  const [invoiceSaveRequest, setInvoiceSaveRequest] = useState(false)
+  // The question about unsaved work, if one is open. Held in a ref as well, so a second ask while one is open is ignored.
+  const [leaveAsk, setLeaveAsk] = useState<LeaveAsk | null>(null)
+  const leaveRef = useRef<LeaveAsk | null>(null)
+  const putLeave = useCallback((next: LeaveAsk | null) => {
+    leaveRef.current = next
+    setLeaveAsk(next)
+  }, [])
   const busyRef = useRef(false)
   // Set while what was saved is being read to see whether leaving would lose anything.
   const checkingLeaveRef = useRef(false)
@@ -302,6 +336,8 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   const chatIdRef = useRef('')
   const [toast, setToast] = useState<ToastMessage | null>(null)
   const toastId = useRef(0)
+  // Stable, so the toast's timer is not started again by every render (the elapsed seconds re-render Home once a second while Droplet works).
+  const dismissToast = useCallback(() => setToast(null), [])
   const [briefOpen, setBriefOpen] = useState(false)
   // What a reply changed, for Undo this and Show me, by the message that carries its receipt. Only for this session: nothing here is saved.
   const receiptsRef = useRef(new Map<number, LiveReceipt>())
@@ -824,10 +860,18 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   )
 
   // The familiar path: choosing a task opens its fixed layout without asking the model, the same layout the
-  // composer falls back to. Tasks without a workspace say so.
-  const chooseTask = useCallback(
+  // composer falls back to. The logo has no workspace: its card opens over the screen. Writing to a client has none either: it is asked for in the chat.
+  const openTask = useCallback(
     async (id: TaskId) => {
       if (busyRef.current) return
+      if (id === 'logo') {
+        setHandoffOpen(true)
+        return
+      }
+      if (id === 'correspondence') {
+        void submitIntent('Help me write to a client.')
+        return
+      }
       // Choosing a task says nothing in the thread. A divider marks the move once something is said in the new workspace.
       spaceRef.current = id
       // What was saved is read before the workspace opens. If the same task was chosen twice meanwhile, the first to arrive is the one opened.
@@ -858,7 +902,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         workspaceOpened()
       }
     },
-    [changeView, currentProjectId, workspaceOpened],
+    [changeView, currentProjectId, submitIntent, workspaceOpened],
   )
 
   // How Undo this ended, shown on the receipt. It can be pressed once.
@@ -1025,7 +1069,6 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
     // The one that is being left, in the project it belongs to (this is called before the project changes).
     if (chatIdRef.current !== id) summariseLeft({ id: chatIdRef.current, projectId: currentProjectRef.current, thread: threadRef.current })
     nameChat(name)
-    leaveRef.current = null
     sentInRef.current = undefined
     nextMessageId.current = messages.reduce((highest, item) => Math.max(highest, item.id), 0) + 1
     void refreshChats(projectId)
@@ -1034,7 +1077,13 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   }, [nameChat, refreshChats, summariseLeft])
 
   const newChat = useCallback(() => {
-    if (!busyRef.current) beginChat(newId(), [], currentProjectId)
+    if (busyRef.current) return
+    // A chat with nothing in it is already a new one: nothing changes, and the founder is told so rather than left wondering whether the press worked.
+    if (threadRef.current.length === 0) {
+      setToast({ id: ++toastId.current, text: 'This is already a new chat. Write a message to start it.' })
+      return
+    }
+    beginChat(newId(), [], currentProjectId)
   }, [beginChat, currentProjectId])
 
   const openChat = useCallback(
@@ -1133,6 +1182,21 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
     }
   }, [])
 
+  // Only the board goes, as when the founder leaves it without saving for another workspace.
+  const closeBoard = useCallback(() => {
+    boardRef.current = null
+    setBoard(null)
+    const other: WorkspaceView | null = workspaceRef.current ? 'brand' : invoiceRef.current ? 'invoice' : null
+    if (other) {
+      viewRef.current = other
+      spaceRef.current = other
+      setView(other)
+    } else {
+      spaceRef.current = null
+      if (!libraryOpenRef.current) setCollapsed(false)
+    }
+  }, [])
+
   // The guided palette is finished: saved. It closes, and the chat shows what was made, with a way to export the brand sheet and open it again.
   const finishBrand = useCallback(
     (result: PaletteResult) => {
@@ -1144,72 +1208,138 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
     [closeBrand, message, refreshProject],
   )
 
-  // Settles the question about unsaved work: its buttons go, and it says how it ended.
-  const settleLeave = useCallback((id: number, text: string, actions?: ThreadAction[]) => {
-    if (!actions) leaveRef.current = null
-    setThread((current) => current.map((item) => (item.id === id ? { ...item, text, actions } : item)))
-  }, [])
-
   // The buttons that are still worth pressing, from what is still unsaved.
-  const leaveActions = (left: { brand: boolean; invoice: boolean; board: boolean }): ThreadAction[] => [
+  const leaveActions = (left: { brand: boolean; invoice: boolean; board: boolean }): SaveDialogAction[] => [
     ...(left.brand ? [{ id: 'save-brand', label: 'Save the palette', primary: true }] : []),
     ...(left.board ? [{ id: 'save-board', label: 'Save the board', primary: true }] : []),
     ...(left.invoice ? [{ id: 'save-invoice', label: 'Review and save the invoice', primary: true }] : []),
-    { id: 'leave', label: 'Leave without saving' },
     { id: 'stay', label: 'Keep working' },
+    { id: 'leave', label: 'Leave without saving', warn: true },
   ]
+  const leaveText = (ask: LeaveAsk) => {
+    const where = [ask.brand ? 'the brand palette' : null, ask.board ? 'the board' : null, ask.invoice ? 'the invoice' : null].filter(Boolean).join(' and ')
+    return `You have unsaved changes in ${where}. If you ${ask.going} now, they are lost.`
+  }
 
-  // Something was saved: if that was the last thing, the workspace closes, and if not, the question stays for what is left.
-  const savedForLeave = useCallback(
-    (what: string) => {
-      const prompt = leaveRef.current
-      if (!prompt) return
-      if (!prompt.brand && !prompt.invoice && !prompt.board) {
-        settleLeave(prompt.id, `${what} Everything is saved, so I closed the workspace.`)
-        closeWorkspaces()
+  // Before something that would lose work: what was saved is read to see whether the open workspaces (those `check` names) hold anything that is not,
+  // and if they do, Droplet asks in the dialog first, with a button for each way out. Nothing is saved without the founder's say: the palette and the
+  // board save when their button is pressed, and the invoice opens its note of what would be remembered, which the founder confirms. With nothing
+  // unsaved, `then` runs at once.
+  const askBeforeLeaving = useCallback(
+    async (check: { brand: boolean; invoice: boolean; board: boolean }, going: string, then: () => void | Promise<void>, discard?: () => void) => {
+      const open = leaveRef.current
+      if (open) {
+        // A question is already waiting, behind the invoice's note perhaps: it comes back rather than a second one being asked.
+        if (open.reviewing) putLeave({ ...open, reviewing: false })
         return
       }
-      const left = prompt.brand ? 'The palette' : prompt.board ? 'The board' : 'The invoice'
-      settleLeave(prompt.id, `${what} ${left} still has unsaved changes. Save it as well, or leave without saving?`, leaveActions(prompt))
+      if (checkingLeaveRef.current) return
+      // What was saved has to be read to know whether anything is unsaved, so a second press meanwhile is ignored.
+      checkingLeaveRef.current = true
+      const left = { brand: false, invoice: false, board: false }
+      try {
+        const projectId = currentProjectRef.current
+        const [palette, memory, savedBoard] = await Promise.all([loadPalette(projectId), loadMemory(projectId), loadBoard(projectId)])
+        left.brand = check.brand && workspaceRef.current ? paletteHasChanges(workspaceRef.current, palette) : false
+        left.invoice = check.invoice && invoiceRef.current ? invoiceHasChanges(invoiceRef.current, memory) : false
+        left.board = check.board && boardRef.current ? boardHasChanges(boardRef.current, savedBoard) : false
+      } finally {
+        checkingLeaveRef.current = false
+      }
+      if (!left.brand && !left.invoice && !left.board) {
+        await then()
+        return
+      }
+      putLeave({ ...left, going, then, ...(discard ? { discard } : {}) })
     },
-    [closeWorkspaces, settleLeave],
+    [putLeave],
   )
 
-  // Back to the conversation as the whole screen. Closing a workspace loses what was not saved, so if there is any, Droplet asks first,
-  // in the thread, with a button for each way out. Nothing is saved without the founder's say: the palette saves when its button is
-  // pressed, and the invoice opens its note of what would be remembered, which the founder confirms.
-  // The check itself, which a reply that closes the workspace runs too, while the request is still being worked on.
-  const leaveWorkspaces = useCallback(async () => {
-    if (leaveRef.current || checkingLeaveRef.current) return
-    // What was saved has to be read to know whether anything is unsaved, so a second press meanwhile is ignored.
-    checkingLeaveRef.current = true
-    let brand = false
-    let invoiceChanged = false
-    let boardChanged = false
-    try {
-      const [palette, memory, board] = await Promise.all([loadPalette(currentProjectId), loadMemory(currentProjectId), loadBoard(currentProjectId)])
-      brand = workspaceRef.current ? paletteHasChanges(workspaceRef.current, palette) : false
-      invoiceChanged = invoiceRef.current ? invoiceHasChanges(invoiceRef.current, memory) : false
-      boardChanged = boardRef.current ? boardHasChanges(boardRef.current, board) : false
-    } finally {
-      checkingLeaveRef.current = false
-    }
-    if (!brand && !invoiceChanged && !boardChanged) {
-      closeWorkspaces()
-      return
-    }
-    const left = { brand, invoice: invoiceChanged, board: boardChanged }
-    const where = [brand ? 'the brand palette' : null, boardChanged ? 'the board' : null, invoiceChanged ? 'the invoice' : null].filter(Boolean).join(' and ')
-    const prompt: ThreadMessage = { ...message('droplet', `You have unsaved changes in ${where}. If I close the workspace now they are lost. Save first?`), local: true, actions: leaveActions(left) }
-    leaveRef.current = { id: prompt.id, ...left }
-    setThread((current) => [...current, prompt])
-  }, [closeWorkspaces, currentProjectId, message])
+  // A task from the workspaces menu. Going from one workspace to another leaves the one on screen, so if it holds unsaved work Droplet asks first.
+  // Leaving it without saving closes it, so it opens again from what was saved.
+  const chooseTask = useCallback(
+    (id: TaskId) => {
+      if (busyRef.current) return
+      const leaving = onScreen()
+      const target: View | null = id === 'brand' ? 'brand' : id === 'invoice' ? 'invoice' : id === 'ideation' ? 'board' : null
+      if (!leaving || !target || target === leaving) return void openTask(id)
+      const close = { brand: closeBrand, invoice: closeInvoice, board: closeBoard }[leaving]
+      void askBeforeLeaving({ brand: leaving === 'brand', invoice: leaving === 'invoice', board: leaving === 'board' }, `open ${TASK_PLACE[id]}`, () => openTask(id), close)
+    },
+    // onScreen only reads refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [askBeforeLeaving, closeBoard, closeBrand, closeInvoice, openTask],
+  )
+
+  // Something was saved: if that was the last thing, the dialog goes and what the founder was doing carries on. If not, it stays for what is left.
+  const afterLeaveSave = useCallback(
+    async (ask: LeaveAsk, what: string) => {
+      setLibraryVersion((count) => count + 1)
+      if (!ask.brand && !ask.invoice && !ask.board) {
+        putLeave(null)
+        setToast({ id: ++toastId.current, text: `${what} Everything is saved.` })
+        await ask.then()
+        return
+      }
+      const left = ask.brand ? 'The palette' : ask.board ? 'The board' : 'The invoice'
+      putLeave({ ...ask, saving: false, reviewing: false, note: `${what} ${left} still has unsaved changes.` })
+    },
+    [putLeave],
+  )
+
+  // Back to the conversation as the whole screen. Closing loses what was not saved, so if there is any, Droplet asks first. A reply that closes the
+  // workspace runs the same check, while the request is still being worked on.
+  const leaveWorkspaces = useCallback(() => askBeforeLeaving(ALL_WORKSPACES, 'close the workspace', closeWorkspaces), [askBeforeLeaving, closeWorkspaces])
 
   // The button, which does nothing while a request is being worked on.
   const backToChat = useCallback(async () => {
     if (busyRef.current) return
     await leaveWorkspaces()
   }, [leaveWorkspaces])
+
+  // The founder's answer to the dialog about unsaved work.
+  const answerLeave = useCallback(
+    async (actionId: string) => {
+      const ask = leaveRef.current
+      if (!ask || ask.saving) return
+      const projectId = currentProjectRef.current
+      if (actionId === 'stay') return putLeave(null)
+      if (actionId === 'leave') {
+        putLeave(null)
+        ask.discard?.()
+        await ask.then()
+        return
+      }
+      if (actionId === 'save-brand' && workspaceRef.current) {
+        putLeave({ ...ask, saving: true, note: undefined })
+        // The typeface pair and the voice words are chosen in the palette workspace and saved with it, so what was saved of them is kept.
+        const before = await loadPalette(projectId)
+        const result = await savePalette(projectId, { blocks: docOf(workspaceRef.current).blocks, ...(before?.fonts ? { fonts: before.fonts } : {}), ...(before?.voice ? { voice: before.voice } : {}) })
+        if (result === null) return putLeave({ ...ask, saving: false, note: 'I could not save the palette, because it could not be stored. Try again, or leave without saving.' })
+        return afterLeaveSave({ ...ask, brand: false }, 'Saved the palette.')
+      }
+      if (actionId === 'save-board' && boardRef.current) {
+        putLeave({ ...ask, saving: true, note: undefined })
+        const result = await saveBoard(projectId, { items: boardDocOf(boardRef.current).items })
+        if (result === null) return putLeave({ ...ask, saving: false, note: 'I could not save the board, because it could not be stored. Try again, or leave without saving.' })
+        return afterLeaveSave({ ...ask, board: false }, 'Saved the board.')
+      }
+      if (actionId === 'save-invoice' && invoiceRef.current) {
+        // The invoice has a note of its own, of exactly what would be remembered. The dialog steps aside, the invoice comes to the front and the note
+        // opens there for the founder to confirm.
+        putLeave({ ...ask, reviewing: true, note: undefined })
+        if (onScreen() !== 'invoice') {
+          viewRef.current = 'invoice'
+          spaceRef.current = 'invoice'
+          changeView('invoice')
+        }
+        setInvoiceSaveRequest(true)
+      }
+    },
+    // onScreen only reads refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [afterLeaveSave, changeView, putLeave],
+  )
 
   // The founder's answer to a change Droplet proposed to their own things on the board. Made through the board's own reducer, as one step they can undo.
   const answerProposal = useCallback((messageId: number, actionId: string) => {
@@ -1240,48 +1370,29 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
   }, [])
 
   const onThreadAction = useCallback(
-    async (messageId: number, actionId: string) => {
-      if (pendingEditsRef.current.has(messageId)) return answerProposal(messageId, actionId)
-      const prompt = leaveRef.current
-      if (!prompt || prompt.id !== messageId || busyRef.current) return
-      if (actionId === 'stay') settleLeave(messageId, 'Okay, I left the workspace as it is.')
-      else if (actionId === 'leave') {
-        settleLeave(messageId, 'I closed the workspace without saving.')
-        closeWorkspaces()
-      } else if (actionId === 'save-brand' && workspaceRef.current) {
-        const doc = docOf(workspaceRef.current)
-        const result = await savePalette(currentProjectId, { blocks: doc.blocks })
-        if (result === null) settleLeave(messageId, 'I could not save the palette, because it could not be stored.', leaveActions(prompt))
-        else {
-          prompt.brand = false
-          savedForLeave('I saved the palette.')
-        }
-      } else if (actionId === 'save-board' && boardRef.current) {
-        const doc = boardDocOf(boardRef.current)
-        const result = await saveBoard(currentProjectId, { items: doc.items })
-        if (result === null) settleLeave(messageId, 'I could not save the board, because it could not be stored.', leaveActions(prompt))
-        else {
-          prompt.board = false
-          savedForLeave('I saved the board.')
-        }
-      } else if (actionId === 'save-invoice') {
-        // The invoice has a note of its own, of exactly what would be remembered. It opens, and the founder confirms.
-        setInvoiceSaveSignal((count) => count + 1)
-      }
+    (messageId: number, actionId: string) => {
+      if (pendingEditsRef.current.has(messageId)) answerProposal(messageId, actionId)
     },
-    [answerProposal, closeWorkspaces, currentProjectId, savedForLeave, settleLeave],
+    [answerProposal],
   )
 
   // The founder confirmed what the invoice would remember. If that was the last unsaved thing in a question about leaving, it is done.
   const invoiceConfirmed = useCallback(async () => {
-    const prompt = leaveRef.current
-    if (!prompt?.invoice) return
-    const memory = await loadMemory(currentProjectId)
-    const still = invoiceRef.current ? invoiceHasChanges(invoiceRef.current, memory) : false
-    if (still) return
-    prompt.invoice = false
-    savedForLeave('I saved the invoice.')
-  }, [currentProjectId, savedForLeave])
+    const ask = leaveRef.current
+    if (!ask?.invoice) return
+    const memory = await loadMemory(currentProjectRef.current)
+    if (invoiceRef.current && invoiceHasChanges(invoiceRef.current, memory)) {
+      putLeave({ ...ask, reviewing: false, note: 'Part of the invoice is still not saved.' })
+      return
+    }
+    await afterLeaveSave({ ...ask, invoice: false }, 'Saved the invoice.')
+  }, [afterLeaveSave, putLeave])
+
+  // The invoice's note closed without being confirmed: the question comes back, so the founder is never left without a way on.
+  const invoiceSaveCancelled = useCallback(() => {
+    const ask = leaveRef.current
+    if (ask?.reviewing) putLeave({ ...ask, reviewing: false })
+  }, [putLeave])
 
   // Another project has its own saved palette, so an open workspace is replaced by that project's.
   const selectProject = useCallback(
@@ -1314,14 +1425,28 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
     [beginChat, currentProjectId],
   )
 
+  // Another project replaces the workspaces that are open with its own, so unsaved work in them would be lost: Droplet asks first. Choosing the
+  // project that is already open changes nothing.
+  const chooseProject = useCallback(
+    (id: string) => {
+      if (id === currentProjectRef.current) return
+      void askBeforeLeaving(ALL_WORKSPACES, 'switch project', () => selectProject(id))
+    },
+    [askBeforeLeaving, selectProject],
+  )
+
   // A project the founder has just made. Home moves to it once the list it was given includes it, so the switcher never names a project it
-  // does not have yet. The move is the one choosing a project in the menu makes.
+  // does not have yet. The move is the one choosing a project in the menu makes, and asks the same question about unsaved work.
   const [madeProjectId, setMadeProjectId] = useState<string | null>(null)
   useEffect(() => {
     if (madeProjectId === null || !projects.some((project) => project.id === madeProjectId)) return
     setMadeProjectId(null)
-    void selectProject(madeProjectId)
-  }, [madeProjectId, projects, selectProject])
+    chooseProject(madeProjectId)
+  }, [chooseProject, madeProjectId, projects])
+
+  // The account page and signing out both leave Home, and the workspaces with it, so Droplet asks first if anything is unsaved.
+  const goToAccount = useMemo(() => (onAccount ? () => void askBeforeLeaving(ALL_WORKSPACES, 'open your account', onAccount) : undefined), [askBeforeLeaving, onAccount])
+  const signOut = useMemo(() => (onSignOut ? () => void askBeforeLeaving(ALL_WORKSPACES, 'sign out', onSignOut) : undefined), [askBeforeLeaving, onSignOut])
 
   const createNamedProject = useMemo(
     () =>
@@ -1512,7 +1637,7 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
       <Sidebar
         projects={projects}
         currentProjectId={currentProjectId}
-        onSelectProject={selectProject}
+        onSelectProject={chooseProject}
         onCreateProject={createNamedProject}
         onRenameProject={renameCurrentProject}
         onOpenBrief={() => setBriefOpen(true)}
@@ -1534,8 +1659,8 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         onToggleCollapsed={() => setCollapsed((value) => !value)}
         mobileOpen={mobileOpen}
         userName={userName}
-        onAccount={onAccount}
-        onSignOut={onSignOut}
+        onAccount={goToAccount}
+        onSignOut={signOut}
       />
       {mobileOpen && <div className="home__scrim" onClick={() => setMobileOpen(false)} aria-hidden="true" />}
 
@@ -1640,8 +1765,10 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
                     setGuide(next)
                   }}
                   onFinished={finishGuided}
-                  saveSignal={invoiceSaveSignal}
+                  saveRequest={invoiceSaveRequest}
+                  onSaveRequestHandled={() => setInvoiceSaveRequest(false)}
                   onConfirmed={invoiceConfirmed}
+                  onSaveCancelled={invoiceSaveCancelled}
                   logoVersion={libraryVersion}
                   onOpenHandoff={() => setHandoffOpen(true)}
                   headerSlots={{ start: headerStart, end: headerEnd, shelf: shelfSlot }}
@@ -1708,7 +1835,21 @@ export default function Home({ projects = mockProjects, userName = mockUser.name
         />
       )}
       <ProjectBrief open={briefOpen} onClose={() => setBriefOpen(false)} projectId={currentProjectId} projectName={projectName(currentProjectId)} enqueue={enqueueChats} onChanged={() => void refreshProject()} />
-      <Toast toast={toast} onDismiss={() => setToast(null)} />
+      <AnimatePresence>
+        {leaveAsk && !leaveAsk.reviewing && (
+          <SaveDialog
+            key="save-dialog"
+            title="Save before you go?"
+            text={leaveText(leaveAsk)}
+            note={leaveAsk.note}
+            actions={leaveActions(leaveAsk)}
+            busy={leaveAsk.saving}
+            onAction={(id) => void answerLeave(id)}
+            onDismiss={() => void answerLeave('stay')}
+          />
+        )}
+      </AnimatePresence>
+      <Toast toast={toast} onDismiss={dismissToast} />
     </div>
     </AskContext.Provider>
   )
