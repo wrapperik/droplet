@@ -6,7 +6,7 @@ Droplet is an AI workspace for small business owners. The founder says what they
 
 **Live:** https://droplet-tan.vercel.app
 
-**Demo video (walkthrough):** https://youtu.be/bKIY1x4bgFI
+**Demo video (walkthrough):** https://youtu.be/oBLeca-GEqo
 
 **Promo video:** https://youtu.be/WLlGiDC9sms
 
