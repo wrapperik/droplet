@@ -15,6 +15,8 @@ import {
   indexPalette,
   MAX_DIGESTS_CHARS,
   MAX_FOUND_CHARS,
+  MAX_FOUND_LINE_CHARS,
+  MAX_FOUND_LINES,
   MAX_INDEX_LINES,
   notesForRequest,
   notesSchema,
@@ -24,6 +26,7 @@ import {
   type WorkspaceNotes,
 } from './notes.ts'
 import { wordsOf } from './recall.ts'
+import { composeRequestSchema } from '../compose/spec.ts'
 
 const t1 = '2026-10-07T10:00:00.000Z'
 const t2 = '2026-10-08T10:00:00.000Z'
@@ -230,6 +233,18 @@ describe('what goes with a message', () => {
     expect(findInNotes(doc2, wordsOf('dog walking brooklyn')).map((entry) => entry.text)).toEqual(['Dog walking in Brooklyn', 'Dog walking', 'Dog walking'])
     expect(findInNotes(doc2, wordsOf('dog walking brooklyn')).map((entry) => entry.at)).toEqual(['2026-09-01', '2026-10-05', '2026-10-01'])
     expect(findInNotes(doc2, new Set())).toEqual([])
+  })
+
+  it('keeps found lines within what the request takes: 40 lines, each up to 300 characters', () => {
+    const long = workspace([line('a', `green ${'g'.repeat(234)}`, { where: 'w'.repeat(80), starred: true })])
+    const longFound = findInNotes({ board: long }, wordsOf('green'))
+    expect(longFound[0].text.length).toBe(MAX_FOUND_LINE_CHARS)
+    const short = workspace(Array.from({ length: 80 }, (_, i) => line(`n${i}`, `green ${i}`)))
+    expect(findInNotes({ board: short }, wordsOf('green'))).toHaveLength(MAX_FOUND_LINES)
+    for (const doc of [{ board: long }, { board: short }]) {
+      const notes = notesForRequest(doc, { onScreen: 'brand', intent: 'Give me a green and beige colour palette' })!
+      expect(composeRequestSchema.safeParse({ intent: 'Give me a green and beige colour palette', notes }).success).toBe(true)
+    }
   })
 
   it('marks a starred line as kept in mind', () => {

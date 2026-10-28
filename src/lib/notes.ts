@@ -154,6 +154,9 @@ export function digestRequestFor(workspace: NotesWorkspace, projectName: string,
 
 export const MAX_DIGESTS_CHARS = 2500
 export const MAX_FOUND_CHARS = 1000
+// What the request schema takes for the lines found: at most 40, each up to 300 characters.
+export const MAX_FOUND_LINES = 40
+export const MAX_FOUND_LINE_CHARS = 300
 
 export type NotesForRequest = {
   digests: { workspace: NotesWorkspace; text: string }[]
@@ -177,7 +180,8 @@ export function findInNotes(doc: NotesDoc, words: Set<string>, leaveOut?: NotesW
   const found: NotesForRequest['found'] = []
   let used = 0
   for (const { workspace, line } of hits) {
-    const text = `${line.where ? `[${line.where}] ` : ''}${line.text}${line.starred ? ' (kept in mind)' : ''}`
+    if (found.length >= MAX_FOUND_LINES) break
+    const text = `${line.where ? `[${line.where}] ` : ''}${line.text}${line.starred ? ' (kept in mind)' : ''}`.slice(0, MAX_FOUND_LINE_CHARS)
     if (used + text.length > maxChars) break
     found.push({ workspace, text, at: line.at.slice(0, 10) })
     used += text.length

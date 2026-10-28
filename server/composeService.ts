@@ -125,6 +125,9 @@ export async function handleCompose(body: unknown, deps: ComposeServiceDeps): Pr
 
   const parsed = composeRequestSchema.safeParse(body)
   if (!parsed.success) {
+    // Which fields failed, so a request the app built wrong shows in the log and is not taken for a long message.
+    const problems = parsed.error.issues.slice(0, 4).map((issue) => `${issue.path.join('.') || '(request)'}: ${issue.message}`)
+    await deps.log({ at: new Date(started).toISOString(), intent: '(bad request)', outcome: 'error', mode: 'base', error: 'bad_request', problems, ms: now() - started })
     return { status: 400, body: { error: 'bad_request', message: 'Send a request with a message of up to 4,000 characters.' } }
   }
   const request = parsed.data
